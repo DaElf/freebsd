@@ -46,6 +46,7 @@ __FBSDID("$FreeBSD$");
 #include <fcntl.h>
 #include <libgeom.h>
 #include <pthread.h>
+#include <signal.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
@@ -57,6 +58,7 @@ __FBSDID("$FreeBSD$");
 #include <rangelock.h>
 
 #include "control.h"
+#include "event.h"
 #include "hast.h"
 #include "hast_proto.h"
 #include "hastd.h"
@@ -132,8 +134,6 @@ static pthread_cond_t sync_cond;
  * The lock below allows to synchornize access to remote connections.
  */
 static pthread_rwlock_t *hio_remote_lock;
-static pthread_mutex_t hio_guard_lock;
-static pthread_cond_t hio_guard_cond;
 
 /*
  * Lock to synchronize metadata updates. Also synchronize access to
@@ -152,13 +152,9 @@ static pthread_mutex_t metadata_lock;
  */
 #define	HAST_NCOMPONENTS	2
 /*
- * Number of seconds to sleep between keepalive packets.
+ * Number of seconds to sleep between reconnect retries or keepalive packets.
  */
-#define	KEEPALIVE_SLEEP		10
-/*
- * Number of seconds to sleep between reconnect retries.
- */
-#define	RECONNECT_SLEEP		5
+#define	RETRY_SLEEP		10
 
 #define	ISCONNECTED(res, no)	\
 	((res)->hr_remotein != NULL && (res)->hr_remoteout != NULL)
@@ -229,8 +225,6 @@ static void *remote_recv_thread(void *arg);
 static void *ggate_send_thread(void *arg);
 static void *sync_thread(void *arg);
 static void *guard_thread(void *arg);
-
-static void sighandler(int sig);
 
 static void
 cleanup(struct hast_resource *res)
@@ -319,6 +313,7 @@ init_environment(struct hast_resource *res __unused)
 {
 	struct hio *hio;
 	unsigned int ii, ncomps;
+	sigset_t mask;
 
 	/*
 	 * In the future it might be per-resource value.
@@ -389,8 +384,6 @@ init_environment(struct hast_resource *res __unused)
 	TAILQ_INIT(&hio_done_list);
 	mtx_init(&hio_done_list_lock);
 	cv_init(&hio_done_list_cond);
-	mtx_init(&hio_guard_lock);
-	cv_init(&hio_guard_cond);
 	mtx_init(&metadata_lock);
 
 	/*
@@ -431,10 +424,11 @@ init_environment(struct hast_resource *res __unused)
 	/*
 	 * Turn on signals handling.
 	 */
-	signal(SIGINT, sighandler);
-	signal(SIGTERM, sighandler);
-	signal(SIGHUP, sighandler);
-	signal(SIGCHLD, sighandler);
+	PJDLOG_VERIFY(sigemptyset(&mask) == 0);
+	PJDLOG_VERIFY(sigaddset(&mask, SIGHUP) == 0);
+	PJDLOG_VERIFY(sigaddset(&mask, SIGINT) == 0);
+	PJDLOG_VERIFY(sigaddset(&mask, SIGTERM) == 0);
+	PJDLOG_VERIFY(sigprocmask(SIG_SETMASK, &mask, NULL) == 0);
 }
 
 static void
@@ -500,6 +494,7 @@ init_remote(struct hast_resource *res, struct proto_conn **inp,
 	assert(real_remote(res));
 
 	in = out = NULL;
+	errmsg = NULL;
 
 	/* Prepare outgoing connection with remote node. */
 	if (proto_client(res->hr_remoteaddr, &out) < 0) {
@@ -673,8 +668,11 @@ init_remote(struct hast_resource *res, struct proto_conn **inp,
 		res->hr_remotein = in;
 		res->hr_remoteout = out;
 	}
+	event_send(res, EVENT_CONNECT);
 	return (true);
 close:
+	if (errmsg != NULL && strcmp(errmsg, "Split-brain condition!") == 0)
+		event_send(res, EVENT_SPLITBRAIN);
 	proto_close(out);
 	if (in != NULL)
 		proto_close(in);
@@ -764,36 +762,50 @@ hastd_primary(struct hast_resource *res)
 	pid_t pid;
 	int error;
 
-	gres = res;
-
 	/*
 	 * Create communication channel between parent and child.
 	 */
 	if (proto_client("socketpair://", &res->hr_ctrl) < 0) {
 		KEEP_ERRNO((void)pidfile_remove(pfh));
-		primary_exit(EX_OSERR,
+		pjdlog_exit(EX_OSERR,
 		    "Unable to create control sockets between parent and child");
+	}
+	/*
+	 * Create communication channel between child and parent.
+	 */
+	if (proto_client("socketpair://", &res->hr_event) < 0) {
+		KEEP_ERRNO((void)pidfile_remove(pfh));
+		pjdlog_exit(EX_OSERR,
+		    "Unable to create event sockets between child and parent");
 	}
 
 	pid = fork();
 	if (pid < 0) {
 		KEEP_ERRNO((void)pidfile_remove(pfh));
-		primary_exit(EX_TEMPFAIL, "Unable to fork");
+		pjdlog_exit(EX_TEMPFAIL, "Unable to fork");
 	}
 
 	if (pid > 0) {
 		/* This is parent. */
+		/* Declare that we are receiver. */
+		proto_recv(res->hr_event, NULL, 0);
 		res->hr_workerpid = pid;
 		return;
 	}
+
+	gres = res;
+
 	(void)pidfile_close(pfh);
+	hook_fini();
 
 	setproctitle("%s (primary)", res->hr_name);
 
 	signal(SIGHUP, SIG_DFL);
 	signal(SIGCHLD, SIG_DFL);
 
-	hook_init();
+	/* Declare that we are sender. */
+	proto_send(res->hr_event, NULL, 0);
+
 	init_local(res);
 	if (real_remote(res) && init_remote(res, NULL, NULL))
 		sync_start();
@@ -892,15 +904,7 @@ remote_close(struct hast_resource *res, int ncomp)
 	 */
 	sync_stop();
 
-	/*
-	 * Wake up guard thread (if we are not called from within guard thread),
-	 * so it can immediately start reconnect.
-	 */
-	if (!mtx_owned(&hio_guard_lock)) {
-		mtx_lock(&hio_guard_lock);
-		cv_signal(&hio_guard_cond);
-		mtx_unlock(&hio_guard_lock);
-	}
+	event_send(res, EVENT_DISCONNECT);
 }
 
 /*
@@ -1232,12 +1236,12 @@ remote_send_thread(void *arg)
 		    data != NULL ? length : 0) < 0) {
 			hio->hio_errors[ncomp] = errno;
 			rw_unlock(&hio_remote_lock[ncomp]);
-			remote_close(res, ncomp);
 			pjdlog_debug(2,
 			    "remote_send: (%p) Unable to send request.", hio);
 			reqlog(LOG_ERR, 0, ggio,
 			    "Unable to send request (%s): ",
 			    strerror(hio->hio_errors[ncomp]));
+			remote_close(res, ncomp);
 			/*
 			 * Take request back from the receive queue and move
 			 * it immediately to the done queue.
@@ -1507,16 +1511,16 @@ sync_thread(void *arg __unused)
 
 	ncomps = HAST_NCOMPONENTS;
 	dorewind = true;
-	synced = -1;
+	synced = 0;
+	offset = -1;
 
 	for (;;) {
 		mtx_lock(&sync_lock);
-		if (synced == -1)
-			synced = 0;
-		else if (!sync_inprogress) {
+		if (offset >= 0 && !sync_inprogress) {
 			pjdlog_info("Synchronization interrupted. "
 			    "%jd bytes synchronized so far.",
 			    (intmax_t)synced);
+			event_send(res, EVENT_SYNCINTR);
 		}
 		while (!sync_inprogress) {
 			dorewind = true;
@@ -1549,6 +1553,7 @@ sync_thread(void *arg __unused)
 				pjdlog_info("Synchronization started. %ju bytes to go.",
 				    (uintmax_t)(res->hr_extentsize *
 				    activemap_ndirty(res->hr_amp)));
+				event_send(res, EVENT_SYNCSTART);
 			}
 		}
 		if (offset < 0) {
@@ -1565,6 +1570,7 @@ sync_thread(void *arg __unused)
 					pjdlog_info("Synchronization complete. "
 					    "%jd bytes synchronized.",
 					    (intmax_t)synced);
+					event_send(res, EVENT_SYNCDONE);
 				}
 				mtx_lock(&metadata_lock);
 				res->hr_syncsrc = HAST_SYNCSRC_UNDEF;
@@ -1728,35 +1734,6 @@ free_queue:
 }
 
 static void
-sighandler(int sig)
-{
-	bool unlock;
-
-	switch (sig) {
-	case SIGINT:
-	case SIGTERM:
-		sigexit_received = true;
-		break;
-	case SIGHUP:
-		sighup_received = true;
-		break;
-	case SIGCHLD:
-		sigchld_received = true;
-		break;
-	default:
-		assert(!"invalid condition");
-	}
-	/*
-	 * Racy, but if we cannot obtain hio_guard_lock here, we don't
-	 * want to risk deadlock.
-	 */
-	unlock = mtx_trylock(&hio_guard_lock);
-	cv_signal(&hio_guard_cond);
-	if (unlock)
-		mtx_unlock(&hio_guard_lock);
-}
-
-static void
 config_reload(void)
 {
 	struct hastd_config *newcfg;
@@ -1897,6 +1874,67 @@ keepalive_send(struct hast_resource *res, unsigned int ncomp)
 	pjdlog_debug(2, "keepalive_send: Request sent.");
 }
 
+static void
+guard_one(struct hast_resource *res, unsigned int ncomp)
+{
+	struct proto_conn *in, *out;
+
+	if (!ISREMOTE(ncomp))
+		return;
+
+	rw_rlock(&hio_remote_lock[ncomp]);
+
+	if (!real_remote(res)) {
+		rw_unlock(&hio_remote_lock[ncomp]);
+		return;
+	}
+
+	if (ISCONNECTED(res, ncomp)) {
+		assert(res->hr_remotein != NULL);
+		assert(res->hr_remoteout != NULL);
+		keepalive_send(res, ncomp);
+	}
+
+	if (ISCONNECTED(res, ncomp)) {
+		assert(res->hr_remotein != NULL);
+		assert(res->hr_remoteout != NULL);
+		rw_unlock(&hio_remote_lock[ncomp]);
+		pjdlog_debug(2, "remote_guard: Connection to %s is ok.",
+		    res->hr_remoteaddr);
+		return;
+	}
+
+	assert(res->hr_remotein == NULL);
+	assert(res->hr_remoteout == NULL);
+	/*
+	 * Upgrade the lock. It doesn't have to be atomic as no other thread
+	 * can change connection status from disconnected to connected.
+	 */
+	rw_unlock(&hio_remote_lock[ncomp]);
+	pjdlog_debug(2, "remote_guard: Reconnecting to %s.",
+	    res->hr_remoteaddr);
+	in = out = NULL;
+	if (init_remote(res, &in, &out)) {
+		rw_wlock(&hio_remote_lock[ncomp]);
+		assert(res->hr_remotein == NULL);
+		assert(res->hr_remoteout == NULL);
+		assert(in != NULL && out != NULL);
+		res->hr_remotein = in;
+		res->hr_remoteout = out;
+		rw_unlock(&hio_remote_lock[ncomp]);
+		pjdlog_info("Successfully reconnected to %s.",
+		    res->hr_remoteaddr);
+		sync_start();
+	} else {
+		/* Both connections should be NULL. */
+		assert(res->hr_remotein == NULL);
+		assert(res->hr_remoteout == NULL);
+		assert(in == NULL && out == NULL);
+		pjdlog_debug(2, "remote_guard: Reconnect to %s failed.",
+		    res->hr_remoteaddr);
+	}
+}
+
 /*
  * Thread guards remote connections and reconnects when needed, handles
  * signals, etc.
@@ -1905,85 +1943,47 @@ static void *
 guard_thread(void *arg)
 {
 	struct hast_resource *res = arg;
-	struct proto_conn *in, *out;
 	unsigned int ii, ncomps;
-	int timeout;
+	struct timespec timeout;
+	time_t lastcheck, now;
+	sigset_t mask;
+	int signo;
 
 	ncomps = HAST_NCOMPONENTS;
+	lastcheck = time(NULL);
+
+	PJDLOG_VERIFY(sigemptyset(&mask) == 0);
+	PJDLOG_VERIFY(sigaddset(&mask, SIGHUP) == 0);
+	PJDLOG_VERIFY(sigaddset(&mask, SIGINT) == 0);
+	PJDLOG_VERIFY(sigaddset(&mask, SIGTERM) == 0);
+
+	timeout.tv_nsec = 0;
+	signo = -1;
 
 	for (;;) {
-		if (sigexit_received) {
+		switch (signo) {
+		case SIGHUP:
+			config_reload();
+			break;
+		case SIGINT:
+		case SIGTERM:
+			sigexit_received = true;
 			primary_exitx(EX_OK,
 			    "Termination signal received, exiting.");
+			break;
+		default:
+			break;
 		}
-		if (sighup_received) {
-			sighup_received = false;
-			config_reload();
-		}
-		hook_check(sigchld_received);
-		if (sigchld_received)
-			sigchld_received = false;
 
-		timeout = KEEPALIVE_SLEEP;
 		pjdlog_debug(2, "remote_guard: Checking connections.");
-		mtx_lock(&hio_guard_lock);
-		for (ii = 0; ii < ncomps; ii++) {
-			if (!ISREMOTE(ii))
-				continue;
-			rw_rlock(&hio_remote_lock[ii]);
-			if (ISCONNECTED(res, ii)) {
-				assert(res->hr_remotein != NULL);
-				assert(res->hr_remoteout != NULL);
-				keepalive_send(res, ii);
-			}
-			if (ISCONNECTED(res, ii)) {
-				assert(res->hr_remotein != NULL);
-				assert(res->hr_remoteout != NULL);
-				rw_unlock(&hio_remote_lock[ii]);
-				pjdlog_debug(2,
-				    "remote_guard: Connection to %s is ok.",
-				    res->hr_remoteaddr);
-			} else if (real_remote(res)) {
-				assert(res->hr_remotein == NULL);
-				assert(res->hr_remoteout == NULL);
-				/*
-				 * Upgrade the lock. It doesn't have to be
-				 * atomic as no other thread can change
-				 * connection status from disconnected to
-				 * connected.
-				 */
-				rw_unlock(&hio_remote_lock[ii]);
-				pjdlog_debug(2,
-				    "remote_guard: Reconnecting to %s.",
-				    res->hr_remoteaddr);
-				in = out = NULL;
-				if (init_remote(res, &in, &out)) {
-					rw_wlock(&hio_remote_lock[ii]);
-					assert(res->hr_remotein == NULL);
-					assert(res->hr_remoteout == NULL);
-					assert(in != NULL && out != NULL);
-					res->hr_remotein = in;
-					res->hr_remoteout = out;
-					rw_unlock(&hio_remote_lock[ii]);
-					pjdlog_info("Successfully reconnected to %s.",
-					    res->hr_remoteaddr);
-					sync_start();
-				} else {
-					/* Both connections should be NULL. */
-					assert(res->hr_remotein == NULL);
-					assert(res->hr_remoteout == NULL);
-					assert(in == NULL && out == NULL);
-					pjdlog_debug(2,
-					    "remote_guard: Reconnect to %s failed.",
-					    res->hr_remoteaddr);
-					timeout = RECONNECT_SLEEP;
-				}
-			} else {
-				rw_unlock(&hio_remote_lock[ii]);
-			}
+		now = time(NULL);
+		if (lastcheck + RETRY_SLEEP <= now) {
+			for (ii = 0; ii < ncomps; ii++)
+				guard_one(res, ii);
+			lastcheck = now;
 		}
-		(void)cv_timedwait(&hio_guard_cond, &hio_guard_lock, timeout);
-		mtx_unlock(&hio_guard_lock);
+		timeout.tv_sec = RETRY_SLEEP;
+		signo = sigtimedwait(&mask, NULL, &timeout);
 	}
 	/* NOTREACHED */
 	return (NULL);

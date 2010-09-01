@@ -28,7 +28,7 @@
 .\"
 .\" $FreeBSD$
 .\"
-.Dd August 27, 2010
+.Dd August 30, 2010
 .Dt HAST.CONF 5
 .Os
 .Sh NAME
@@ -212,6 +212,20 @@ Execute the given program on various HAST events.
 Below is the list of currently implemented events and arguments the given
 program is executed with:
 .Bl -tag -width ".Ic xxxx"
+.It Ic "<path> role <resource> <oldrole> <newrole>"
+.Pp
+Executed on both primary and secondary nodes when resource role is changed.
+.Pp
+.It Ic "<path> connect <resource>"
+.Pp
+Executed on both primary and secondary nodes when connection for the given
+resource between the nodes is established.
+.Pp
+.It Ic "<path> disconnect <resource>"
+.Pp
+Executed on both primary and secondary nodes when connection for the given
+resource between the nodes is lost.
+.Pp
 .It Ic "<path> syncstart <resource>"
 .Pp
 Executed on primary node when synchronization process of secondary node is
@@ -228,6 +242,11 @@ Executed on primary node when synchronization process of secondary node is
 interrupted, most likely due to secondary node outage or connection failure
 between the nodes.
 .Pp
+.It Ic "<path> split-brain <resource>"
+.Pp
+Executed on both primary and secondary nodes when split-brain condition is
+detected.
+.Pp
 .El
 The
 .Aq path
@@ -240,6 +259,22 @@ will log it as an error.
 The
 .Aq resource
 argument is resource name from the configuration file.
+.Pp
+The
+.Aq oldrole
+argument is previous resource role (before the change).
+It can be one of:
+.Ar init ,
+.Ar secondary ,
+.Ar primary .
+.Pp
+The
+.Aq newrole
+argument is current resource role (after the change).
+It can be one of:
+.Ar init ,
+.Ar secondary ,
+.Ar primary .
 .Pp
 .It Ic name Aq name
 .Pp

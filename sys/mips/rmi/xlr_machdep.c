@@ -66,15 +66,14 @@ __FBSDID("$FreeBSD$");
 #include <machine/fls64.h>
 #include <machine/intr_machdep.h>
 #include <machine/smp.h>
-#include <mips/rmi/rmi_mips_exts.h>
 
 #include <mips/rmi/iomap.h>
-#include <mips/rmi/clock.h>
 #include <mips/rmi/msgring.h>
-#include <mips/rmi/xlrconfig.h>
 #include <mips/rmi/interrupt.h>
 #include <mips/rmi/pic.h>
 #include <mips/rmi/board.h>
+#include <mips/rmi/rmi_mips_exts.h>
+#include <mips/rmi/rmi_boot_info.h>
 
 void mpwait(void);
 unsigned long xlr_io_base = (unsigned long)(DEFAULT_XLR_IO_BASE);
@@ -305,7 +304,7 @@ xlr_pic_init(void)
 	/* Initialize all IRT entries */
 	for (i = 0; i < PIC_NUM_IRTS; i++) {
 		irq = PIC_INTR_TO_IRQ(i);
-		level = PIC_IRQ_IS_EDGE_TRIGGERED(irq);
+		level = PIC_IS_EDGE_TRIGGERED(i);
 
 		/* Bind all PIC irqs to cpu 0 */
 		xlr_write_reg(mmio, PIC_IRT_0(i), 0x01);
@@ -575,11 +574,11 @@ platform_init_ap(int cpuid)
 	stat |= MIPS_SR_COP_2_BIT | MIPS_SR_COP_0_BIT;
 	mips_wr_status(stat);
 
-	xlr_unmask_hard_irq((void *)IRQ_IPI);
-	xlr_unmask_hard_irq((void *)IRQ_TIMER);
+	xlr_enable_irq(IRQ_IPI);
+	xlr_enable_irq(IRQ_TIMER);
 	if (xlr_thr_id() == 0) {
 		xlr_msgring_cpu_init(); 
-	 	xlr_unmask_hard_irq((void *)IRQ_MSGRING);
+	 	xlr_enable_irq(IRQ_MSGRING);
 	}
 
 	return;

@@ -38,23 +38,24 @@ __FBSDID("$FreeBSD$");
 #include <sys/malloc.h>
 #include <sys/bus.h>
 #include <sys/endian.h>
-#include <machine/bus.h>
-#include <machine/md_var.h>
-#include <machine/intr_machdep.h>
-#include <mips/rmi/rmi_mips_exts.h>
-#include <mips/rmi/interrupt.h>
-#include <machine/cpuregs.h>
+#include <sys/rman.h>
+
 #include <vm/vm.h>
 #include <vm/vm_param.h>
 #include <vm/pmap.h>
 
-#include <sys/rman.h>
 #include <dev/pci/pcivar.h>
 #include <dev/pci/pcireg.h>
 
+#include <machine/bus.h>
+#include <machine/md_var.h>
+#include <machine/intr_machdep.h>
+#include <machine/cpuregs.h>
+
+#include <mips/rmi/rmi_mips_exts.h>
+#include <mips/rmi/interrupt.h>
 #include <mips/rmi/iomap.h>
 #include <mips/rmi/pic.h>
-#include <mips/rmi/shared_structs.h>
 #include <mips/rmi/board.h>
 #include <mips/rmi/pcibus.h>
 
@@ -403,24 +404,15 @@ xlr_map_msi(device_t pcib, device_t dev, int irq, uint64_t * addr,
 }
 
 static void
-bridge_pcix_ack(void *arg)
+bridge_pcix_ack(int irq)
 {
 
 	xlr_read_reg(xlr_io_mmio(XLR_IO_PCIX_OFFSET), 0x140 >> 2);
 }
 
 static void
-bridge_pcix_mask_ack(void *arg)
+bridge_pcie_ack(int irq)
 {
-
-	xlr_mask_hard_irq(arg);
-	bridge_pcix_ack(arg);
-}
-	
-static void
-bridge_pcie_ack(void *arg)
-{
-	int irq = (intptr_t)arg;
 	uint32_t reg;
 	xlr_reg_t *pcie_mmio_le = xlr_io_mmio(XLR_IO_PCIE_1_OFFSET);
 
@@ -441,14 +433,6 @@ bridge_pcie_ack(void *arg)
 		return;
 	}
 	xlr_write_reg(pcie_mmio_le, reg>>2, 0xffffffff);
-}
-
-static void
-bridge_pcie_mask_ack(void *arg)
-{
-
-	xlr_mask_hard_irq(arg);
-	bridge_pcie_ack(arg);
 }
 
 static int
@@ -475,17 +459,13 @@ mips_platform_pci_setup_intr(device_t dev, device_t child,
 		return (0);
 
 	if (xlr_board_info.is_xls == 0) {
-		xlr_cpu_establish_hardintr(device_get_name(child), filt,
-		    intr, arg, PIC_PCIX_IRQ, flags, cookiep,
-		    bridge_pcix_mask_ack, xlr_unmask_hard_irq,
-		    bridge_pcix_ack, NULL);
-		pic_setup_intr(PIC_IRT_PCIX_INDEX, PIC_PCIX_IRQ, 0x1);
+		xlr_establish_intr(device_get_name(child), filt,
+		    intr, arg, PIC_PCIX_IRQ, flags, cookiep, bridge_pcix_ack);
+		pic_setup_intr(PIC_IRT_PCIX_INDEX, PIC_PCIX_IRQ, 0x1, 0);
 	} else {
-		xlr_cpu_establish_hardintr(device_get_name(child), filt,
-		    intr, arg, xlrirq, flags, cookiep,
-	    	    bridge_pcie_mask_ack, xlr_unmask_hard_irq,
-		    bridge_pcie_ack, NULL);
-		pic_setup_intr(xlrirq - PIC_IRQ_BASE, xlrirq, 0x1);
+		xlr_establish_intr(device_get_name(child), filt,
+		    intr, arg, xlrirq, flags, cookiep, bridge_pcie_ack);
+		pic_setup_intr(xlrirq - PIC_IRQ_BASE, xlrirq, 0x1, 0);
 	}
 
 	return (bus_generic_setup_intr(dev, child, irq, flags, filt, intr,
