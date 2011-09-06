@@ -1,5 +1,4 @@
 sys/amd64/compile
-sys/amd64/conf
 sys/i386/compile
 sys/i386/conf
 cscope.*
@@ -11,3 +10,6 @@ cscope.*
 .pc
 qpatches
 patches
+cscope.*
+*~
+#*#
