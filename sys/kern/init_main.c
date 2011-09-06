@@ -91,6 +91,8 @@ __FBSDID("$FreeBSD$");
 #include <ddb/ddb.h>
 #include <ddb/db_sym.h>
 
+//#define VERBOSE_SYSINIT
+
 void mi_startup(void);				/* Should be elsewhere */
 
 /* Components of the first process -- never freed. */

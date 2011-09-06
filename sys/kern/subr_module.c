@@ -159,13 +159,19 @@ preload_search_info(caddr_t mod, int inf)
     uint32_t	*hdr;
     uint32_t	type = 0;
     int		next;
+    int		max = 256;
 
     curp = mod;
     for (;;) {
 	hdr = (uint32_t *)curp;
+	printf("%s:%d hdr %p hdr[0] %u hdr[1] %u\n",
+	       __FUNCTION__,__LINE__,
+	       hdr,hdr[0],hdr[1]);
 	/* end of module data? */
 	if (hdr[0] == 0 && hdr[1] == 0)
 	    break;
+	if (max-- == 0)  /* something not right bail out */
+		break;
 	/* 
 	 * We give up once we've looped back to what we were looking at 
 	 * first - this should normally be a MODINFO_NAME field.

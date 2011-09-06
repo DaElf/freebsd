@@ -98,6 +98,7 @@ uart_cninit(struct consdev *cp)
 	di->type = UART_DEV_CONSOLE;
 	uart_add_sysdev(di);
 	uart_init(di);
+	printf("%s:%d\n",__FUNCTION__,__LINE__);
 }
 
 static void

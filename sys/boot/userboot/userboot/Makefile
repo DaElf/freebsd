@@ -26,6 +26,7 @@ SRCS+=		userboot_cons.c
 SRCS+=		userboot_disk.c
 SRCS+=		vers.c
 
+CFLAGS+=	-g3
 CFLAGS+=	-Wall
 CFLAGS+=	-I${.CURDIR}/..
 CFLAGS+=	-I${.CURDIR}/../../common

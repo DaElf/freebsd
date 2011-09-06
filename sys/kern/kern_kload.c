@@ -29,11 +29,13 @@ static int kload_copyin_segment(struct kload_segment *,int);
 static struct vm_page*
 kload_grab_page(struct kload_items *items, int seg) {
 
-	struct vm_object *obj;
+	struct vm_object *obj = items->kload_obj;
 	struct vm_page *m = NULL;
 
-	if (!items->kload_obj) 
-		obj = items->kload_obj = vm_object_allocate(OBJT_DEFAULT, seg);
+	if (obj) {
+		obj = vm_object_allocate(OBJT_DEFAULT, seg);
+		items->kload_obj = obj;
+	}
 
 	VM_OBJECT_LOCK(obj);
 	m = vm_page_grab(obj, 0, VM_ALLOC_NOBUSY | VM_ALLOC_WIRED | VM_ALLOC_ZERO | VM_ALLOC_RETRY);
@@ -64,9 +66,14 @@ static int kload_add_page(struct kload_items *items, unsigned long item_m, int s
 		       (void *)*items->item,
 		       m,
 		       (void *)phys );
+		/* store the address of indrect page */
 		*items->item = (unsigned long)phys;
-		image->entry = ;
-		items->last_item = (unsigned long)phys + ((PAGE_SIZE/sizeof(unsigned long)) - 1);
+		/* ok now move to new page to start storing address */
+		items->item = NULL; /* we have a physical page but no pv_entry yet */
+		  /* vm_page_grab may not be the right way to get a page in this case */
+		/* look at kern_alloc  That adds pages to the kernel map ... which is what we 
+		   probably want */
+		items->last_item = (unsigned long *)(phys + ((PAGE_SIZE/sizeof(unsigned long)) - 1));
 	}
 	*items->item = item_m;
 	items->item++;

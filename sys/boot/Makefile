@@ -3,6 +3,7 @@
 .include <bsd.own.mk>
 .include <bsd.arch.inc.mk>
 
+CFLAGS += -g3
 .if ${MK_FORTH} != "no"
 # Build the add-in FORTH interpreter.
 SUBDIR+=		ficl
@@ -15,3 +16,5 @@ SUBDIR+=		${ADIR}
 .endif
 
 .include <bsd.subdir.mk>
+
+CFLAGS += -g3
