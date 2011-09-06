@@ -3244,6 +3244,15 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 		*n_args = 4;
 		break;
 	}
+	/* kload */
+	case 532: {
+		struct kload_args *p = params;
+		uarg[0] = (intptr_t) p->buf; /* const void * */
+		uarg[1] = p->buflen; /* size_t */
+		iarg[2] = p->flags; /* int */
+		*n_args = 3;
+		break;
+	}
 	default:
 		*n_args = 0;
 		break;
@@ -8626,6 +8635,22 @@ systrace_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			p = "off_t";
 			break;
 		case 3:
+			p = "int";
+			break;
+		default:
+			break;
+		};
+		break;
+	/* kload */
+	case 532:
+		switch(ndx) {
+		case 0:
+			p = "const void *";
+			break;
+		case 1:
+			p = "size_t";
+			break;
+		case 2:
 			p = "int";
 			break;
 		default:
