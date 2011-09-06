@@ -41,6 +41,8 @@ __FBSDID("$FreeBSD$");
 
 #include "bootstrap.h"
 
+#define ELF_VERBOSE
+
 #define COPYOUT(s,d,l)	archsw.arch_copyout((vm_offset_t)(s), d, l)
 
 #if defined(__i386__) && __ELF_WORD_SIZE == 64
@@ -143,6 +145,8 @@ __elfN(loadfile)(char *filename, u_int64_t dest, struct preloaded_file **result)
     kfp = file_findfile(NULL, NULL);
     if (ehdr->e_type == ET_DYN) {
 	/* Looks like a kld module */
+	printf("%s found ET_DYN\n",__FUNCTION__);
+
 	if (kfp == NULL) {
 	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: can't load module before kernel\n");
 	    err = EPERM;
@@ -158,6 +162,7 @@ __elfN(loadfile)(char *filename, u_int64_t dest, struct preloaded_file **result)
 
     } else if (ehdr->e_type == ET_EXEC) {
 	/* Looks like a kernel */
+	printf("%s found ET_EXEC\n",__FUNCTION__);
 	if (kfp != NULL) {
 	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: kernel already loaded\n");
 	    err = EPERM;
@@ -167,6 +172,8 @@ __elfN(loadfile)(char *filename, u_int64_t dest, struct preloaded_file **result)
 	 * Calculate destination address based on kernel entrypoint 	
 	 */
 	dest = (ehdr->e_entry & ~PAGE_MASK);
+	printf("%s dest 0x%jx e_entry 0x%jx\n",__FUNCTION__,
+	       (uintmax_t)dest,(uintmax_t)ehdr->e_entry);
 	if (dest == 0) {
 	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: not a kernel (maybe static binary?)\n");
 	    err = EPERM;
@@ -260,12 +267,20 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
     firstaddr = lastaddr = 0;
     ehdr = ef->ehdr;
     if (ef->kernel) {
+
+      printf("%s enter off 0x%llx mask 0x%llx 0x%llx\n",__FUNCTION__,(unsigned long long) off,
+	     (off & 0xffffffffff000000ull),
+	     off -  (off & 0xffffffffff000000ull)
+	     );
+      /* with this mask the kernel must start on a 256meg boundry */
+      /* why is this? can we move this down to slightly more reasonable boundry? */
 #if defined(__i386__) || defined(__amd64__)
 #if __ELF_WORD_SIZE == 64
 	off = - (off & 0xffffffffff000000ull);/* x86_64 relocates after locore */
 #else
 	off = - (off & 0xff000000u);	/* i386 relocates after locore */
 #endif
+	printf("%s after mask off 0x%llx\n",__FUNCTION__,(unsigned long long) off);
 #elif defined(__powerpc__)
 	/*
 	 * On the purely virtual memory machines like e500, the kernel is
@@ -313,29 +328,35 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
 
     for (i = 0; i < ehdr->e_phnum; i++) {
 	/* We want to load PT_LOAD segments only.. */
+	    printf("%s header # %d p_type %d\n",__FUNCTION__,i,phdr[i].p_type);
 	if (phdr[i].p_type != PT_LOAD)
 	    continue;
 
 #ifdef ELF_VERBOSE
-	printf("Segment: 0x%lx@0x%lx -> 0x%lx-0x%lx",
-	    (long)phdr[i].p_filesz, (long)phdr[i].p_offset,
-	    (long)(phdr[i].p_vaddr + off),
-	    (long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1));
+	printf("Segment: 0x%llx @ 0x%llx -> 0x%llx - 0x%llx",
+	    (long long)phdr[i].p_filesz, (long long)phdr[i].p_offset,
+	    (long long)(phdr[i].p_vaddr + off),
+	    (long long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1));
 #else
 	if ((phdr[i].p_flags & PF_W) == 0) {
-	    printf("text=0x%lx ", (long)phdr[i].p_filesz);
+	    printf("text=0x%llx ", (long long)phdr[i].p_filesz);
 	} else {
-	    printf("data=0x%lx", (long)phdr[i].p_filesz);
+	    printf("data=0x%llx", (long long)phdr[i].p_filesz);
 	    if (phdr[i].p_filesz < phdr[i].p_memsz)
-		printf("+0x%lx", (long)(phdr[i].p_memsz -phdr[i].p_filesz));
+		printf("+0x%llx", (long long)(phdr[i].p_memsz -phdr[i].p_filesz));
 	    printf(" ");
 	}
 #endif
 	fpcopy = 0;
 	if (ef->firstlen > phdr[i].p_offset) {
 	    fpcopy = ef->firstlen - phdr[i].p_offset;
-	    archsw.arch_copyin(ef->firstpage + phdr[i].p_offset,
-			       phdr[i].p_vaddr + off, fpcopy);
+	    printf("\n%s:%d firstpage 0x%lx p_offset 0x%lx p_vaddr 0x%llx off 0x%llx\n",
+		   __FUNCTION__,__LINE__,
+		   (unsigned long long)ef->firstpage,
+		   (unsigned long long) phdr[i].p_offset,
+		   (unsigned long long)phdr[i].p_vaddr,
+		   (unsigned long long)off);
+	    archsw.arch_copyin(ef->firstpage + phdr[i].p_offset, phdr[i].p_vaddr + off, fpcopy);
 	}
 	if (phdr[i].p_filesz > fpcopy) {
 	    if (kern_pread(ef->fd, phdr[i].p_vaddr + off + fpcopy,
@@ -348,7 +369,7 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
 	/* clear space from oversized segments; eg: bss */
 	if (phdr[i].p_filesz < phdr[i].p_memsz) {
 #ifdef ELF_VERBOSE
-	    printf(" (bss: 0x%lx-0x%lx)",
+	    printf(" (bss: 0x%lx-0x%lx) clearing",
 		(long)(phdr[i].p_vaddr + off + phdr[i].p_filesz),
 		(long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1));
 #endif

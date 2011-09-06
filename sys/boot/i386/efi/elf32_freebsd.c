@@ -70,7 +70,7 @@ elf32_exec(struct preloaded_file *fp)
 	return(err);
     entry = ehdr->e_entry & 0xffffff;
 
-    printf("Start @ 0x%lx ...\n", entry);
+    printf("\n\n%s:%d Start @ 0x%lx ...\n",__FILE__,__LINE__, entry);
 
     ldr_enter(fp->f_name);
 

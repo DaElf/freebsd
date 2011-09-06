@@ -65,13 +65,14 @@ command_boot(int argc, char *argv[])
 	    return(CMD_ERROR);
 	}
 
+	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	/* find/load the kernel module */
 	if (mod_loadkld(argv[1], argc - 2, argv + 2) != 0)
 	    return(CMD_ERROR);
 	/* we have consumed all arguments */
 	argc = 1;
     }
-
+    printf("%s:%d\n",__FUNCTION__,__LINE__);
     /*
      * See if there is a kernel module already loaded
      */
@@ -80,6 +81,7 @@ command_boot(int argc, char *argv[])
 	    /* we have consumed all arguments */
 	    argc = 1;
 
+    printf("%s:%d\n",__FUNCTION__,__LINE__);
     /*
      * Loaded anything yet?
      */
@@ -102,6 +104,7 @@ command_boot(int argc, char *argv[])
     if (archsw.arch_autoload() != 0)
 	return(CMD_ERROR);
 
+    printf("%s:%d %p\n",__FUNCTION__,__LINE__,file_formats[fp->f_loader]->l_exec);
     /* Call the exec handler from the loader matching the kernel */
     file_formats[fp->f_loader]->l_exec(fp);
     return(CMD_ERROR);
