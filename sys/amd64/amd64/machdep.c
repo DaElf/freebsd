@@ -1621,8 +1621,10 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	u_int64_t msr;
 	char *env;
 	size_t kstack0_sz;
+	u_int64_t physfree_save = physfree;
+	u_int64_t kernbase = KERNBASE;
 
-	thread0.td_kstack = physfree + KERNBASE;
+	thread0.td_kstack = physfree + kernbase;
 	thread0.td_kstack_pages = KSTACK_PAGES;
 	kstack0_sz = thread0.td_kstack_pages * PAGE_SIZE;
 	bzero((void *)thread0.td_kstack, kstack0_sz);
@@ -1634,13 +1636,18 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	 */
 	proc_linkup0(&proc0, &thread0);
 
-	preload_metadata = (caddr_t)(uintptr_t)(modulep + KERNBASE);
+	/* so when we add 4k to the kernbase modulep is in the next page 
+	 * but when we add KERNBASE back into we are now one page to far
+	 * so there is some funky rounding going on
+	 */
+	preload_metadata = (caddr_t)(uintptr_t)(modulep + kernbase);
+	/* need to leave this at original kernbase location? */
 	preload_bootstrap_relocate(KERNBASE);
 	kmdp = preload_search_by_type("elf kernel");
 	if (kmdp == NULL)
 		kmdp = preload_search_by_type("elf64 kernel");
 	boothowto = MD_FETCH(kmdp, MODINFOMD_HOWTO, int);
-	kern_envp = MD_FETCH(kmdp, MODINFOMD_ENVP, char *) + KERNBASE;
+	kern_envp = MD_FETCH(kmdp, MODINFOMD_ENVP, char *) + kernbase;
 #ifdef DDB
 	ksym_start = MD_FETCH(kmdp, MODINFOMD_SSYM, uintptr_t);
 	ksym_end = MD_FETCH(kmdp, MODINFOMD_ESYM, uintptr_t);
@@ -1671,7 +1678,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	wrmsr(MSR_KGSBASE, 0);		/* User value while in the kernel */
 
 	pcpu_init(pc, 0, sizeof(struct pcpu));
-	dpcpu_init((void *)(physfree + KERNBASE), 0);
+	dpcpu_init((void *)(physfree + kernbase), 0);
 	physfree += DPCPU_SIZE;
 	PCPU_SET(prvspace, pc);
 	PCPU_SET(curthread, &thread0);
@@ -1734,6 +1741,11 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	 * Initialize the console before we print anything out.
 	 */
 	cninit();
+
+	printf("%s:%d modulep 0x%jx physfree 0x%jx\n",__FUNCTION__,__LINE__,
+	       modulep, physfree_save);
+	printf("preload_metadata %p kmdp %p kern_envp %p\n",
+	       preload_metadata,kmdp,kern_envp);
 
 #ifdef DEV_ISA
 #ifdef DEV_ATPIC

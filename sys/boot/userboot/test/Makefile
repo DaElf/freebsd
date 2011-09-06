@@ -9,6 +9,7 @@ WITHOUT_SSP=
 PROG=		test
 INTERNALPROG=
 
+CFLAGS+=	-g3
 CFLAGS+=	-I${.CURDIR}/..
 CFLAGS+=	-I${.CURDIR}/../../..
 
