@@ -113,10 +113,13 @@ elf64_exec(struct preloaded_file *fp)
     printf("Start @ %#llx ...\n", ehdr->e_entry);
 #endif
     printf("Start @ %#llx ...\n", ehdr->e_entry);
-    printf("%s:%d __exec %p amd6_tramp %p modulep %p kernend %p\n",
+    printf("%s:%d __exec %p amd6_tramp %p __base 0x%lx PT4 0x%lx modulep %p kernend %p\n",
 	   __FUNCTION__,__LINE__,
 	   __exec,
-	   (void *)VTOP(amd64_tramp), modulep, kernend);
+	   (void *)VTOP(amd64_tramp),
+	   __base,
+	   (unsigned long)VTOP(PT4),
+	   modulep, kernend);
 	   
     dev_cleanup();
     __exec((void *)VTOP(amd64_tramp), modulep, kernend);
