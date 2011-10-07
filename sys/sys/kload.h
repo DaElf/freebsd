@@ -9,6 +9,8 @@
 struct kload_segment {
 	void		       *k_buf;
 	size_t			k_memsz;
+	unsigned long	       *k_pages;
+	unsigned long		k_entry_pt;
 };
 	
 struct kload {
@@ -26,14 +28,15 @@ struct kload {
 #define KLOAD_SOURCE       0x8
 
 struct kload_items {
-	struct vm_object *kload_obj;
-	
 	unsigned long head;
+	vm_offset_t head_va;
 	unsigned long *last_item;
 	unsigned long *item;
+	int i_count;
   
 	
 	unsigned long flags;  /* not used yet */
+  //struct vm_object *kload_obj;
 };
 
 
