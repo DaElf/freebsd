@@ -449,6 +449,7 @@ ithread_create(const char *name)
 	struct thread *td;
 	int error;
 
+	printf("%s:%d name %s\n",__FUNCTION__,__LINE__,name);
 	ithd = malloc(sizeof(struct intr_thread), M_ITHREAD, M_WAITOK | M_ZERO);
 
 	error = kproc_kthread_add(ithread_loop, ithd, &intrproc,
@@ -473,6 +474,7 @@ ithread_create(const char *name, struct intr_handler *ih)
 	struct thread *td;
 	int error;
 
+	printf("%s:%d name %s\n",__FUNCTION__,__LINE__,name);
 	ithd = malloc(sizeof(struct intr_thread), M_ITHREAD, M_WAITOK | M_ZERO);
 
 	error = kproc_kthread_add(ithread_loop, ih, &intrproc,
@@ -592,6 +594,7 @@ intr_event_add_handler(struct intr_event *ie, const char *name,
 	if (ie == NULL || name == NULL || (handler == NULL && filter == NULL))
 		return (EINVAL);
 
+	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	/* Allocate and populate an interrupt handler structure. */
 	ih = malloc(sizeof(struct intr_handler), M_ITHREAD, M_WAITOK | M_ZERO);
 	ih->ih_filter = filter;
@@ -1337,6 +1340,7 @@ ithread_loop(void *arg)
 		if (ithd->it_flags & IT_DEAD) {
 			CTR3(KTR_INTR, "%s: pid %d (%s) exiting", __func__,
 			    p->p_pid, td->td_name);
+			printf("%s: pid %d (%s) exiting", __func__, p->p_pid, td->td_name);
 			free(ithd, M_ITHREAD);
 			kthread_exit();
 		}
@@ -1506,6 +1510,7 @@ ithread_loop(void *arg)
 	ie->ie_count = 0;
 	wake = 0;
 
+	printf("%s starting ih %p\n",__FUNCTION__,ih);
 	/*
 	 * As long as we have interrupts outstanding, go through the
 	 * list of handlers, giving each one a go at it.
