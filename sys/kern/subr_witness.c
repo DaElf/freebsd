@@ -437,7 +437,8 @@ SYSCTL_PROC(_debug_witness, OID_AUTO, fullgraph, CTLTYPE_STRING | CTLFLAG_RD,
 SYSCTL_PROC(_debug_witness, OID_AUTO, badstacks, CTLTYPE_STRING | CTLFLAG_RD,
     NULL, 0, sysctl_debug_witness_badstacks, "A", "Show bad witness stacks");
 
-static struct mtx w_mtx;
+//static struct mtx w_mtx;
+struct mtx w_mtx;
 
 /* w_list */
 static struct witness_list w_free = STAILQ_HEAD_INITIALIZER(w_free);
@@ -711,7 +712,7 @@ static int blessed_count =
 /*
  * This global is set to 0 once it becomes safe to use the witness code.
  */
-static int witness_cold = 1;
+int witness_cold = 1;
 
 /*
  * This global is set to 1 once the static lock orders have been enrolled

@@ -115,6 +115,7 @@ int
 intr_register_pic(struct pic *pic)
 {
 	int error;
+	printf("%s pic %p\n",__FUNCTION__,pic);
 
 	mtx_lock(&intr_table_lock);
 	if (intr_pic_registered(pic))
@@ -137,6 +138,7 @@ intr_register_source(struct intsrc *isrc)
 {
 	int error, vector;
 
+	printf("%s isrc %p\n",__FUNCTION__,isrc);
 	KASSERT(intr_pic_registered(isrc->is_pic), ("unregistered PIC"));
 	vector = isrc->is_pic->pic_vector(isrc);
 	if (interrupt_sources[vector] != NULL)

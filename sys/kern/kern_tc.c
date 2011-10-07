@@ -43,7 +43,8 @@ dummy_get_timecount(struct timecounter *tc)
 	return (++now);
 }
 
-static struct timecounter dummy_timecounter = {
+//static struct timecounter dummy_timecounter = {
+struct timecounter dummy_timecounter = {
 	dummy_get_timecount, 0, ~0u, 1000000, "dummy", -1000000
 };
 

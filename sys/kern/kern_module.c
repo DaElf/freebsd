@@ -64,6 +64,7 @@ static TAILQ_HEAD(modulelist, module) modules;
 struct sx modules_sx;
 static int nextid = 1;
 static void module_shutdown(void *, int);
+void kload_module_shutdown(void);
 
 static int
 modevent_nop(module_t mod, int what, void *arg)
@@ -98,13 +99,21 @@ module_shutdown(void *arg1, int arg2)
 
 	if (arg2 & RB_NOSYNC)
 		return;
+	printf("%s:%d enter\n",__FUNCTION__,__LINE__);
 	mtx_lock(&Giant);
 	MOD_SLOCK;
 	TAILQ_FOREACH_REVERSE(mod, &modules, modulelist, link)
 		MOD_EVENT(mod, MOD_SHUTDOWN);
 	MOD_SUNLOCK;
 	mtx_unlock(&Giant);
+	printf("%s:%d exit\n",__FUNCTION__,__LINE__);
 }
+
+void
+kload_module_shutdown(void) {
+	module_shutdown(NULL, 0);
+}
+
 
 void
 module_register_init(const void *arg)

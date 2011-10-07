@@ -48,7 +48,11 @@ __FBSDID("$FreeBSD$");
 #include <sys/systm.h>
 #include <sys/bus.h>
 #include <sys/lock.h>
+#ifdef KDB
 #include <sys/kdb.h>
+#else
+static int kdb_active = 0;
+#endif
 #include <sys/mutex.h>
 #include <sys/proc.h>
 #include <sys/kernel.h>
@@ -104,6 +108,8 @@ static	uint16_t i8254_offset;
 static	int	(*i8254_pending)(struct intsrc *);
 static	int	i8254_ticked;
 
+extern int kload_active;
+
 struct attimer_softc {
 	int intr_en;
 	int port_rid, intr_rid;
@@ -136,6 +142,9 @@ static	u_char	timer2_state;
 
 static	unsigned i8254_get_timecount(struct timecounter *tc);
 static	void	set_i8254_freq(int mode, uint32_t period);
+int attimer_generic_detach(device_t dev);
+int attimer_generic_shutdown(device_t dev);
+int attimer_generic_suspend(device_t dev);
 
 static int
 clkintr(void *arg)
@@ -302,6 +311,7 @@ void
 DELAY(int n)
 {
 	int delta, prev_tick, tick, ticks_left;
+
 #ifdef DELAYDEBUG
 	int getit_calls = 1;
 	int n1;
@@ -332,7 +342,7 @@ DELAY(int n)
 	 * input.
 	 */
 #ifdef KDB
-	if (kdb_active)
+	if (kdb_active || kload_active)
 		prev_tick = 1;
 	else
 #endif
@@ -364,7 +374,7 @@ DELAY(int n)
 
 	while (ticks_left > 0) {
 #ifdef KDB
-		if (kdb_active) {
+		if (kdb_active || kload_active) {
 #ifdef PC98
 			outb(0x5f, 0);
 #else
@@ -376,6 +386,9 @@ DELAY(int n)
 		} else
 #endif
 			tick = getit();
+
+
+
 #ifdef DELAYDEBUG
 		++getit_calls;
 #endif
@@ -490,7 +503,9 @@ i8254_init(void)
 void
 startrtclock()
 {
-
+	printf("%s:%d return addr %p\t%p\n",__FUNCTION__,__LINE__,
+	       __builtin_return_address(0),
+	       __builtin_return_address(1));
 	init_TSC();
 }
 
@@ -660,7 +675,8 @@ static int
 attimer_probe(device_t dev)
 {
 	int result;
-	
+
+	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
 	result = ISA_PNP_PROBE(device_get_parent(dev), dev, attimer_ids);
 	/* ENOENT means no PnP-ID, device is hinted. */
 	if (result == ENOENT) {
@@ -682,6 +698,7 @@ attimer_attach(device_t dev)
 	u_long s;
 	int i;
 
+	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
 	attimer_sc = sc = device_get_softc(dev);
 	bzero(sc, sizeof(struct attimer_softc));
 #ifdef PC98
@@ -757,13 +774,30 @@ attimer_resume(device_t dev)
 	return (0);
 }
 
+int
+attimer_generic_detach(device_t dev) {
+	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
+	return bus_generic_detach(dev);
+}
+int
+attimer_generic_shutdown(device_t dev) {
+	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
+	return bus_generic_detach(dev);
+}
+int
+attimer_generic_suspend(device_t dev) {
+	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
+	return bus_generic_detach(dev);
+}
+
+
 static device_method_t attimer_methods[] = {
 	/* Device interface */
 	DEVMETHOD(device_probe,		attimer_probe),
 	DEVMETHOD(device_attach,	attimer_attach),
-	DEVMETHOD(device_detach,	bus_generic_detach),
-	DEVMETHOD(device_shutdown,	bus_generic_shutdown),
-	DEVMETHOD(device_suspend,	bus_generic_suspend),
+	DEVMETHOD(device_detach,	attimer_generic_detach),
+	DEVMETHOD(device_shutdown,	attimer_generic_shutdown),
+	DEVMETHOD(device_suspend,	attimer_generic_suspend),
 	DEVMETHOD(device_resume,	attimer_resume),
 	{ 0, 0 }
 };
