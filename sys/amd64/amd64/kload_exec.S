@@ -194,6 +194,11 @@ identity_mapped:
 	xorq    %rdi, %rdi
 	xorq    %rbp, %rbp
 
+	pushq	16(%r9)		// physfree
+	movq	8(%r9), %rax	//modulep
+	salq	$32, %rax
+	pushq	%rax
+
 	pushq $0x8
 	pushq $0xffffffff8026fc60
 	lretq
