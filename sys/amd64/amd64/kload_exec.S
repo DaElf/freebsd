@@ -43,54 +43,69 @@ relocate_kernel:
 //	movq  10(%rsp), %rbp /* reboot_code_buffer */
 //	movq  18(%rsp), %rdx /* start address */
 
-	pushq %rbp
-	movq  %rsp, %rbp
+//	pushq %rbp
+//	movq  %rsp, %rbp
 
+	// move the stack to the end of the control page
+	
+//	lea 4096(%rcx), %rsp
+	
+	/* jump to identity mapped page */
+//	addq	$(identity_mapped - relocate_kernel), %r8
+//	pushq	%r8
+//	ret
+
+//identity_mapped:
+	/* store the start address on the stack */
+//	pushq   %rdx
+
+	// first install the new page table
+	movq	32(%rcx), %rax // page table
+	movq 	40(%rcx), %r9  // address of control_page with new PT
+	movq	%rax, %cr3
+	
+
+	// then move the stack to the end of control page
+	lea 4096(%r9), %rsp
+
+	// now save stuff onto the new stack
 	pushq %rcx	// arg 4 control page
 	pushq %rdx	// arg 3 code page
 	pushq %rsi	// arg 2 kern base
 	pushq %rdi	// arg 1 va_list
 
-	# Display a message to say everything is working so far
-	pushq %rdi
-	movq $s_hello2, %rdi
-	call printf
-	popq %rdi
+	/* install simple gdt */
+	movq	24(%r9), %rax	// gdt
+	lgdt	(%rax)
+	// now move to the code page
+	// should have been passwd code_page based on new PT
+	movq %rdx, %r8
+	addq	$(identity_mapped - relocate_kernel), %r8
+	/* offset of code segment in new gdt */
+	pushq $0x08
+	pushq %r8
+	// jump to this spot in the new page
+	lretq
+identity_mapped:
+
+//	# Display a message to say everything is working so far
+//	pushq %rdi
+//	movq $s_hello2, %rdi
+//	call printf
+//	popq %rdi
+
 
 #if 0
-	/* zero out flags */
-	pushq $0
-	popfq
-	cli
-
-	/* set a new stack at the bottom of our page... */
-	lea   4096(%rbp), %rsp
-
-	/* store the parameters back on the stack */
-	pushq   %rdx /* store the start address */
-
-	/* Turn off paging, leave protection turned on */
-	movq %cr0, %rax	/* Turn off paging (bit 31 in CR0) */
-	andq $0xFFFFFFFF7fffffff, %rax
-	movq %rax, %cr0
-	jmp 1f
-1:	
-
-	/* Flush the TLB (needed?) */
-	xorq %rax, %rax
-	movq %rax, %cr3
-#endif
-	movq 	24(%rsp), %rcx
-	movq	32(%rcx), %rax // page table
-	movq	%rax, %cr3
-
-	movq	24(%rcx), %rax	// gdt
+	movq	24(%r9), %rax	// gdt
 	lgdt	(%rax)
 
-	jmp 1f
+	// now jump the code to use the new gdt segment
+	pushq $0x8
+	pushq 1f
+	lretq
+//	ljmp 1f
 	nop	
 1:
-#if 1
 	// we just loaded a bogus data segment so se can't set any of the
 	// data segment register
 	movq $0x10,%rax
@@ -98,7 +113,7 @@ relocate_kernel:
 	movq %rax,%es
 	movq %rax,%fs
 	movq %rax,%gs
-//	movq %rax,%ss
+	movq %rax,%ss
 #endif
 #if 1
 	/*
@@ -119,8 +134,13 @@ relocate_kernel:
 	
 	/* Do the copies */
 	cld
+	/* saved list of source pages */
 	movq 0(%rsp), %rbx
-	movq 8(%rsp), %rdi // set the initial dest page
+	/* the initial dest page
+	* this is KERNBASE + 0x200000
+	* kernel is contigious in memory
+	*/
+	movq 8(%rsp), %rdi
 0:	/* top, read another word for the indirection page */
 	movq	(%rbx), %rcx
 	
