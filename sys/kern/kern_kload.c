@@ -226,9 +226,10 @@ kload_copyin_segment(struct kload_segment *khdr, int seg) {
 
 	/*  need to set up a START dst page */
 	for (i = 0; i < num_pages; i++) {
-		//printf("pages phys 0x%lx\n",(unsigned long)vtophys(va + (i * PAGE_SIZE)));
-		kload_add_page(k_items, vtophys(va + (i * PAGE_SIZE))| KLOAD_SOURCE);
-		//kload_add_page(k_items, (va + (i * PAGE_SIZE))| KLOAD_SOURCE);
+	  //printf("pages phys 0x%lx\n",(unsigned long)vtophys(va + (i * PAGE_SIZE)));
+	  kload_add_page(k_items, (vtophys(va + (i * PAGE_SIZE)) + KERNBASE)
+			 | KLOAD_SOURCE);
+	  //kload_add_page(k_items, (va + (i * PAGE_SIZE))| KLOAD_SOURCE);
 	}
 	*k_items->item = KLOAD_DONE;
 	if ((error = copyin(khdr->k_buf, (void *)va, khdr->k_memsz)) != 0)
@@ -322,11 +323,16 @@ kload(struct thread *td, struct kload_args *uap)
 	
 	setup_freebsd_gdt(gdt_desc);
 	gdt->size    = GUEST_GDTR_LIMIT;
-	gdt->address = (unsigned long)gdt_desc;
+	gdt->address = (unsigned long)(vtophys(gdt_desc) + KERNBASE);
 
-	/* returns phys addr */
+	/* returns new page table phys addr */
 	pgtbl = kload_build_page_table();
 	((unsigned long *)control_page)[4] = (unsigned long)pgtbl;
+
+	/* we pass the virt addr of control_page but we need
+	 * new virt addr as well */
+	((unsigned long *)control_page)[5] =
+		(unsigned long)(vtophys(control_page) + KERNBASE);
 
 	if(uap->flags & 0x4) {
 		kload_reboot();
@@ -339,18 +345,25 @@ kload(struct thread *td, struct kload_args *uap)
 		kload_copyin_segment(&kld.khdr[i],i);
 	}
 
-	printf("%s: head_va 0x%lx\n"
-	       "\tkernbase 0x%lx\n"
-	       "\tcode_page 0x%lx (phys 0x%lx)\n"
-	       "\tcontrol_page 0x%lx (phys 0x%lx)\n"
-	       "\tgdt 0x%lx (0x%lx) pgtbl 0x%lx\n",
+	printf("%s:\thead_va\t0x%lx (phys 0x%lx)\n"
+	       "\tkernbase\t0x%lx\n"
+	       "\tcode_page\t0x%lx (phys 0x%lx)\n"
+	       "\tcontrol_page\t0x%lx (phys 0x%lx)\n"
+	       "\tgdt\t0x%lx (0x%lx)\n"
+	       "\tpgtbl\t0x%lx\n",
 	       __FUNCTION__,
-	       k_items->head_va,KERNBASE + 0x200000,
+	       k_items->head_va, vtophys(k_items->head_va),
+	       KERNBASE + 0x200000,
 	       control_page + PAGE_SIZE, vtophys(control_page + PAGE_SIZE),
 	       control_page, vtophys(control_page),
 	       (unsigned long)gdt,vtophys(gdt),(unsigned long)pgtbl );
-	ret = relocate_kernel(k_items->head_va,(KERNBASE + 0x200000),code_page,control_page);
-	//	ret = relocate_kernel();
+	/* only pass the control page under the current page table
+	 * the rest of the address should be based on new page table
+	 * which is a simple phys + KERNBASE mapping */
+	ret = relocate_kernel(vtophys(k_items->head_va) + KERNBASE,
+			      KERNBASE + 0x200000,
+			      vtophys(code_page) + KERNBASE,
+			      control_page);
 	printf("\trelocate_new_kernel returned %d\n",ret);
 		
 	return 0;
