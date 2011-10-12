@@ -162,13 +162,14 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 			items->head_va = va;
 		
 		phys = vtophys(va);
-		printf("%s:%d added indirect page item %p va %p phys %p\n",__FUNCTION__,__LINE__,
+		printf("%s indirect page item %p va %p stored %p phys %p\n",__FUNCTION__,
 		       (void *)*items->item,
 		       (void *)va,
+		       (void *)(vtophys(va) + KERNBASE),
 		       (void *)phys );
 		/* store the address of indrect page */
 		//*items->item = (unsigned long)phys | KLOAD_INDIRECT;
-		*items->item = (unsigned long)va | KLOAD_INDIRECT;
+		*items->item = (unsigned long)(vtophys(va) + KERNBASE) | KLOAD_INDIRECT;
 		items->item = (unsigned long *)va;
 		/* ok now move to new page to start storing address */
 		items->last_item = (unsigned long *)va + ((PAGE_SIZE/sizeof(unsigned long)) - 1);
@@ -234,7 +235,9 @@ kload_copyin_segment(struct kload_segment *khdr, int seg) {
 	*k_items->item = KLOAD_DONE;
 	if ((error = copyin(khdr->k_buf, (void *)va, khdr->k_memsz)) != 0)
                 return error;
-	printf("copied %d bytes to va %p\n",(int)khdr->k_memsz, (void *)va);
+	printf("copied %d bytes to va %p done marker at %p\n",
+	       (int)khdr->k_memsz, (void *)va,
+	       &k_items->item );
 
 
 	return error;
