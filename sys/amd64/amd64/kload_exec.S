@@ -74,6 +74,11 @@ relocate_kernel:
 	pushq %rsi	// arg 2 kern base
 	pushq %rdi	// arg 1 va_list
 
+	/* zero out flags, and disable interrupts */
+	pushq $0
+	popfq
+	cli
+	
 	/* install simple gdt */
 	movq	24(%r9), %rax	// gdt
 	lgdt	(%rax)
@@ -88,6 +93,13 @@ relocate_kernel:
 	lretq
 identity_mapped:
 
+
+	movq $0x10,%rax
+	movq %rax,%ds
+	movq %rax,%es
+	movq %rax,%fs
+	movq %rax,%gs
+	movq %rax,%ss
 //	# Display a message to say everything is working so far
 //	pushq %rdi
 //	movq $s_hello2, %rdi
