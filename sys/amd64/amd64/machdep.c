@@ -1766,8 +1766,8 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 
 	printf("%s:%d modulep 0x%jx physfree 0x%jx\n",__FUNCTION__,__LINE__,
 	       modulep, physfree_save);
-	printf("preload_metadata %p kmdp %p kern_envp %p\n",
-	       preload_metadata,kmdp,kern_envp);
+	printf("preload_metadata %p kmdp %p kern_envp %p r_gdt %p (phys 0x%lx)\n",
+	       preload_metadata,kmdp,kern_envp,&r_gdt,(unsigned long)vtophys(&r_gdt));
 	printf("kload_step %p (%d)\n",&kload_step,kload_step);
 
 #ifdef DEV_ISA
