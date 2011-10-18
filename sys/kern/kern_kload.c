@@ -10,6 +10,7 @@
 #include <sys/mutex.h>
 #include <sys/kernel.h>
 #include <sys/malloc.h>
+#include <sys/bus.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -19,6 +20,14 @@
 #include <vm/vm_object.h>
 #include <vm/vm_extern.h>
 #include <vm/vm_map.h>
+//#include <machine/segments.h>
+#include <machine/intr_machdep.h>
+#include <contrib/dev/acpica/include/acpi.h>
+
+struct region_descriptor {
+	unsigned long rd_limit:16;		/* segment extent */
+	unsigned long rd_base:64 __packed;	/* base address  */
+} __packed;
 
 static struct kload_items *k_items = NULL;
 MALLOC_DECLARE(M_KLOAD);
@@ -41,7 +50,7 @@ static void setup_freebsd_gdt(uint64_t *gdtr);
 int kload_reboot(void);
 int kload_reboot_prep(void);
 	
-static struct gdt_desc_ptr *gdt;
+static struct gdt_desc_ptr *mygdt;
 static	vm_offset_t control_page;
 static 	void *gdt_desc;
 static	p4_entry_t *pgtbl;
@@ -50,13 +59,13 @@ static	p4_entry_t *pgtbl;
 extern struct timecounter *timecounter;
 extern struct timecounter dummy_timecounter;
 extern void kload_module_shutdown(void);
-extern struct mtx icu_lock;
-extern struct mtx dt_lock;
-#ifdef WITNESS
-extern struct mtx w_mtx;
-#endif
-extern int witness_cold;
-extern struct mtx clock_lock;
+//extern struct mtx icu_lock;
+//extern struct mtx dt_lock;
+//#ifdef WITNESS
+//extern struct mtx w_mtx;
+//#endif
+//extern int witness_cold;
+//extern struct mtx clock_lock;
 
 extern void shutdown_turnstiles(void);
 
@@ -269,11 +278,8 @@ kload(struct thread *td, struct kload_args *uap)
 	printf("%s:%d Says Hello!!!\n",__FUNCTION__,__LINE__);
 	
 	int error = 0;
-	//struct gdt_desc_ptr *gdt;
-	//vm_offset_t control_page;
+	struct region_descriptor *null_idt;
 	vm_offset_t code_page;
-	//void *gdt_desc;
-	//p4_entry_t *pgtbl;
         size_t bufsize = uap->buflen;
 	struct kload kld;
 	int i;
@@ -313,20 +319,18 @@ kload(struct thread *td, struct kload_args *uap)
 	((unsigned long *)control_page)[0] = 0xC0DE;
 	((unsigned long *)control_page)[1] = kload_modulep;
 	((unsigned long *)control_page)[2] = kload_physfree;
-	       
-	
 
-	gdt = (struct gdt_desc_ptr *)kmem_alloc(kernel_map,PAGE_SIZE);
-	((unsigned long *)control_page)[3] = (unsigned long)vtophys(gdt) + KERNBASE;
+	mygdt = (struct gdt_desc_ptr *)kmem_alloc(kernel_map,PAGE_SIZE);
+	((unsigned long *)control_page)[3] = (unsigned long)vtophys(mygdt) + KERNBASE;
 	
-	gdt_desc = (char *)gdt + sizeof(struct gdt_desc_ptr);
+	gdt_desc = (char *)mygdt + sizeof(struct gdt_desc_ptr);
 	printf ("gdt %p paddr(0x%lx) size gdt_desc %lu gdt_desc %p\n",
-		gdt, vtophys(gdt),
+		mygdt, vtophys(mygdt),
 		sizeof(struct gdt_desc_ptr), gdt_desc);
 	
 	setup_freebsd_gdt(gdt_desc);
-	gdt->size    = GUEST_GDTR_LIMIT;
-	gdt->address = (unsigned long)(vtophys(gdt_desc) + KERNBASE);
+	mygdt->size    = GUEST_GDTR_LIMIT;
+	mygdt->address = (unsigned long)(vtophys(gdt_desc) + KERNBASE);
 
 	/* returns new page table phys addr */
 	pgtbl = kload_build_page_table();
@@ -337,8 +341,10 @@ kload(struct thread *td, struct kload_args *uap)
 	((unsigned long *)control_page)[5] =
 		(unsigned long)(vtophys(control_page) + KERNBASE);
 
+	((unsigned long *)control_page)[6] = (unsigned long)kld.khdr[0].k_entry_pt;
 	if(uap->flags & 0x4) {
-		kload_reboot();
+	  //	kload_reboot();
+		intr_clear_all_handlers();
 	}
 
 	printf("\tnum_hdrs %d\n",kld.num_hdrs);
@@ -348,18 +354,36 @@ kload(struct thread *td, struct kload_args *uap)
 		kload_copyin_segment(&kld.khdr[i],i);
 	}
 
-	printf("%s:\thead_va\t0x%lx (phys 0x%lx)\n"
+
+	null_idt = (struct region_descriptor*)kmem_alloc(kernel_map,PAGE_SIZE);
+	((unsigned long *)control_page)[7] = (unsigned long)vtophys(null_idt) + KERNBASE;
+	/* Wipe the IDT. */
+	null_idt->rd_limit = 0;
+	null_idt->rd_base = 0;
+	//lidt(&null_idt);
+
+	printf("%s:\thead_va\t\t0x%lx (phys 0x%lx)\n"
 	       "\tkernbase\t0x%lx\n"
 	       "\tcode_page\t0x%lx (phys 0x%lx)\n"
 	       "\tcontrol_page\t0x%lx (phys 0x%lx)\n"
-	       "\tgdt\t0x%lx (0x%lx)\n"
-	       "\tpgtbl\t0x%lx\n",
+	       "\tgdt\t\t0x%lx (0x%lx)\n"
+	       "\tpgtbl\t\t0x%lx\n"
+	       "\tidt\t\t0x%lx (0x%lx)\n",
 	       __FUNCTION__,
 	       k_items->head_va, vtophys(k_items->head_va),
 	       KERNBASE + 0x200000,
 	       control_page + PAGE_SIZE, vtophys(control_page + PAGE_SIZE),
 	       control_page, vtophys(control_page),
-	       (unsigned long)gdt,vtophys(gdt),(unsigned long)pgtbl );
+	       (unsigned long)mygdt,vtophys(mygdt),(unsigned long)pgtbl,
+	       (unsigned long)null_idt,vtophys(null_idt) );
+	
+	shutdown_turnstiles();
+	intr_clear_all_handlers();
+	/* not really sure what this will do but lets try it and see */
+	//AcpiTerminate();
+
+	//	disable_intr();
+
 	/* only pass the control page under the current page table
 	 * the rest of the address should be based on new page table
 	 * which is a simple phys + KERNBASE mapping */
@@ -391,30 +415,33 @@ int kload_reboot_prep(void) {
 	memset((void *)control_page, 0, PAGE_SIZE * 2);
 	memcpy((void *)code_page, kernel_jump, relocate_kernel_size);
 
-	gdt = (struct gdt_desc_ptr *)kmem_alloc(kernel_map,PAGE_SIZE);
-	gdt_desc = (char *)gdt + sizeof(struct gdt_desc_ptr);
+	mygdt = (struct gdt_desc_ptr *)kmem_alloc(kernel_map,PAGE_SIZE);
+	gdt_desc = (char *)mygdt + sizeof(struct gdt_desc_ptr);
 	printf ("gdt %p paddr(0x%lx) size gdt_desc %lx gdt_desc %p\n",
-		gdt, vtophys(gdt),
+		mygdt, vtophys(mygdt),
 		sizeof(struct gdt_desc_ptr), gdt_desc);
 	
 	setup_freebsd_gdt(gdt_desc);
-	gdt->size    = GUEST_GDTR_LIMIT;
-	gdt->address = (unsigned long)gdt_desc;
+	mygdt->size    = GUEST_GDTR_LIMIT;
+	mygdt->address = (unsigned long)gdt_desc;
 
 	pgtbl = kload_build_page_table();
 	return 0;
 }
 
+
 int
 kload_reboot(void)
 {
+
 	int ret = 0;
+#if 0
 
 	printf("%s calling kernel_jump with modulep 0x%lx physfree 0x%lx "
 	       "gdt 0x%lx pgtbl 0x%lx\n",
 	       __FUNCTION__,
 	       kload_modulep, kload_physfree,
-	       (unsigned long)gdt,(unsigned long)pgtbl);
+	       (unsigned long)mygdt,(unsigned long)pgtbl);
 	
 	/* quick and dirty hack to shutdown all modules
 	 * including the bloody clock
@@ -424,7 +451,7 @@ kload_reboot(void)
 	printf("\tkload_active %p (%d) kload_step %p (%d)\n",&kload_active, kload_active,
 	       &kload_step, kload_step);
 
-#if 1
+# if 1
 //	kload_module_shutdown();
 	
 	mtx_destroy(&icu_lock);
@@ -437,13 +464,14 @@ kload_reboot(void)
 	
 	witness_cold = 1;
 	timecounter = &dummy_timecounter;
-#endif
-#if 0
+# endif
+# if 0
 	ret = kernel_jump_simple(
 		kload_modulep,
 		kload_physfree,
-		(unsigned long)gdt,
+		(unsigned long)mygdt,
 		(unsigned long)pgtbl);
+# endif
 #endif
 	printf("kernel_jump returned %d\n",ret);
 	return 0;
