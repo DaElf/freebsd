@@ -176,9 +176,15 @@ intr_add_handler(const char *name, int vector, driver_filter_t filter,
 	struct intsrc *isrc;
 	int error;
 
+	printf("%s:%d name %s vector %d\n",__FUNCTION__,__LINE__,
+	       name, vector
+		);
+
 	isrc = intr_lookup_source(vector);
-	if (isrc == NULL)
+	if (isrc == NULL) {
+		printf("%s:%d ret EINVAL\n",__FUNCTION__,__LINE__);
 		return (EINVAL);
+	}
 	error = intr_event_add_handler(isrc->is_event, name, filter, handler,
 	    arg, intr_priority(flags), flags, cookiep);
 	if (error == 0) {
@@ -191,8 +197,45 @@ intr_add_handler(const char *name, int vector, driver_filter_t filter,
 		}
 		mtx_unlock(&intr_table_lock);
 	}
+
+	printf("%s:%d cookiep %p ret %p %p\n",
+	       __FUNCTION__,__LINE__,
+	       *cookiep,
+	       __builtin_return_address(0),
+	       __builtin_return_address(1) );
 	return (error);
 }
+
+int
+intr_clear_all_handlers(void)
+{
+	int i;
+	struct intsrc *isrc;
+
+	mtx_lock(&intr_table_lock);
+	for (i = 0; i < NUM_IO_INTS; i++) {
+		isrc = interrupt_sources[i];
+		if (isrc != NULL && isrc->is_handlers > 0) {
+			printf("%s:%d isrc[%d] %p is_handlers %d\n",
+			       __FUNCTION__,__LINE__,i,isrc,
+			       isrc->is_handlers);
+			       isrc->is_handlers--;
+			if (isrc->is_handlers == 0) {
+				printf("\t dis_source %p dis_intr %p\n",
+				       isrc->is_pic->pic_disable_source,
+				       isrc->is_pic->pic_disable_intr);
+				isrc->is_pic->pic_disable_source(isrc, PIC_NO_EOI);
+				isrc->is_pic->pic_disable_intr(isrc);
+			}
+			intrcnt_updatename(isrc);
+			
+		}
+	}
+	mtx_unlock(&intr_table_lock);
+	return 0;
+}
+
+
 
 int
 intr_remove_handler(void *cookie)
@@ -299,6 +342,7 @@ intr_suspend(void)
 
 	mtx_lock(&intr_table_lock);
 	STAILQ_FOREACH(pic, &pics, pics) {
+		printf("%s pic %p\n",__FUNCTION__,pic);
 		if (pic->pic_suspend != NULL)
 			pic->pic_suspend(pic);
 	}
@@ -463,8 +507,11 @@ intr_next_cpu(void)
 	u_int apic_id;
 
 	/* Leave all interrupts on the BSP during boot. */
-	if (!assign_cpu)
-		return (PCPU_GET(apic_id));
+	if (!assign_cpu) {
+		printf("%s:%d return %u\n",__FUNCTION__,__LINE__,
+		       PCPU_GET(apic_id) );
+		return PCPU_GET(apic_id);
+	}
 
 	mtx_lock_spin(&icu_lock);
 	apic_id = cpu_apic_ids[current_cpu];
@@ -474,6 +521,7 @@ intr_next_cpu(void)
 			current_cpu = 0;
 	} while (!CPU_ISSET(current_cpu, &intr_cpus));
 	mtx_unlock_spin(&icu_lock);
+	printf("%s:%d return %u\n",__FUNCTION__,__LINE__,apic_id);
 	return (apic_id);
 }
 

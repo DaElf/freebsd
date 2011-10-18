@@ -158,6 +158,7 @@ struct intsrc *intr_lookup_source(int vector);
 int	intr_register_pic(struct pic *pic);
 int	intr_register_source(struct intsrc *isrc);
 int	intr_remove_handler(void *cookie);
+int	intr_clear_all_handlers(void);
 void	intr_resume(void);
 void	intr_suspend(void);
 void	intrcnt_add(const char *name, u_long **countp);

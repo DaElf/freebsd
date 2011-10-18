@@ -82,8 +82,10 @@ relocate_kernel:
 	/* install simple gdt */
 	movq	24(%r9), %rax	// gdt
 	lgdt	(%rax)
+	movq	56(%r9), %rax
+	lidt	(%rax) 	// null idt 
 	// now move to the code page
-	// should have been passwd code_page based on new PT
+	// should have been passed code_page based on new PT
 	movq %rdx, %r8
 	addq	$(identity_mapped - relocate_kernel), %r8
 	/* offset of code segment in new gdt */
@@ -200,7 +202,7 @@ identity_mapped:
 	pushq	%rax
 
 	pushq $0x8
-	pushq $0xffffffff8026fc60
+	pushq 48(%r9) 	// entry # kernel entry pt
 	lretq
 
 /* print to serial port */
