@@ -91,7 +91,7 @@ __FBSDID("$FreeBSD$");
 #include <ddb/ddb.h>
 #include <ddb/db_sym.h>
 
-//#define VERBOSE_SYSINIT
+#define VERBOSE_SYSINIT
 
 void mi_startup(void);				/* Should be elsewhere */
 
@@ -211,7 +211,7 @@ restart:
 
 #if defined(VERBOSE_SYSINIT)
 	last = SI_SUB_COPYRIGHT;
-	verbose = 0;
+	verbose = 1;
 #if !defined(DDB)
 	printf("VERBOSE_SYSINIT: DDB not enabled, symbol lookups disabled.\n");
 #endif
@@ -236,7 +236,7 @@ restart:
 		if ((*sipp)->subsystem > last) {
 			verbose = 1;
 			last = (*sipp)->subsystem;
-			printf("subsystem %x\n", last);
+			printf("subsystem 0x%x\n", last);
 		}
 		if (verbose) {
 #if defined(DDB)
