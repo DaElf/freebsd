@@ -225,6 +225,7 @@ lapic_init(vm_paddr_t addr)
 	    ("local APIC not aligned on a page boundary"));
 	lapic = pmap_mapdev(addr, sizeof(lapic_t));
 	lapic_paddr = addr;
+	printf("%s lapic %p addr 0x%lx\n",__FUNCTION__,lapic,addr);
 	setidt(APIC_SPURIOUS_INT, IDTVEC(spuriousint), SDT_APIC, SEL_KPL,
 	    GSEL_APIC);
 
@@ -1028,6 +1029,7 @@ apic_enable_vector(u_int apic_id, u_int vector)
 	KASSERT(vector != IDT_DTRACE_RET,
 	    ("Attempt to overwrite DTrace entry"));
 #endif
+	printf("%s apic_id %d vector %u\n",__FUNCTION__,apic_id,vector);
 	setidt(vector, ioint_handlers[vector / 32], SDT_APIC, SEL_KPL,
 	    GSEL_APIC);
 }
@@ -1043,6 +1045,8 @@ apic_disable_vector(u_int apic_id, u_int vector)
 #endif
 	KASSERT(ioint_handlers[vector / 32] != NULL,
 	    ("No ISR handler for vector %u", vector));
+	
+	printf("%s NOTYET apic_id %d vector %u\n",__FUNCTION__,apic_id,vector);
 #ifdef notyet
 	/*
 	 * We can not currently clear the idt entry because other cpus
@@ -1258,9 +1262,9 @@ static void
 apic_init(void *dummy __unused)
 {
 	struct apic_enumerator *enumerator;
-#ifndef __amd64__
+//#ifndef __amd64__
 	uint64_t apic_base;
-#endif
+//#endif
 	int retval, best;
 
 	/* We only support built in local APICs. */
@@ -1275,6 +1279,7 @@ apic_init(void *dummy __unused)
 	best_enum = NULL;
 	best = 0;
 	SLIST_FOREACH(enumerator, &enumerators, apic_next) {
+		printf("%s calling probe %p\n",__FUNCTION__,enumerator->apic_probe);
 		retval = enumerator->apic_probe();
 		if (retval > 0)
 			continue;
@@ -1306,6 +1311,12 @@ apic_init(void *dummy __unused)
 		wrmsr(MSR_APICBASE, apic_base);
 	}
 #endif
+	apic_base = rdmsr(MSR_APICBASE);
+	printf("%s:%d apic_base 0x%lx apic_enabled %lu\n",
+	       __FUNCTION__,__LINE__,
+	       apic_base, (apic_base & APICBASE_ENABLED));
+	apic_base |= APICBASE_ENABLED;
+	wrmsr(MSR_APICBASE, apic_base);
 
 	/* Probe the CPU's in the system. */
 	retval = best_enum->apic_probe_cpus();
@@ -1329,6 +1340,7 @@ apic_setup_local(void *dummy __unused)
 		return;
 
 	/* Initialize the local APIC. */
+	printf("%s calling %p\n",__FUNCTION__,best_enum->apic_setup_local);
 	retval = best_enum->apic_setup_local();
 	if (retval != 0)
 		printf("%s: Failed to setup the local APIC: returned %d\n",

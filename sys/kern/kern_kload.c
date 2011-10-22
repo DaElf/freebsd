@@ -378,11 +378,24 @@ kload(struct thread *td, struct kload_args *uap)
 	       (unsigned long)null_idt,vtophys(null_idt) );
 	
 	shutdown_turnstiles();
+	printf("%s disable_interrupts\n",__FUNCTION__);
+	disable_intr();
+	printf("%s clear all handlers\n",__FUNCTION__);
 	intr_clear_all_handlers();
 	/* not really sure what this will do but lets try it and see */
-	//AcpiTerminate();
+	printf("%s AcpiTerminate\n",__FUNCTION__);
+	AcpiTerminate();
+	printf("%s AcpiDisable\n",__FUNCTION__);
+        AcpiDisable();
 
-	//	disable_intr();
+	{
+		u_int64_t	apicbase;
+		apicbase = rdmsr(MSR_APICBASE);
+		printf("%s turn off local apic 0x%lu\n",__FUNCTION__,apicbase);
+		apicbase &= ~APICBASE_ENABLED;
+		wrmsr(MSR_APICBASE, apicbase);
+	}
+
 
 	/* only pass the control page under the current page table
 	 * the rest of the address should be based on new page table
