@@ -1262,9 +1262,9 @@ static void
 apic_init(void *dummy __unused)
 {
 	struct apic_enumerator *enumerator;
-//#ifndef __amd64__
+#ifndef __amd64__
 	uint64_t apic_base;
-//#endif
+#endif
 	int retval, best;
 
 	/* We only support built in local APICs. */
@@ -1311,12 +1311,14 @@ apic_init(void *dummy __unused)
 		wrmsr(MSR_APICBASE, apic_base);
 	}
 #endif
+#if 0
 	apic_base = rdmsr(MSR_APICBASE);
 	printf("%s:%d apic_base 0x%lx apic_enabled %lu\n",
 	       __FUNCTION__,__LINE__,
 	       apic_base, (apic_base & APICBASE_ENABLED));
 	apic_base |= APICBASE_ENABLED;
 	wrmsr(MSR_APICBASE, apic_base);
+#endif
 
 	/* Probe the CPU's in the system. */
 	retval = best_enum->apic_probe_cpus();
