@@ -11,6 +11,8 @@
 #include <sys/kernel.h>
 #include <sys/malloc.h>
 #include <sys/bus.h>
+#include <sys/proc.h>
+#include <sys/sched.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -24,10 +26,12 @@
 #include <machine/intr_machdep.h>
 #include <contrib/dev/acpica/include/acpi.h>
 
+#if 0
 struct region_descriptor {
 	unsigned long rd_limit:16;		/* segment extent */
 	unsigned long rd_base:64 __packed;	/* base address  */
 } __packed;
+#endif
 
 static struct kload_items *k_items = NULL;
 MALLOC_DECLARE(M_KLOAD);
@@ -376,18 +380,18 @@ kload(struct thread *td, struct kload_args *uap)
 	       control_page, vtophys(control_page),
 	       (unsigned long)mygdt,vtophys(mygdt),(unsigned long)pgtbl,
 	       (unsigned long)null_idt,vtophys(null_idt) );
-	
-	shutdown_turnstiles();
-	printf("%s disable_interrupts\n",__FUNCTION__);
-	disable_intr();
+
+
 	printf("%s clear all handlers\n",__FUNCTION__);
 	intr_clear_all_handlers();
 	/* not really sure what this will do but lets try it and see */
 	printf("%s AcpiTerminate\n",__FUNCTION__);
 	AcpiTerminate();
 	printf("%s AcpiDisable\n",__FUNCTION__);
-        AcpiDisable();
+	AcpiDisable();
+	shutdown_turnstiles();
 
+#if 0
 	{
 		u_int64_t	apicbase;
 		apicbase = rdmsr(MSR_APICBASE);
@@ -395,7 +399,23 @@ kload(struct thread *td, struct kload_args *uap)
 		apicbase &= ~APICBASE_ENABLED;
 		wrmsr(MSR_APICBASE, apicbase);
 	}
+#endif
 
+#if defined(SMP)
+	/*
+	 * Bind us to CPU 0 so that all shutdown code runs there.  Some
+	 * systems don't shutdown properly (i.e., ACPI power off) if we
+	 * run on another processor.
+	 */
+	printf("Binding process to cpu 0\n");
+	thread_lock(curthread);
+	sched_bind(curthread, 0);
+	thread_unlock(curthread);
+	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
+#endif
+	
+	printf("%s disable_interrupts\n",__FUNCTION__);
+	disable_intr();
 
 	/* only pass the control page under the current page table
 	 * the rest of the address should be based on new page table
