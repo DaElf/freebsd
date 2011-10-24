@@ -86,8 +86,11 @@ struct file_format *file_formats[] = {
  * data structures from bootstrap.h as well.
  */
 extern struct console userboot_console;
+extern struct console comconsole;
+
 
 struct console *consoles[] = {
 	&userboot_console,
+	&comconsole,
 	NULL
 };

@@ -50,6 +50,18 @@ struct console userboot_console = {
 	userboot_cons_poll,
 };
 
+
+struct console comconsole = {
+	"comconsole",
+	"comsonsole",
+	0,
+	userboot_cons_probe,
+	userboot_cons_init,
+	userboot_cons_putchar,
+	userboot_cons_getchar,
+	userboot_cons_poll,
+};
+
 static void
 userboot_cons_probe(struct console *cp)
 {
