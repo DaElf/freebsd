@@ -2,3 +2,6 @@ sys/amd64/compile
 cscope.*
 *~
 \#*\#
+*.o
+*.So
+*.a
