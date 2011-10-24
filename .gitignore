@@ -13,3 +13,6 @@ patches
 cscope.*
 *~
 \#*\#
+*.o
+*.So
+*.a
