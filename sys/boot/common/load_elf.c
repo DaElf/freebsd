@@ -134,6 +134,16 @@ __elfN(loadfile)(char *filename, u_int64_t dest, struct preloaded_file **result)
 	ehdr->e_ident[EI_VERSION] != EV_CURRENT ||	/* Version ? */
 	ehdr->e_version != EV_CURRENT ||
 	ehdr->e_machine != ELF_TARG_MACH) {		/* Machine ? */
+      printf("%d %d\n"
+	     "%d %d\n"
+	     "%d %d\n"
+	     "%d %d\n"
+	     "%d %d\n",
+	     ehdr->e_ident[EI_CLASS] , ELF_TARG_CLASS, 
+	     ehdr->e_ident[EI_DATA] , ELF_TARG_DATA,
+	     ehdr->e_ident[EI_VERSION] , EV_CURRENT,
+	     ehdr->e_version , EV_CURRENT,
+	     ehdr->e_machine, ELF_TARG_MACH);
 	err = EFTYPE;
 	goto oerr;
     }

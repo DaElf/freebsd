@@ -142,7 +142,7 @@ intr_register_source(struct intsrc *isrc)
 {
 	int error, vector;
 
-	printf("%s isrc %p\n",__FUNCTION__,isrc);
+	printf("\n\t%s isrc %p\n",__FUNCTION__,isrc);
 	KASSERT(intr_pic_registered(isrc->is_pic), ("unregistered PIC"));
 	vector = isrc->is_pic->pic_vector(isrc);
 	if (interrupt_sources[vector] != NULL)
