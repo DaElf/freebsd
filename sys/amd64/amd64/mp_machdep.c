@@ -159,6 +159,8 @@ static int	start_all_aps(void);
 static int	start_ap(int apic_id);
 static void	release_aps(void *dummy);
 
+void		ipi_suspend_ap(void);
+
 static u_int	hyperthreading_cpus;	/* logical cpus sharing L1 cache */
 static int	hyperthreading_allowed = 1;
 static u_int	bootMP_size;
@@ -420,6 +422,9 @@ mp_bootaddress(u_int basemem)
 		boot_address -= PAGE_SIZE;	/* not enough, lower by 4k */
 	/* 3 levels of page table pages */
 	mptramp_pagetables = boot_address - (PAGE_SIZE * 3);
+
+	printf("%s bootMP_size 0x%x boot_address 0x%x mptramp_pagetables 0x%x\n",
+	       __FUNCTION__,bootMP_size,boot_address, mptramp_pagetables);
 
 	return mptramp_pagetables;
 }
@@ -986,12 +991,22 @@ start_ap(int apic_id)
 	/* used as a watchpoint to signal AP startup */
 	cpus = mp_naps;
 
+	printf("%s starting apic_id %d\n",__FUNCTION__,apic_id);
 	/*
 	 * first we do an INIT/RESET IPI this INIT IPI might be run, reseting
 	 * and running the target CPU. OR this INIT IPI might be latched (P5
 	 * bug), CPU waiting for STARTUP IPI. OR this INIT IPI might be
 	 * ignored.
 	 */
+#if 0
+	/* do an INIT IPI: assert NMI */
+	printf("%s NMI apic_id %d\n",__FUNCTION__,apic_id);
+	lapic_ipi_raw(APIC_DEST_DESTFLD | APIC_TRIGMOD_EDGE |
+	    APIC_LEVEL_ASSERT | APIC_DESTMODE_PHY | APIC_DELMODE_NMI, apic_id);
+
+	/* wait for pending status end */
+	lapic_ipi_wait(-1);
+#endif
 
 	/* do an INIT IPI: assert RESET */
 	lapic_ipi_raw(APIC_DEST_DESTFLD | APIC_TRIGMOD_EDGE |
@@ -1307,9 +1322,28 @@ ipi_selected(cpuset_t cpus, u_int ipi)
 		cpu--;
 		CPU_CLR(cpu, &cpus);
 		CTR3(KTR_SMP, "%s: cpu: %d ipi: %x", __func__, cpu, ipi);
+		printf("%s: cpu: %d ipi: 0x%x\n", __func__, cpu, ipi);
 		ipi_send_cpu(cpu, ipi);
 	}
 }
+
+void
+ipi_suspend_ap(void)
+{  
+	int cpu;
+
+	if (PCPU_GET(cpuid) != 0){
+		printf("need to be called from cpu 0\n");
+		return;
+	}
+	
+	for (cpu = 1; cpu < mp_ncpus; cpu++) {
+		printf("%s sending IPI_STOP to cpu %d\n",__FUNCTION__,cpu);
+		ipi_send_cpu(cpu, IPI_STOP);
+	}
+}
+						    
+
 
 /*
  * send an IPI to a specific CPU.
@@ -1389,6 +1423,8 @@ cpustop_handler(void)
 
 	cpu = PCPU_GET(cpuid);
 
+	printf("%s: cpu(%d)\n",__FUNCTION__,cpu);
+
 	savectx(&stoppcbs[cpu]);
 
 	/* Indicate that we are stopped */
@@ -1418,6 +1454,11 @@ cpususpend_handler(void)
 
 	cpu = PCPU_GET(cpuid);
 
+	printf("%s called on cpu%d\n",__FUNCTION__,cpu);
+
+	rf = intr_disable();
+	cr3 = rcr3();
+
 	if (savectx(susppcbs[cpu])) {
 		ctx_fpusave(suspfpusave[cpu]);
 		wbinvd();
@@ -1428,6 +1469,13 @@ cpususpend_handler(void)
 		PCPU_SET(switchtime, 0);
 		PCPU_SET(switchticks, ticks);
 	}
+	
+	lapic_clear_lapic();
+	//load_cr0(0x60000010); // put cpu back into real mode
+	//load_cr4(0); // nothing special enabled
+	//	load_cr3(0);
+	wbinvd();
+	halt();
 
 	/* Wait for resume */
 	while (!CPU_ISSET(cpu, &started_cpus))
