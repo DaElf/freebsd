@@ -18,6 +18,9 @@
 #define X86_CR0_CD	0x40000000 /* Cache Disable */
 #define X86_CR0_PG	0x80000000 /* Paging */
 
+#define X86_CR4_PSE	0x00000010 /* enable page size extensions */
+#define X86_CR4_PAE	0x00000020 /* enable physical address extensions */
+
 .macro dumphex val
 	pushq %rsi
 	movq \val, %rsi
@@ -63,7 +66,14 @@ relocate_kernel:
 	movq	32(%rcx), %rax // page table
 	movq 	40(%rcx), %r9  // address of control_page with new PT
 	movq	%rax, %cr3
-	
+
+	/*
+	 * Set cr4 to a known state:
+	 *  - page size extensions
+	 *  - physical address extension enabled
+	 */
+	movq	$(X86_CR4_PSE | X86_CR4_PAE), %rax
+	movq	%rax, %cr4
 
 	// then move the stack to the end of control page
 	lea 4096(%r9), %rsp
@@ -140,7 +150,7 @@ identity_mapped:
 	 *  - Proctected mode enabled
 	 */
 	movq	%cr0, %rax
-	andq	$~(X86_CR0_AM | X86_CR0_WP | X86_CR0_TS | X86_CR0_EM), %rax
+	andq	$~(X86_CR0_AM | X86_CR0_WP | X86_CR0_TS | X86_CR0_EM |  X86_CR0_MP | X86_CR0_NE), %rax
 	orl	$(X86_CR0_PG | X86_CR0_PE), %eax
 	movq	%rax, %cr0
 
