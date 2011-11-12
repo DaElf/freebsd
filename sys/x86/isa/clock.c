@@ -776,17 +776,17 @@ attimer_resume(device_t dev)
 
 int
 attimer_generic_detach(device_t dev) {
-	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
+  //	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
 	return bus_generic_detach(dev);
 }
 int
 attimer_generic_shutdown(device_t dev) {
-	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
+  //	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
 	return bus_generic_detach(dev);
 }
 int
 attimer_generic_suspend(device_t dev) {
-	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
+  //	printf("%s:%d dev %p\n",__FUNCTION__,__LINE__,dev);
 	return bus_generic_detach(dev);
 }
 

@@ -135,10 +135,6 @@ SYSCTL_INT(_kern_shutdown, OID_AUTO, show_busybufs, CTLFLAG_RW,
  * Variable panicstr contains argument to first call to panic; used as flag
  * to indicate that the kernel has already called panic.
  */
-
-extern int kload_reboot(void);
-extern int kload_reboot_prep(void);
-
 const char *panicstr;
 
 int dumping;				/* system is dumping */
@@ -440,7 +436,6 @@ kern_reboot(int howto)
 	 * Ok, now do things that assume all filesystem activity has
 	 * been completed.
 	 */
-	kload_reboot_prep();
 	EVENTHANDLER_INVOKE(shutdown_post_sync, howto);
 
 	if ((howto & (RB_HALT|RB_DUMP)) == RB_DUMP && !cold && !dumping) 
@@ -537,9 +532,6 @@ shutdown_reset(void *junk, int howto)
 #endif
 
 	/* cpu_boot(howto); */ /* doesn't do anything at the moment */
-	printf("Calling kload_reboot\n");
-	kload_reboot();
-
 	cpu_reset();
 	/* NOTREACHED */ /* assuming reset worked */
 }

@@ -13,6 +13,7 @@
 #include <sys/bus.h>
 #include <sys/proc.h>
 #include <sys/sched.h>
+#include <sys/smp.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -53,6 +54,7 @@ static p4_entry_t *kload_build_page_table(void);
 static void setup_freebsd_gdt(uint64_t *gdtr);
 int kload_reboot(void);
 int kload_reboot_prep(void);
+void ipi_suspend_ap(void);
 	
 static struct gdt_desc_ptr *mygdt;
 static	vm_offset_t control_page;
@@ -382,25 +384,6 @@ kload(struct thread *td, struct kload_args *uap)
 	       (unsigned long)null_idt,vtophys(null_idt) );
 
 
-	printf("%s clear all handlers\n",__FUNCTION__);
-	intr_clear_all_handlers();
-	/* not really sure what this will do but lets try it and see */
-	printf("%s AcpiTerminate\n",__FUNCTION__);
-	AcpiTerminate();
-	printf("%s AcpiDisable\n",__FUNCTION__);
-	AcpiDisable();
-	shutdown_turnstiles();
-
-#if 0
-	{
-		u_int64_t	apicbase;
-		apicbase = rdmsr(MSR_APICBASE);
-		printf("%s turn off local apic 0x%lu\n",__FUNCTION__,apicbase);
-		apicbase &= ~APICBASE_ENABLED;
-		wrmsr(MSR_APICBASE, apicbase);
-	}
-#endif
-
 #if defined(SMP)
 	/*
 	 * Bind us to CPU 0 so that all shutdown code runs there.  Some
@@ -412,10 +395,70 @@ kload(struct thread *td, struct kload_args *uap)
 	sched_bind(curthread, 0);
 	thread_unlock(curthread);
 	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
+
+	// now that we are cpu 0 send ipi to stop other cpu's
+	//ipi_suspend_ap();
+#endif
+	printf("%s: suspend APs\n",__FUNCTION__);
+	{
+		cpuset_t map;
+		
+		map = all_cpus;
+		//CPU_CLR(0, &map);
+		// we should be bound to cpu 0 at this point
+		printf("%s  cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
+		CPU_CLR(PCPU_GET(cpuid), &map);
+		CPU_NAND(&map, &stopped_cpus);
+		if (!CPU_EMPTY(&map)) {
+			printf("cpu_reset: Stopping other CPUs\n");
+			//stop_cpus_hard(map);
+			suspend_cpus(map);
+		}
+	}
+	
+	printf("un-bind process\n");
+	thread_lock(curthread);
+	sched_unbind(curthread);
+	thread_unlock(curthread);
+
+	printf("%s: module_shutdown\n",__FUNCTION__);
+	kload_module_shutdown();
+
+	printf("%s: clear all handlers\n",__FUNCTION__);
+	intr_clear_all_handlers();
+
+#if 1	
+	printf("%s: shutdown_turstiles\n",__FUNCTION__);
+	shutdown_turnstiles();
+#endif
+#if 0
+	/* not really sure what this will do but lets try it and see */
+	printf("%s: AcpiTerminate\n",__FUNCTION__);
+	AcpiTerminate();
+	//	printf("%s AcpiDisable\n",__FUNCTION__);
+	//AcpiDisable();
+#endif
+
+#if 0
+	//#if defined(SMP)
+	/*
+	 * Bind us to CPU 0 so that all shutdown code runs there.  Some
+	 * systems don't shutdown properly (i.e., ACPI power off) if we
+	 * run on another processor.
+	 */
+	printf("Binding process to cpu 0\n");
+	thread_lock(curthread);
+	sched_bind(curthread, 0);
+	thread_unlock(curthread);
+	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
+
+	// now that we are cpu 0 send ipi to stop other cpu's
+	//ipi_suspend_ap();
 #endif
 	
-	printf("%s disable_interrupts\n",__FUNCTION__);
+	printf("%s disable_interrupts cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
 	disable_intr();
+	intr_suspend();
 
 	/* only pass the control page under the current page table
 	 * the rest of the address should be based on new page table
