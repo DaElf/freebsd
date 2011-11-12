@@ -225,7 +225,7 @@ lapic_init(vm_paddr_t addr)
 	    ("local APIC not aligned on a page boundary"));
 	lapic = pmap_mapdev(addr, sizeof(lapic_t));
 	lapic_paddr = addr;
-	printf("%s lapic %p addr 0x%lx\n",__FUNCTION__,lapic,addr);
+	printf("%s lapic %p paddr 0x%lx\n",__FUNCTION__,lapic,addr);
 	setidt(APIC_SPURIOUS_INT, IDTVEC(spuriousint), SDT_APIC, SEL_KPL,
 	    GSEL_APIC);
 
@@ -342,6 +342,33 @@ lapic_dump(const char* str)
 }
 
 void
+lapic_clear_lapic(void) {
+
+	struct lapic *la;
+	la = &lapics[lapic_id()];
+	
+	printf("%s lapic_id(%d) cpu(%d) la %p lapic %p\n",__FUNCTION__,
+	       lapic_id(), PCPU_GET(cpuid), la, lapic);
+
+	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
+	//lapic->lvt_lint0 = lvt_mode(la, LVT_LINT0, APIC_LVTT_M);
+	//lapic->lvt_lint0 = APIC_LVT_M | APIC_LVT_DM;
+	lapic->lvt_lint0 = APIC_LVT_M;
+	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
+
+	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
+	//lapic->lvt_lint1 = lvt_mode(la, LVT_LINT1, APIC_LVTT_M);
+	lapic->lvt_lint1 = APIC_LVT_M;
+	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
+
+	/* Program timer LVT and setup handler. */
+	printf("\ttimer 0x%x\n",lapic->lvt_timer);
+	//lapic->lvt_timer = lvt_mode(la, LVT_TIMER, APIC_LVTT_M);
+	lapic->lvt_timer = APIC_LVTT_M;
+	printf("\ttimer 0x%x\n",lapic->lvt_timer);
+}
+
+void
 lapic_setup(int boot)
 {
 	struct lapic *la;
@@ -349,6 +376,14 @@ lapic_setup(int boot)
 	register_t saveintr;
 	char buf[MAXCOMLEN + 1];
 
+	printf("%s lapic_id(%d) boot %d cpu(%d) la %p lapic %p ret %p %p\n",__FUNCTION__,
+	       lapic_id(),boot, PCPU_GET(cpuid),
+	       &lapics[lapic_id()],
+	       lapic,
+	       __builtin_return_address(0),
+	       __builtin_return_address(1)
+		);
+	
 	la = &lapics[lapic_id()];
 	KASSERT(la->la_present, ("missing APIC structure"));
 	saveintr = intr_disable();
@@ -361,15 +396,21 @@ lapic_setup(int boot)
 	lapic_enable();
 
 	/* Program LINT[01] LVT entries. */
+	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
 	lapic->lvt_lint0 = lvt_mode(la, LVT_LINT0, lapic->lvt_lint0);
+	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
+	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
 	lapic->lvt_lint1 = lvt_mode(la, LVT_LINT1, lapic->lvt_lint1);
+	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
 
 	/* Program the PMC LVT entry if present. */
 	if (maxlvt >= LVT_PMC)
 		lapic->lvt_pcint = lvt_mode(la, LVT_PMC, lapic->lvt_pcint);
 
 	/* Program timer LVT and setup handler. */
+	printf("\ttimer 0x%x\n",lapic->lvt_timer);
 	lapic->lvt_timer = lvt_mode(la, LVT_TIMER, lapic->lvt_timer);
+	printf("\ttimer 0x%x\n",lapic->lvt_timer);
 	if (boot) {
 		snprintf(buf, sizeof(buf), "cpu%d:timer", PCPU_GET(cpuid));
 		intrcnt_add(buf, &la->la_timer_count);
@@ -649,14 +690,14 @@ lapic_set_lvt_mode(u_int apic_id, u_int pin, u_int32_t mode)
 		return (EINVAL);
 	if (apic_id == APIC_ID_ALL) {
 		lvt = &lvts[pin];
-		if (bootverbose)
+		//if (bootverbose)
 			printf("lapic:");
 	} else {
 		KASSERT(lapics[apic_id].la_present,
 		    ("%s: missing APIC %u", __func__, apic_id));
 		lvt = &lapics[apic_id].la_lvts[pin];
 		lvt->lvt_active = 1;
-		if (bootverbose)
+		//if (bootverbose)
 			printf("lapic%u:", apic_id);
 	}
 	lvt->lvt_mode = mode;
@@ -675,7 +716,7 @@ lapic_set_lvt_mode(u_int apic_id, u_int pin, u_int32_t mode)
 	default:
 		panic("Unsupported delivery mode: 0x%x\n", mode);
 	}
-	if (bootverbose) {
+	if (1 || bootverbose) {
 		printf(" Routing ");
 		switch (mode) {
 		case APIC_LVT_DM_NMI:
@@ -1266,6 +1307,9 @@ apic_init(void *dummy __unused)
 	uint64_t apic_base;
 #endif
 	int retval, best;
+	printf("%s cpu has apic? %d disabled? %d\n",__FUNCTION__,
+	       (int)(cpu_feature & CPUID_APIC),
+	       resource_disabled("apic", 0));
 
 	/* We only support built in local APICs. */
 	if (!(cpu_feature & CPUID_APIC))
