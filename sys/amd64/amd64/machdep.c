@@ -1764,11 +1764,16 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	 */
 	cninit();
 
-	printf("%s:%d modulep 0x%jx physfree 0x%jx\n",__FUNCTION__,__LINE__,
-	       modulep, physfree_save);
-	printf("preload_metadata %p kmdp %p kern_envp %p r_gdt %p (phys 0x%lx)\n",
-	       preload_metadata,kmdp,kern_envp,&r_gdt,(unsigned long)vtophys(&r_gdt));
-	printf("kload_step %p (%d)\n",&kload_step,kload_step);
+	printf("%s:%d\n\tmodulep 0x%jx physfree_save 0x%jx physfree 0x%jx\n",__FUNCTION__,__LINE__,
+	       modulep, physfree_save, physfree);
+	printf("\tpreload_metadata %p kmdp %p kern_envp %p\n",
+	       preload_metadata,kmdp,kern_envp);
+	printf("\tcr4 0x%lx cr3 0x%lx cr2 0x%lx cr0 0x%lx\n",rcr4(),rcr3(),rcr2(),rcr0());
+	//	printf("\tr_gdt %p (phys 0x%lx)\n",
+	//      &r_gdt,(unsigned long)vtophys(&r_gdt));
+	//printf("kload_step %p (%d)\n",&kload_step,kload_step);
+	printf("\tboothowto 0x%lx \n",(unsigned long)boothowto);
+
 
 #ifdef DEV_ISA
 #ifdef DEV_ATPIC
@@ -1790,6 +1795,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 #endif
 
 	kdb_init();
+	//kdb_enter(KDB_WHY_BOOTFLAGS, "Boot flags requested debugger");
 
 #ifdef KDB
 	if (boothowto & RB_KDB)

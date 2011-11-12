@@ -142,7 +142,7 @@ intr_register_source(struct intsrc *isrc)
 {
 	int error, vector;
 
-	printf("\n\t%s isrc %p\n",__FUNCTION__,isrc);
+	//	printf("\n\t%s isrc %p\n",__FUNCTION__,isrc);
 	KASSERT(intr_pic_registered(isrc->is_pic), ("unregistered PIC"));
 	vector = isrc->is_pic->pic_vector(isrc);
 	if (interrupt_sources[vector] != NULL)
@@ -346,7 +346,7 @@ intr_suspend(void)
 
 	mtx_lock(&intr_table_lock);
 	STAILQ_FOREACH(pic, &pics, pics) {
-		printf("%s pic %p\n",__FUNCTION__,pic);
+		printf("%s pic %p suspend func %p\n",__FUNCTION__,pic,pic->pic_suspend);
 		if (pic->pic_suspend != NULL)
 			pic->pic_suspend(pic);
 	}
@@ -551,7 +551,7 @@ intr_add_cpu(u_int cpu)
 
 	if (cpu >= MAXCPU)
 		panic("%s: Invalid CPU ID", __func__);
-	if (bootverbose)
+	//if (bootverbose)
 		printf("INTR: Adding local APIC %d as a target\n",
 		    cpu_apic_ids[cpu]);
 

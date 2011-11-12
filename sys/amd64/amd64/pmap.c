@@ -457,9 +457,13 @@ create_pagetables(vm_paddr_t *firstaddr)
 	int i, j, ndm1g;
 
 	/* Allocate pages */
+	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	KPTphys = allocpages(firstaddr, NKPT);
+	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	KPML4phys = allocpages(firstaddr, 1);
+	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	KPDPphys = allocpages(firstaddr, NKPML4E);
+	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	KPDphys = allocpages(firstaddr, NKPDPE);
 
 	ndmpdp = (ptoa(Maxmem) + NBPDP - 1) >> PDPSHIFT;

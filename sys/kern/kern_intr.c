@@ -281,7 +281,7 @@ intr_event_create(struct intr_event **event, void *source, int flags, int irq,
 	if (event != NULL)
 		*event = ie;
 	CTR2(KTR_INTR, "%s: created %s", __func__, ie->ie_name);
-	printf("%s: created %s", __func__, ie->ie_name);
+	//printf("%s: created %s", __func__, ie->ie_name);
 	return (0);
 }
 
