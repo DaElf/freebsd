@@ -132,8 +132,11 @@ md_getboothowto(char *kargs)
 		if (getenv(howto_names[i].ev) != NULL)
 			howto |= howto_names[i].mask;
 	}
-	if (!strcmp(getenv("console"), "comconsole"))
+	printf("%s:%d console string %s\n",__FUNCTION__,__LINE__,getenv("console"));
+	if (!strcmp(getenv("console"), "comconsole")) {
+		printf("\tsetting console to comconsole\n");
 		howto |= RB_SERIAL;
+	}
 	if (!strcmp(getenv("console"), "nullconsole"))
 		howto |= RB_MUTE;
 
