@@ -350,22 +350,30 @@ lapic_clear_lapic(void) {
 	printf("%s lapic_id(%d) cpu(%d) la %p lapic %p\n",__FUNCTION__,
 	       lapic_id(), PCPU_GET(cpuid), la, lapic);
 
+#if 0
 	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
 	//lapic->lvt_lint0 = lvt_mode(la, LVT_LINT0, APIC_LVTT_M);
 	//lapic->lvt_lint0 = APIC_LVT_M | APIC_LVT_DM;
-	lapic->lvt_lint0 = APIC_LVT_M;
+	//lapic->lvt_lint0 = APIC_LVT_M;
+	lapic->lvt_lint0 |= APIC_LVT_M;
 	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
 
 	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
 	//lapic->lvt_lint1 = lvt_mode(la, LVT_LINT1, APIC_LVTT_M);
-	lapic->lvt_lint1 = APIC_LVT_M;
+	//lapic->lvt_lint1 = APIC_LVT_M;
+	lapic->lvt_lint1 |= APIC_LVT_M;
 	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
 
 	/* Program timer LVT and setup handler. */
 	printf("\ttimer 0x%x\n",lapic->lvt_timer);
 	//lapic->lvt_timer = lvt_mode(la, LVT_TIMER, APIC_LVTT_M);
-	lapic->lvt_timer = APIC_LVTT_M;
+	//lapic->lvt_timer = APIC_LVTT_M;
+	lapic->lvt_timer |= APIC_LVTT_M;
 	printf("\ttimer 0x%x\n",lapic->lvt_timer);
+#endif
+
+	printf("\tdiable lapic\n");
+	lapic_disable();
 }
 
 void

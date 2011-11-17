@@ -60,6 +60,7 @@ static struct gdt_desc_ptr *mygdt;
 static	vm_offset_t control_page;
 static 	void *gdt_desc;
 static	p4_entry_t *pgtbl;
+unsigned long kload_pgtbl;
 
 
 extern struct timecounter *timecounter;
@@ -278,7 +279,7 @@ relocate_kernel(void);
 #endif
 
 int
-kload(struct thread *td, struct kload_args *uap)
+sys_kload(struct thread *td, struct kload_args *uap)
 {
 	
 	printf("%s:%d Says Hello!!!\n",__FUNCTION__,__LINE__);
@@ -340,6 +341,7 @@ kload(struct thread *td, struct kload_args *uap)
 
 	/* returns new page table phys addr */
 	pgtbl = kload_build_page_table();
+	kload_pgtbl = (unsigned long)pgtbl;
 	((unsigned long *)control_page)[4] = (unsigned long)pgtbl;
 
 	/* we pass the virt addr of control_page but we need
@@ -421,6 +423,7 @@ kload(struct thread *td, struct kload_args *uap)
 	sched_unbind(curthread);
 	thread_unlock(curthread);
 
+	//DELAY(5000000);		/* wait ~5000mS */
 	printf("%s: module_shutdown\n",__FUNCTION__);
 	kload_module_shutdown();
 

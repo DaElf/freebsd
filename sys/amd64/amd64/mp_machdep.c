@@ -78,6 +78,9 @@ __FBSDID("$FreeBSD$");
 #define BIOS_RESET		(0x0f)
 #define BIOS_WARM		(0x0a)
 
+
+// quick hack to access the kload page table so we can set the APs to a know pgtbl */
+extern unsigned long kload_pgtbl; 
 /* lock region used by kernel profiling */
 int	mcount_lock;
 
@@ -998,7 +1001,7 @@ start_ap(int apic_id)
 	 * bug), CPU waiting for STARTUP IPI. OR this INIT IPI might be
 	 * ignored.
 	 */
-#if 0
+#if 1
 	/* do an INIT IPI: assert NMI */
 	printf("%s NMI apic_id %d\n",__FUNCTION__,apic_id);
 	lapic_ipi_raw(APIC_DEST_DESTFLD | APIC_TRIGMOD_EDGE |
@@ -1450,6 +1453,8 @@ cpustop_handler(void)
 void
 cpususpend_handler(void)
 {
+	register_t cr3, rf;
+	register_t cr0, cr4;
 	u_int cpu;
 
 	cpu = PCPU_GET(cpuid);
@@ -1475,8 +1480,26 @@ cpususpend_handler(void)
 	//load_cr0(0x60000010); // put cpu back into real mode
 	//load_cr4(0); // nothing special enabled
 	//	load_cr3(0);
+	/* make sure the page table is not the same one that boot process sets up */
+	load_cr3(kload_pgtbl);
+
+#if 0
+	/* Disable PGE. */
+	cr4 = rcr4();
+	load_cr4(cr4 & ~CR4_PGE);
+
+	/* Disable caches (CD = 1, NW = 0) and paging*/
+	cr0 = rcr0();
+	load_cr0((cr0 & ~CR0_NW) | CR0_CD | CR0_PG);
+#endif
+
+	/* Flushes caches and TLBs. */
 	wbinvd();
-	halt();
+	invltlb();
+
+	// restore interrupts so that we can be woken from halt
+	//	intr_restore(rf);
+	//halt();
 
 	/* Wait for resume */
 	while (!CPU_ISSET(cpu, &started_cpus))
