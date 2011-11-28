@@ -1001,7 +1001,7 @@ start_ap(int apic_id)
 	 * bug), CPU waiting for STARTUP IPI. OR this INIT IPI might be
 	 * ignored.
 	 */
-#if 1
+#if 0
 	/* do an INIT IPI: assert NMI */
 	printf("%s NMI apic_id %d\n",__FUNCTION__,apic_id);
 	lapic_ipi_raw(APIC_DEST_DESTFLD | APIC_TRIGMOD_EDGE |
@@ -1325,7 +1325,7 @@ ipi_selected(cpuset_t cpus, u_int ipi)
 		cpu--;
 		CPU_CLR(cpu, &cpus);
 		CTR3(KTR_SMP, "%s: cpu: %d ipi: %x", __func__, cpu, ipi);
-		printf("%s: cpu: %d ipi: 0x%x\n", __func__, cpu, ipi);
+		//printf("%s: cpu: %d ipi: 0x%x\n", __func__, cpu, ipi);
 		ipi_send_cpu(cpu, ipi);
 	}
 }
@@ -1483,7 +1483,7 @@ cpususpend_handler(void)
 	/* make sure the page table is not the same one that boot process sets up */
 	load_cr3(kload_pgtbl);
 
-#if 0
+#if 1
 	/* Disable PGE. */
 	cr4 = rcr4();
 	load_cr4(cr4 & ~CR4_PGE);
@@ -1493,13 +1493,17 @@ cpususpend_handler(void)
 	load_cr0((cr0 & ~CR0_NW) | CR0_CD | CR0_PG);
 #endif
 
+#if 0
 	/* Flushes caches and TLBs. */
 	wbinvd();
 	invltlb();
+#endif
 
+#if 0
 	// restore interrupts so that we can be woken from halt
-	//	intr_restore(rf);
-	//halt();
+	intr_restore(rf);
+	halt();
+#endif
 
 	/* Wait for resume */
 	while (!CPU_ISSET(cpu, &started_cpus))

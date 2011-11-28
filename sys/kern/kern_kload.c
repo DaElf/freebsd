@@ -417,11 +417,13 @@ sys_kload(struct thread *td, struct kload_args *uap)
 			suspend_cpus(map);
 		}
 	}
-	
+
+#if 0	
 	printf("un-bind process\n");
 	thread_lock(curthread);
 	sched_unbind(curthread);
 	thread_unlock(curthread);
+#endif
 
 	//DELAY(5000000);		/* wait ~5000mS */
 	printf("%s: module_shutdown\n",__FUNCTION__);
@@ -466,6 +468,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	/* only pass the control page under the current page table
 	 * the rest of the address should be based on new page table
 	 * which is a simple phys + KERNBASE mapping */
+	printf("calling relocate_kernel\n");
 	ret = relocate_kernel(vtophys(k_items->head_va) + KERNBASE,
 			      KERNBASE + 0x200000,
 			      vtophys(code_page) + KERNBASE,
