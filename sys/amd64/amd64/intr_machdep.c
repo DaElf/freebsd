@@ -508,7 +508,7 @@ intr_next_cpu(void)
 
 	/* Leave all interrupts on the BSP during boot. */
 	if (!assign_cpu) {
-		printf("%s:%d return %u\n",__FUNCTION__,__LINE__,
+		printf("%s:%d same cpu %u\n",__FUNCTION__,__LINE__,
 		       PCPU_GET(apic_id) );
 		return PCPU_GET(apic_id);
 	}
@@ -521,7 +521,7 @@ intr_next_cpu(void)
 			current_cpu = 0;
 	} while (!CPU_ISSET(current_cpu, &intr_cpus));
 	mtx_unlock_spin(&icu_lock);
-	printf("%s:%d return %u\n",__FUNCTION__,__LINE__,apic_id);
+	printf("%s:%d assigned to %u\n",__FUNCTION__,__LINE__,apic_id);
 	return (apic_id);
 }
 
