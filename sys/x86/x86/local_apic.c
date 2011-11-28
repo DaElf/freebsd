@@ -350,25 +350,25 @@ lapic_clear_lapic(void) {
 	printf("%s lapic_id(%d) cpu(%d) la %p lapic %p\n",__FUNCTION__,
 	       lapic_id(), PCPU_GET(cpuid), la, lapic);
 
-#if 0
+#if 1
 	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
 	//lapic->lvt_lint0 = lvt_mode(la, LVT_LINT0, APIC_LVTT_M);
 	//lapic->lvt_lint0 = APIC_LVT_M | APIC_LVT_DM;
-	//lapic->lvt_lint0 = APIC_LVT_M;
-	lapic->lvt_lint0 |= APIC_LVT_M;
+	lapic->lvt_lint0 = APIC_LVT_M;
+	//lapic->lvt_lint0 |= APIC_LVT_M;
 	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
 
 	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
 	//lapic->lvt_lint1 = lvt_mode(la, LVT_LINT1, APIC_LVTT_M);
-	//lapic->lvt_lint1 = APIC_LVT_M;
-	lapic->lvt_lint1 |= APIC_LVT_M;
+	lapic->lvt_lint1 = APIC_LVT_M;
+	//lapic->lvt_lint1 |= APIC_LVT_M;
 	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
 
 	/* Program timer LVT and setup handler. */
 	printf("\ttimer 0x%x\n",lapic->lvt_timer);
 	//lapic->lvt_timer = lvt_mode(la, LVT_TIMER, APIC_LVTT_M);
-	//lapic->lvt_timer = APIC_LVTT_M;
-	lapic->lvt_timer |= APIC_LVTT_M;
+	lapic->lvt_timer = APIC_LVTT_M;
+	//lapic->lvt_timer |= APIC_LVTT_M;
 	printf("\ttimer 0x%x\n",lapic->lvt_timer);
 #endif
 
@@ -963,7 +963,20 @@ lapic_handle_error(void)
 	lapic->esr = 0;
 	esr = lapic->esr;
 
-	printf("CPU%d: local APIC error 0x%x\n", PCPU_GET(cpuid), esr);
+	printf("CPU%d: local APIC error 0x%x\t", PCPU_GET(cpuid), esr);
+	if (lapic->esr & APIC_ESR_SEND_CS_ERROR)
+		printf("send_cs_error\n");
+	if (lapic->esr & APIC_ESR_RECEIVE_CS_ERROR)
+		printf("receive_cs_error\n");
+	if (lapic->esr & APIC_ESR_SEND_ACCEPT)
+		printf("send_accept\n");
+	if (lapic->esr & APIC_ESR_RECEIVE_ACCEPT)
+		printf("receive_accept\n");
+	if (lapic->esr & APIC_ESR_SEND_ILLEGAL_VECTOR)
+		printf("send_illegal_vector\n");
+	if (lapic->esr & APIC_ESR_ILLEGAL_REGISTER)
+		printf("illegal_register\n");
+
 	lapic_eoi();
 }
 
@@ -1129,8 +1142,10 @@ apic_free_vector(u_int apic_id, u_int vector, u_int irq)
 	td = curthread;
 	if (!rebooting) {
 		thread_lock(td);
-		if (sched_is_bound(td))
-			panic("apic_free_vector: Thread already bound.\n");
+		if (sched_is_bound(td)) {
+			printf("%s Thread already bound ... do we care?\n",__FUNCTION__);
+			//panic("apic_free_vector: Thread already bound.\n");
+		}
 		sched_bind(td, apic_cpuid(apic_id));
 		thread_unlock(td);
 	}
