@@ -57,46 +57,7 @@
  * 8(%rsp) = 32 bit kernend
  *
  * We are already in long mode, on a 64 bit %cs and running at KERNBASE.
-  */
-NON_GPROF_ENTRY(kern_enter)
-
-
-	/* Don't trust what the loader gives for rflags. */
-	pushq	$PSL_KERNEL
-	popfq
-
-#if 0
-	movq $0xffffffff80a48e10, %rdi
-	movq $0x28ce50, %rcx
-//	movq $0xffffffff80a40e90, %rdi
-//	movq $0xeedd0, %rcx
-	xorl %eax,%eax
-	shrq $3,%rcx
-	cld
-	rep
-	stosq
-	movq $0x28ce50,%rcx
-//	movq $0xeedd0,%rcx
-	andq $7,%rcx
-	rep
-	stosb
-#endif
-	
-	/* Find the metadata pointers before we lose them */
-	movq	%rsp, %rbp
-	movl	4(%rbp),%edi		/* modulep (arg 1) */
-	movl	8(%rbp),%esi		/* kernend (arg 2) */
-	/* Get onto a stack that we can trust - there is no going back now. */
-	movq	$bootstack,%rsp
-	xorl	%ebp, %ebp
-
-	call	hammer_time		/* set up cpu for unix operation */
-	movq	%rax,%rsp		/* set up kstack for mi_startup() */
-	call	mi_startup		/* autoconfiguration, mountroot etc */
-0:	hlt
-	jmp	0b
-
-	
+ */
 NON_GPROF_ENTRY(btext)
 
 	/* Tell the bios to warmboot next time */
@@ -106,22 +67,11 @@ NON_GPROF_ENTRY(btext)
 	pushq	$PSL_KERNEL
 	popfq
 
-
-#if 0
-	// clear out the tmp stack
-	movq $bootstack-$0x1000, %rdi
-	movq $0x1000, %rcx
-	xorl	%eax,%eax
-	shrq	$3,%rcx
-	cld
-	rep
-	stosq
-#endif
-
 	/* Find the metadata pointers before we lose them */
 	movq	%rsp, %rbp
 	movl	4(%rbp),%edi		/* modulep (arg 1) */
 	movl	8(%rbp),%esi		/* kernend (arg 2) */
+
 	/* Get onto a stack that we can trust - there is no going back now. */
 	movq	$bootstack,%rsp
 	xorl	%ebp, %ebp
