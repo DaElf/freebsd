@@ -40,28 +40,6 @@ kernel_jump:
 	
 	.globl relocate_kernel
 relocate_kernel:
-	/* read the arguments and say goodbye to the stack */
-//	movq  8(%rsp), %rbx /* indirection_page */
-	// This will blast the stack ... set the base ptr to the location of the kernel start */
-//	movq  10(%rsp), %rbp /* reboot_code_buffer */
-//	movq  18(%rsp), %rdx /* start address */
-
-//	pushq %rbp
-//	movq  %rsp, %rbp
-
-	// move the stack to the end of the control page
-	
-//	lea 4096(%rcx), %rsp
-	
-	/* jump to identity mapped page */
-//	addq	$(identity_mapped - relocate_kernel), %r8
-//	pushq	%r8
-//	ret
-
-//identity_mapped:
-	/* store the start address on the stack */
-//	pushq   %rdx
-
 	// first install the new page table
 	movq	32(%rcx), %rax // page table
 	movq 	40(%rcx), %r9  // address of control_page with new PT
@@ -105,7 +83,6 @@ relocate_kernel:
 	lretq
 identity_mapped:
 
-
 	movq $0x10,%rax
 	movq %rax,%ds
 	movq %rax,%es
@@ -118,28 +95,6 @@ identity_mapped:
 //	call printf
 //	popq %rdi
 
-
-#if 0
-	movq	24(%r9), %rax	// gdt
-	lgdt	(%rax)
-
-	// now jump the code to use the new gdt segment
-	pushq $0x8
-	pushq 1f
-	lretq
-//	ljmp 1f
-	nop	
-1:
-	// we just loaded a bogus data segment so se can't set any of the
-	// data segment register
-	movq $0x10,%rax
-	movq %rax,%ds
-	movq %rax,%es
-	movq %rax,%fs
-	movq %rax,%gs
-	movq %rax,%ss
-#endif
-#if 1
 	/*
 	 * Set cr0 to a known state:
 	 *  - Paging enabled
@@ -153,8 +108,6 @@ identity_mapped:
 	andq	$~(X86_CR0_AM | X86_CR0_WP | X86_CR0_TS | X86_CR0_EM |  X86_CR0_MP | X86_CR0_NE), %rax
 	orl	$(X86_CR0_PG | X86_CR0_PE), %eax
 	movq	%rax, %cr0
-
-#endif
 	
 	/* Do the copies */
 	cld
