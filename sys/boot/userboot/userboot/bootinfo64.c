@@ -189,6 +189,7 @@ bios_addsmapdata(struct preloaded_file *kfp)
 	int smapnum, len;
 	struct smap smap[3], *sm;
 
+	printf("%s\n",__FUNCTION__);
 	CALLBACK(getmem, &lowmem, &highmem);
 
 	sm = &smap[0];
