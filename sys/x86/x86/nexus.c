@@ -59,6 +59,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/intr_machdep.h>
 #include <sys/rman.h>
 #include <sys/interrupt.h>
+#include <sys/sysctl.h>
 
 #include <machine/vmparam.h>
 #include <vm/vm.h>
@@ -673,6 +674,52 @@ ram_probe(device_t dev)
 	device_set_desc(dev, "System RAM");
 	return (0);
 }
+
+static int
+smap_hdlr(SYSCTL_HANDLER_ARGS) {
+
+  /* SYSCTL_HANDLER_ARGS
+     struct sysctl_oid *oidp, void *arg1,
+     intptr_t arg2, struct sysctl_req *req
+  */
+
+	struct bios_smap *smapbase;
+	caddr_t kmdp;
+	uint32_t smapsize = 0;
+
+	/* Retrieve the system memory map from the loader. */
+	kmdp = preload_search_by_type("elf kernel");
+	if (kmdp == NULL)
+		kmdp = preload_search_by_type(ELF_KERN_STR);  
+	if (kmdp != NULL) {
+		smapbase = (struct bios_smap *)preload_search_info(kmdp,
+								   MODINFO_METADATA | MODINFOMD_SMAP);
+	} else {
+		smapbase = NULL;
+		goto out;
+	}
+
+
+	printf("%s smapbase %p\n",__FUNCTION__,smapbase);
+	smapsize = *((u_int32_t *)smapbase - 1);
+
+#if 0
+	{
+		struct bios_smap *smap, *smapend;
+		smapend = (struct bios_smap *)((uintptr_t)smapbase + smapsize);
+		for (smap = smapbase; smap < smapend; smap++) {
+			printf("\ttype %d base 0x%lx length 0x%lx\n",
+			       smap->type,smap->base, smap->length);
+		}
+	}
+#endif
+
+out:
+	return (sysctl_handle_opaque(oidp, smapbase, smapsize, req));
+}
+SYSCTL_PROC(_hw, OID_AUTO, smap, CTLTYPE_OPAQUE|CTLFLAG_RD|CTLFLAG_MPSAFE,
+	    0, sizeof(struct bios_smap), smap_hdlr, "S,smap",
+	    "Bios System Map");
 
 static int
 ram_attach(device_t dev)
