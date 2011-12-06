@@ -175,4 +175,10 @@ struct loader_callbacks_v1 {
          */
 	void		(*getmem)(void *arg, uint64_t *lowmem,
             uint64_t *highmem);
+	/*
+	 * build system smap
+	 * this is for kload to build pass back in a copy of the running
+	 * systems smap returns 
+	 */
+	int (*buildsmap)(void *arg, void **smap, size_t *len);
 };
