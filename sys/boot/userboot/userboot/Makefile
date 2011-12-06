@@ -44,10 +44,13 @@ vers.c: ${.CURDIR}/../../common/newvers.sh ${.CURDIR}/version
 
 CLEANFILES=	vers.c
 
+//MK_FORTH = no
 .if ${MK_FORTH} != "no"
 BOOT_FORTH=	yes
 CFLAGS+=        -DBOOT_FORTH -I${.CURDIR}/../../ficl -I${.CURDIR}/../../ficl/i386
 LIBFICL=	${.OBJDIR}/../ficl/libficl.a
+LIBSTAND=	${.OBJDIR}/../libstand/libstand.a
+.else
 LIBSTAND=	${.OBJDIR}/../libstand/libstand.a
 .endif
 
