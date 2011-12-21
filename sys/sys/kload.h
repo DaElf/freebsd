@@ -10,15 +10,15 @@ struct kload_segment {
 	void		       *k_buf;
 	size_t			k_memsz;
 	unsigned long	       *k_pages;
-	unsigned long		k_entry_pt;
+	unsigned long		k_seg_start;
 };
 	
 struct kload {
-	/* This may only be partially filled in.
-	 * OR could create our own segment describtor structure */
-//	struct Elf_Phdr phdr[10];
-	struct kload_segment khdr[10];
-	int num_hdrs;
+	struct kload_segment	khdr[10];
+	int			num_hdrs;
+	unsigned long		k_entry_pt;
+	unsigned int		k_modulep;
+	unsigned int		k_physfree;
 };
 
 //typedef unsigned long kload_item_t;
