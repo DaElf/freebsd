@@ -149,10 +149,6 @@ extern u_int64_t hammer_time(u_int64_t, u_int64_t);
 extern void printcpuinfo(void);	/* XXX header file */
 extern void identify_cpu(void);
 extern void panicifcpuunsupported(void);
-extern int kload_active;
-extern int kload_step;
-extern u_int64_t kload_modulep;
-extern u_int64_t kload_physfree;
 
 #define	CS_SECURE(cs)		(ISPL(cs) == SEL_UPL)
 #define	EFL_SECURE(ef, oef)	((((ef) ^ (oef)) & ~PSL_USERCHANGE) == 0)
@@ -1631,12 +1627,6 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	u_int64_t physfree_save = physfree;
 	u_int64_t kernbase = KERNBASE;
 
-	kload_physfree = physfree;
-	kload_modulep = modulep;
-
-	//breakpoint();
-	kload_active = 1;
-	kload_step = 1;
 	thread0.td_kstack = physfree + kernbase;
 	thread0.td_kstack_pages = KSTACK_PAGES;
 	kstack0_sz = thread0.td_kstack_pages * PAGE_SIZE;
@@ -1771,7 +1761,6 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	printf("\tcr4 0x%lx cr3 0x%lx cr2 0x%lx cr0 0x%lx\n",rcr4(),rcr3(),rcr2(),rcr0());
 	//	printf("\tr_gdt %p (phys 0x%lx)\n",
 	//      &r_gdt,(unsigned long)vtophys(&r_gdt));
-	//printf("kload_step %p (%d)\n",&kload_step,kload_step);
 	printf("\tboothowto 0x%lx \n",(unsigned long)boothowto);
 
 
