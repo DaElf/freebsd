@@ -541,11 +541,11 @@ kload_load_image(void *image,unsigned long entry_pt) {
 	kld.k_modulep  =  ((unsigned int *)stack)[1];
 	kld.k_physfree =  ((unsigned int *)stack)[2];
 
-	printf("loading k_buf %p with size % to kernel image addr %p entry_pt 0x%lx\n",
+	printf("loading k_buf %p with size %jd to kernel image addr %p entry_pt 0x%jx\n",
 	       kld.khdr[0].k_buf,
 	       kld.khdr[0].k_memsz,
-	       kld.k_entry_pt,
-	       image);
+	       image,
+	       kld.k_entry_pt);
 	if (execute)
 		flags |= 0x8;
 
