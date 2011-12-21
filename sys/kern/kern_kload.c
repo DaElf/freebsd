@@ -40,8 +40,6 @@ MALLOC_DEFINE(M_KLOAD, "kload_items", "kload items");
 
 int kload_active = 0;
 int kload_step;
-u_int64_t kload_modulep;
-u_int64_t kload_physfree;
 
 typedef u_int64_t p4_entry_t;
 typedef u_int64_t p3_entry_t;
@@ -371,8 +369,8 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	memcpy((void *)code_page, relocate_kernel, relocate_kernel_size);
 
 	((unsigned long *)control_page)[0] = 0xC0DE;
-	((unsigned long *)control_page)[1] = kload_modulep;
-	((unsigned long *)control_page)[2] = kload_physfree;
+	((unsigned long *)control_page)[1] = kld.k_modulep;
+	((unsigned long *)control_page)[2] = kld.k_physfree;
 
 	mygdt = (struct gdt_desc_ptr *)kload_kmem_alloc(kernel_map,PAGE_SIZE);
 	update_max_min((vm_offset_t)mygdt,1);
@@ -393,7 +391,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	((unsigned long *)control_page)[5] =
 		(unsigned long)(vtophys(control_page) + KLOADBASE);
 
-	((unsigned long *)control_page)[6] = (unsigned long)kld.khdr[0].k_entry_pt;
+	((unsigned long *)control_page)[6] = (unsigned long)kld.k_entry_pt;
 	if(uap->flags & 0x4) {
 	  //	kload_reboot();
 		intr_clear_all_handlers();
@@ -402,7 +400,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	printf("\tnum_hdrs %d\n",kld.num_hdrs);
 	/* 10 segments should be more than enough */
 	for (i = 0 ; (i < kld.num_hdrs && i <= 10); i++) {
-		printf("\tsegment %d entry_pt 0x%lx\n",i,kld.khdr[i].k_entry_pt);
+		printf("\tsegment %d entry_pt 0x%lx\n",i,kld.k_entry_pt);
 		kload_copyin_segment(&kld.khdr[i],i);
 	}
 
