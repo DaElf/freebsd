@@ -27,13 +27,6 @@
 #include <machine/intr_machdep.h>
 #include <contrib/dev/acpica/include/acpi.h>
 
-#if 0
-struct region_descriptor {
-	unsigned long rd_limit:16;		/* segment extent */
-	unsigned long rd_base:64 __packed;	/* base address  */
-} __packed;
-#endif
-
 static struct kload_items *k_items = NULL;
 MALLOC_DECLARE(M_KLOAD);
 MALLOC_DEFINE(M_KLOAD, "kload_items", "kload items");
@@ -46,13 +39,11 @@ typedef u_int64_t p3_entry_t;
 typedef u_int64_t p2_entry_t;
 
 static int kload_copyin_segment(struct kload_segment *,int);
-int kload_copyin_segment_old(struct kload_segment *,int);
 static int kload_add_page(struct kload_items *items, unsigned long item_m);
 static p4_entry_t *kload_build_page_table(void);
 static void setup_freebsd_gdt(uint64_t *gdtr);
-int kload_reboot(void);
-int kload_reboot_prep(void);
-void ipi_suspend_ap(void);
+int kload_exec(void);
+int kload_exec_prep(void);
 	
 static struct gdt_desc_ptr *mygdt;
 static	vm_offset_t control_page;
@@ -61,11 +52,8 @@ static	p4_entry_t *pgtbl;
 unsigned long kload_pgtbl;
 static unsigned long max_addr = 0 , min_addr = 0;
 
-
-extern struct timecounter *timecounter;
-extern struct timecounter dummy_timecounter;
+extern void ipi_suspend_ap(void);
 extern void kload_module_shutdown(void);
-
 extern void shutdown_turnstiles(void);
 
 #define GIGMASK			(~((1<<30)-1))
@@ -108,7 +96,6 @@ update_max_min(vm_offset_t addr, int count) {
 	}
 }
 
-#define VTOP(x) x
 static p4_entry_t *
 kload_build_page_table(void) { 
 
@@ -183,21 +170,12 @@ kload_build_page_table(void) {
 static int
 kload_add_page(struct kload_items *items, unsigned long item_m)
 {
-//	printf("%s:%d add page 0x%lx\n",__FUNCTION__,__LINE__,item_m);
 	if (*items->item != 0) {
 		printf(" item != 0 0x%lx\n",*items->item);
 		items->item++;
 		items->i_count--;
 	}
 
-#if 0
-	printf("%s%d item %p last_item %p head 0x%lx i_count %d\n",__FUNCTION__,
-	       __LINE__,
-	       items->item,
-	       items->last_item,
-	       items->head,
-	       items->i_count );
-#endif
 #if 0
 	printf("%s%d item 0x%lx\n",
 	       __FUNCTION__, __LINE__,
@@ -210,7 +188,6 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 		vm_paddr_t phys = 0;
 		unsigned long va;
 
-		//va = (unsigned long)malloc(PAGE_SIZE, M_TEMP, M_WAITOK|M_ZERO);
 		va = (unsigned long)kload_kmem_alloc(kernel_map,PAGE_SIZE);
 		update_max_min(va,1);
 		if (items->head_va == 0)
@@ -248,33 +225,10 @@ kload_copyin_segment(struct kload_segment *khdr, int seg) {
 	int num_pages;
 	int error = 0;
 	vm_offset_t va;
-//	int pperp; 
-//	int extra_pages;
-//	unsigned long *pages_va = NULL;
-//	vm_object_t obj;
-//	vm_paddr_t phys;
 
-	/* create vm_object for each segemet */
-//	obj = vm_object_allocate(OBJT_DEFAULT, seg);
-	
-//	VM_OBJECT_LOCK(obj);
 	num_pages = roundup2(khdr->k_memsz,PAGE_SIZE) >> PAGE_SHIFT;
 	printf("%s:%d num_pages %d\n",__FUNCTION__,__LINE__,num_pages);
 
-#if 0
-	pperp = PAGE_SIZE / sizeof(unsigned long);
-	/* assume pperp will always be a power of 2 */
-	extra_pages = roundup2(num_pages, pperp) / pperp;
-	printf("extra_pages %d\n", extra_pages);
-	extra_pages = roundup2(num_pages + extra_pages, pperp) / pperp;
-	printf("extra_pages %d\n", extra_pages);
-
-	pages_va = (unsigned long *)kload_kmem_alloc(kernel_map, extra_pages);
-	khdr->k_pages = pages_va;
-	/* ----- */	
-#endif
-
-	//va = kload_kmem_alloc(kernel_map, num_pages * PAGE_SIZE, pages_va);
 	va = kload_kmem_alloc(kernel_map, num_pages * PAGE_SIZE);
 	update_max_min(va,num_pages);
 	if(!va)
@@ -283,11 +237,9 @@ kload_copyin_segment(struct kload_segment *khdr, int seg) {
 
 	/*  need to set up a START dst page */
 	for (i = 0; i < num_pages; i++) {
-	  //printf("pages phys 0x%lx\n",(unsigned long)vtophys(va + (i * PAGE_SIZE)));
-	  kload_add_page(k_items, (vtophys(va + (i * PAGE_SIZE)) + KLOADBASE)
-			 | KLOAD_SOURCE);
-	  //kload_add_page(k_items, (va + (i * PAGE_SIZE))| KLOAD_SOURCE);
-
+		//printf("pages phys 0x%lx\n",(unsigned long)vtophys(va + (i * PAGE_SIZE)));
+		kload_add_page(k_items, (vtophys(va + (i * PAGE_SIZE)) + KLOADBASE)
+			       | KLOAD_SOURCE); 
 	}
 	*k_items->item = KLOAD_DONE;
 	if ((error = copyin(khdr->k_buf, (void *)va, khdr->k_memsz)) != 0)
@@ -296,33 +248,19 @@ kload_copyin_segment(struct kload_segment *khdr, int seg) {
 	       (int)khdr->k_memsz, (void *)va,
 	       &k_items->item );
 
-
 	return error;
 }
 
-#if 0
-int foo_foo_foo(void) {
-	printf("%s:%d Says Hello!!!\n",__FUNCTION__,__LINE__);
-	printf("Hi simple %d\n",6);
-}
-#endif
-
-#if 1
-unsigned long
+extern unsigned long
 relocate_kernel(unsigned long indirection_page,
 		unsigned long page_list,
 		unsigned long code_page,
 		unsigned long control_page);
 extern int relocate_kernel_size;
-#else
-unsigned long
-relocate_kernel(void);
-#endif
 
 int
 sys_kload(struct thread *td, struct kload_args *uap)
 {
-	
 	printf("%s:%d Says Hello!!!\n",__FUNCTION__,__LINE__);
 	
 	int error = 0;
@@ -357,7 +295,6 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		k_items->item = &k_items->head;
 		k_items->last_item = &k_items->head;
 	}
-
 
 	control_page = kload_kmem_alloc(kernel_map, PAGE_SIZE * 2);
 	update_max_min(control_page,2);
@@ -403,7 +340,6 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		printf("\tsegment %d entry_pt 0x%lx\n",i,kld.k_entry_pt);
 		kload_copyin_segment(&kld.khdr[i],i);
 	}
-
 
 	null_idt = (struct region_descriptor*)kload_kmem_alloc(kernel_map,PAGE_SIZE);
 	((unsigned long *)control_page)[7] = (unsigned long)vtophys(null_idt) + KLOADBASE;
@@ -473,13 +409,6 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		}
 	}
 
-#if 0	
-	printf("un-bind process\n");
-	thread_lock(curthread);
-	sched_unbind(curthread);
-	thread_unlock(curthread);
-#endif
-
 	//DELAY(5000000);		/* wait ~5000mS */
 	printf("%s: module_shutdown\n",__FUNCTION__);
 	kload_module_shutdown();
@@ -497,23 +426,6 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	AcpiTerminate();
 	//	printf("%s AcpiDisable\n",__FUNCTION__);
 	//AcpiDisable();
-#endif
-
-#if 0
-	//#if defined(SMP)
-	/*
-	 * Bind us to CPU 0 so that all shutdown code runs there.  Some
-	 * systems don't shutdown properly (i.e., ACPI power off) if we
-	 * run on another processor.
-	 */
-	printf("Binding process to cpu 0\n");
-	thread_lock(curthread);
-	sched_bind(curthread, 0);
-	thread_unlock(curthread);
-	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
-
-	// now that we are cpu 0 send ipi to stop other cpu's
-	//ipi_suspend_ap();
 #endif
 	
 	printf("%s disable_interrupts cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
@@ -536,82 +448,15 @@ just_testing:
 	return 0;
 }
 
-int kernel_jump(unsigned long gdt,unsigned long pgtbl);
-int kernel_jump_simple(unsigned long modulep, unsigned long physfree,
-		       unsigned long gdt, unsigned long pgtbl);
-int kload_reboot_prep(void) {
-
-	vm_offset_t code_page;
-
-	control_page = kload_kmem_alloc(kernel_map, PAGE_SIZE * 2);
-	code_page = control_page + PAGE_SIZE;
-	printf("%s control_page 0x%lx (phys 0x%lx) code_page 0x%lx (phys) 0x%lx)\n",
-	       __FUNCTION__, control_page, vtophys(control_page),
-	       control_page + PAGE_SIZE, vtophys(control_page + PAGE_SIZE));
-
-	printf("copy from %p kernel_kump to 0x%lx size %d\n",
-	       kernel_jump, (unsigned long)code_page, relocate_kernel_size);
-	memset((void *)control_page, 0, PAGE_SIZE * 2);
-	memcpy((void *)code_page, kernel_jump, relocate_kernel_size);
-
-	mygdt = (struct gdt_desc_ptr *)kload_kmem_alloc(kernel_map,PAGE_SIZE);
-	gdt_desc = (char *)mygdt + sizeof(struct gdt_desc_ptr);
-	printf ("gdt %p paddr(0x%lx) size gdt_desc %lx gdt_desc %p\n",
-		mygdt, vtophys(mygdt),
-		sizeof(struct gdt_desc_ptr), gdt_desc);
-	
-	setup_freebsd_gdt(gdt_desc);
-	mygdt->size    = GUEST_GDTR_LIMIT;
-	mygdt->address = (unsigned long)gdt_desc;
-
-	pgtbl = kload_build_page_table();
+/* need to split things apart so we can wander into the reboot shutdown code and
+ * then back
+ */
+int kload_exec_prep(void) {
 	return 0;
 }
 
-
 int
-kload_reboot(void)
+kload_exec(void)
 {
-
-	int ret = 0;
-#if 0
-
-	printf("%s calling kernel_jump with modulep 0x%lx physfree 0x%lx "
-	       "gdt 0x%lx pgtbl 0x%lx\n",
-	       __FUNCTION__,
-	       kload_modulep, kload_physfree,
-	       (unsigned long)mygdt,(unsigned long)pgtbl);
-	
-	/* quick and dirty hack to shutdown all modules
-	 * including the bloody clock
-	 */
-	kload_active = 1;
-	kload_step = 1;
-	printf("\tkload_active %p (%d) kload_step %p (%d)\n",&kload_active, kload_active,
-	       &kload_step, kload_step);
-
-# if 1
-//	kload_module_shutdown();
-	
-	mtx_destroy(&icu_lock);
-	mtx_destroy(&dt_lock);
-	// It looks like somebody still has a ref on Giant at shutdown
-	mtx_unlock(&Giant);
-	mtx_destroy(&clock_lock);
-	mutex_shutdown();
-	shutdown_turnstiles();
-	
-	witness_cold = 1;
-	timecounter = &dummy_timecounter;
-# endif
-# if 0
-	ret = kernel_jump_simple(
-		kload_modulep,
-		kload_physfree,
-		(unsigned long)mygdt,
-		(unsigned long)pgtbl);
-# endif
-#endif
-	printf("kernel_jump returned %d\n",ret);
 	return 0;
 }
