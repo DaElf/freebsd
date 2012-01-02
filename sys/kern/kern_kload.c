@@ -14,6 +14,9 @@
 #include <sys/proc.h>
 #include <sys/sched.h>
 #include <sys/smp.h>
+#include <sys/reboot.h>
+#include <sys/eventhandler.h>
+#include <sys/priv.h>
 
 #include <vm/vm.h>
 #include <vm/vm_param.h>
@@ -31,8 +34,7 @@ static struct kload_items *k_items = NULL;
 MALLOC_DECLARE(M_KLOAD);
 MALLOC_DEFINE(M_KLOAD, "kload_items", "kload items");
 
-int kload_active = 0;
-int kload_step;
+int kload_ready = 0;
 
 typedef u_int64_t p4_entry_t;
 typedef u_int64_t p3_entry_t;
@@ -42,11 +44,11 @@ static int kload_copyin_segment(struct kload_segment *,int);
 static int kload_add_page(struct kload_items *items, unsigned long item_m);
 static p4_entry_t *kload_build_page_table(void);
 static void setup_freebsd_gdt(uint64_t *gdtr);
-int kload_exec(void);
-int kload_exec_prep(void);
+static void kload_shutdown_final(void *arg, int howto);
 	
 static struct gdt_desc_ptr *mygdt;
 static	vm_offset_t control_page;
+static	vm_offset_t code_page;
 static 	void *gdt_desc;
 static	p4_entry_t *pgtbl;
 unsigned long kload_pgtbl;
@@ -55,6 +57,11 @@ static unsigned long max_addr = 0 , min_addr = 0;
 extern void ipi_suspend_ap(void);
 extern void kload_module_shutdown(void);
 extern void shutdown_turnstiles(void);
+extern unsigned long relocate_kernel(unsigned long indirection_page,
+				     unsigned long page_list,
+				     unsigned long code_page,
+				     unsigned long control_page);
+extern int relocate_kernel_size;
 
 #define GIGMASK			(~((1<<30)-1))
 #define KLOADBASE		KVADDR(KPML4I, (NPDPEPG-48), 0, 0)
@@ -69,6 +76,18 @@ extern void shutdown_turnstiles(void);
 						   M_WAITOK | M_ZERO, \
 						   0, (1 << 30) /* 1Gig limit */, \
 						   VM_MEMATTR_WRITE_COMBINING)
+
+
+struct kload_cpage {
+	unsigned long kcp_magic;	/* 0 */
+	unsigned long kcp_modulep;	/* 1 */
+	unsigned long kcp_physfree;	/* 2 */
+	unsigned long kcp_gdt;		/* 3 */
+	unsigned long kcp_pgtbl;	/* 4 */
+	unsigned long kcp_cp;		/* 5 */
+	unsigned long kcp_entry_pt;	/* 6 */
+	unsigned long kcp_idt;		/* 7 */ 
+} __attribute__((packed)) ;
 
 struct gdt_desc_ptr {
 	unsigned short size;
@@ -251,26 +270,22 @@ kload_copyin_segment(struct kload_segment *khdr, int seg) {
 	return error;
 }
 
-extern unsigned long
-relocate_kernel(unsigned long indirection_page,
-		unsigned long page_list,
-		unsigned long code_page,
-		unsigned long control_page);
-extern int relocate_kernel_size;
-
 int
 sys_kload(struct thread *td, struct kload_args *uap)
-{
+{ 
 	printf("%s:%d Says Hello!!!\n",__FUNCTION__,__LINE__);
 	
 	int error = 0;
 	struct region_descriptor *null_idt;
-	vm_offset_t code_page;
         size_t bufsize = uap->buflen;
 	struct kload kld;
 	int i;
-	int ret;
+		
+	error = priv_check(td, PRIV_REBOOT);
+	if (error)
+		return error;
 
+	EVENTHANDLER_REGISTER(shutdown_final, kload_shutdown_final, NULL, SHUTDOWN_PRI_KLOAD);
 	printf("Reading from buf %p for len 0x%jx flags 0x%x\n",
 	       uap->buf,(uintmax_t)bufsize,
 	       uap->flags);
@@ -327,12 +342,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	 * new virt addr as well */
 	((unsigned long *)control_page)[5] =
 		(unsigned long)(vtophys(control_page) + KLOADBASE);
-
 	((unsigned long *)control_page)[6] = (unsigned long)kld.k_entry_pt;
-	if(uap->flags & 0x4) {
-	  //	kload_reboot();
-		intr_clear_all_handlers();
-	}
 
 	printf("\tnum_hdrs %d\n",kld.num_hdrs);
 	/* 10 segments should be more than enough */
@@ -348,13 +358,16 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	null_idt->rd_base = 0;
 	//lidt(&null_idt);
 
-	/* this must be built after all other allocations so it can
-	 * caculate build a page table entry based on min max alloc space
+	/* 
+	 * This must be built after all other allocations so it can
+	 * build a page table entry based on min max addresses 
 	 */
 	/* returns new page table phys addr */
 	pgtbl = kload_build_page_table();
 	kload_pgtbl = (unsigned long)pgtbl;
 	((unsigned long *)control_page)[4] = (unsigned long)pgtbl;
+
+	kload_ready = 1;
 
 	printf("%s:\n\thead_va\t\t0x%lx (phys 0x%lx)\n"
 	       "\tkernbase\t0x%lx\n"
@@ -364,7 +377,9 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	       "\tpgtbl\t\t\t\t0x%lx\n"
 	       "\tidt\t\t0x%lx (0x%lx)\n"
 	       "\tmax_addr\t\t\t(0x%lx)\n"
-	       "\tmin_addr\t\t\t(0x%lx)\n",
+	       "\tmin_addr\t\t\t(0x%lx)\n"
+	       "\tmodulep\t\t\t(0x%lx)\n"
+	       "\tphysfree\t\t\t(0x%lx)\n",
 	       __FUNCTION__,
 	       k_items->head_va, vtophys(k_items->head_va),
 	       KERNBASE + 0x200000,
@@ -372,10 +387,10 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	       control_page, vtophys(control_page),
 	       (unsigned long)mygdt,vtophys(mygdt),(unsigned long)pgtbl,
 	       (unsigned long)null_idt,vtophys(null_idt),
-	       (unsigned long)max_addr, (unsigned long)min_addr );
+	       (unsigned long)max_addr, (unsigned long)min_addr,
+	       (unsigned long)kld.k_modulep, (unsigned long)kld.k_physfree);
 
-	// really do it vs just testing
-	if(!(uap->flags & 0x8))
+	if(!(uap->flags & (KLOAD_EXEC | KLOAD_REBOOT)))
 		goto just_testing;
 #if defined(SMP)
 	/*
@@ -388,75 +403,74 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	sched_bind(curthread, 0);
 	thread_unlock(curthread);
 	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
-
-	// now that we are cpu 0 send ipi to stop other cpu's
-	//ipi_suspend_ap();
 #endif
-	printf("%s: suspend APs\n",__FUNCTION__);
-	{
-		cpuset_t map;
-		
-		map = all_cpus;
-		//CPU_CLR(0, &map);
-		// we should be bound to cpu 0 at this point
-		printf("%s  cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
-		CPU_CLR(PCPU_GET(cpuid), &map);
-		CPU_NAND(&map, &stopped_cpus);
-		if (!CPU_EMPTY(&map)) {
-			printf("cpu_reset: Stopping other CPUs\n");
-			//stop_cpus_hard(map);
-			suspend_cpus(map);
-		}
+	
+	if(uap->flags & KLOAD_REBOOT) {
+		mtx_lock(&Giant);
+		kern_reboot(RB_KLOAD);
+		/* should not return */
+		mtx_unlock(&Giant);
 	}
 
-	//DELAY(5000000);		/* wait ~5000mS */
+	/* 
+	 * the reboot code will do a module shutdown so it is not
+	 * part kload_shutdown_final but it needs to happen.
+	 * So in the case of exec run it here
+	 */
 	printf("%s: module_shutdown\n",__FUNCTION__);
 	kload_module_shutdown();
 
-	printf("%s: clear all handlers\n",__FUNCTION__);
-	intr_clear_all_handlers();
+	kload_shutdown_final(NULL, RB_KLOAD);
 
-#if 1	
-	printf("%s: shutdown_turstiles\n",__FUNCTION__);
-	shutdown_turnstiles();
-#endif
-#if 0
-	/* not really sure what this will do but lets try it and see */
-	printf("%s: AcpiTerminate\n",__FUNCTION__);
-	AcpiTerminate();
-	//	printf("%s AcpiDisable\n",__FUNCTION__);
-	//AcpiDisable();
-#endif
-	
-	printf("%s disable_interrupts cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
-	disable_intr();
-	intr_suspend();
-
-	/* only pass the control page under the current page table
-	 * the rest of the address should be based on new page table
-	 * which is a simple phys + KLOADBASE mapping */
-	printf("calling relocate_kernel\n");
-	ret = relocate_kernel(vtophys(k_items->head_va) + KLOADBASE,
-			      /* dest addr i.e. overwrite existing kernel */
-			      KERNBASE + 0x200000,
-			      vtophys(code_page) + KLOADBASE,
-			      control_page);
-	printf("\trelocate_new_kernel returned %d\n",ret);
 just_testing:
 	printf("%s just testing not really trying to reboot\n",__FUNCTION__);
 		
 	return 0;
 }
 
-/* need to split things apart so we can wander into the reboot shutdown code and
- * then back
- */
-int kload_exec_prep(void) {
-	return 0;
-}
 
-int
-kload_exec(void)
+static void
+kload_shutdown_final(void *arg, int howto)
 {
-	return 0;
+	int ret;
+	cpuset_t map;
+
+	printf("%s arg %p howto 0x%x\n",__FUNCTION__, arg, howto);
+
+	if (!(howto & RB_KLOAD)) {
+		printf("%s not a kload reboot\n",__FUNCTION__);
+		return;
+	}
+	if (kload_ready) {
+
+		printf("%s: suspend APs\n",__FUNCTION__);
+		map = all_cpus;
+		// we should be bound to cpu 0 at this point
+		printf("%s  cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
+		CPU_CLR(PCPU_GET(cpuid), &map);
+		CPU_NAND(&map, &stopped_cpus);
+		if (!CPU_EMPTY(&map)) {
+			printf("cpu_reset: Stopping other CPUs\n");
+			suspend_cpus(map);
+		}
+
+		//DELAY(5000000);
+
+		printf("%s: clear all handlers\n",__FUNCTION__);
+		intr_clear_all_handlers();
+		
+		printf("%s disable_interrupts cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
+		disable_intr();
+		intr_suspend();
+		printf("calling relocate_kernel\n");
+		ret = relocate_kernel(vtophys(k_items->head_va) + KLOADBASE,
+				      /* dest addr i.e. overwrite existing kernel */
+				      KERNBASE + 0x200000,
+				      vtophys(code_page) + KLOADBASE,
+				      control_page);
+		/* currently this will never happen */
+		printf("\trelocate_new_kernel returned %d\n",ret);
+	} else {
+		printf("kload_shutdown_final called without proper alt kernel load\n");
+	}
 }
