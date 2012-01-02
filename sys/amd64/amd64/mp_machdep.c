@@ -1493,15 +1493,15 @@ cpususpend_handler(void)
 	load_cr0((cr0 & ~CR0_NW) | CR0_CD | CR0_PG);
 #endif
 
-#if 0
+#if 1
 	/* Flushes caches and TLBs. */
 	wbinvd();
 	invltlb();
 #endif
 
-#if 0
+#if 1
 	// restore interrupts so that we can be woken from halt
-	intr_restore(rf);
+	//	intr_restore(rf);
 	halt();
 #endif
 
