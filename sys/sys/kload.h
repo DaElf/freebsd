@@ -3,8 +3,7 @@
 
 #define KLOAD_LOAD		 0
 #define KLOAD_REBOOT		(1 << 0 )
-#define KLOAD_EXEC		(1 << 0 )
-#define KLOAD_TEST_RELOCATE	(1 << 10)
+#define KLOAD_EXEC		(1 << 1 )
 
 struct kload_segment {
 	void		       *k_buf;

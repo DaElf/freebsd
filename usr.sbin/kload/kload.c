@@ -1,9 +1,14 @@
 /* Russell Cattelan Digital Elves Inc 2011 */
 
-/* This heavily borrowed from userboot/test/test.c */
+/*
+ * Heavily borrowed from userboot/test/test.c 
+ * process kill code borrowed from halt.c 
+ */
 
 #include <sys/ioctl.h>
 #include <sys/stat.h>
+#include <sys/sysctl.h>
+#include <signal.h>
 #include <dirent.h>
 #include <dlfcn.h>
 #include <err.h>
@@ -39,7 +44,8 @@ size_t image_max_used = 0;
 int disk_fd = -1;
 uint64_t regs[16];
 uint64_t pc;
-static int execute = 0;
+static int k_execute = 0;
+static int k_reboot = 0;
 static void *dl_lib;
 
 typedef void *(*M_func)(size_t bytes, const char *file, int line);
@@ -47,6 +53,8 @@ typedef void *(*M_func)(size_t bytes, const char *file, int line);
 M_func Malloc_func;
 
 static void k_exit(void *, int);
+static int shutdown_processes(void);
+static u_int get_pageins(void);
 int kload_load_image(void *image,unsigned long entry_pt);
 
 struct load_file {
@@ -452,7 +460,7 @@ struct loader_callbacks_v1 cb = {
 
 static void
 usage(void) {
-	printf("usage: kload [-d <disk image path>] [-h <host filesystem path>] -e\n");
+	printf("usage: kload [-d <disk image path>] [-h <host filesystem path>] [-e | -r]\n");
 	exit(1);
 }
 
@@ -462,7 +470,7 @@ main(int argc, char** argv) {
 	int opt;
 	char *disk_image = NULL;
 
-	while ((opt = getopt(argc, argv, "d:h:e")) != -1) {
+	while ((opt = getopt(argc, argv, "d:h:er")) != -1) {
 		switch (opt) {
 		case 'd':
 			disk_image = optarg;
@@ -472,12 +480,20 @@ main(int argc, char** argv) {
 			host_base = optarg;
 			break;
 		case 'e':
-			execute = 1;
+			k_execute = 1;
+			break;
+		case 'r':
+			k_reboot = 1;
 			break;
 
 		case '?':
 			usage();
 		}
+	}
+	
+	if (geteuid()) {
+		errno = EPERM;
+		err(1, NULL);
 	}
 
 //	dl_lib = dlopen("/boot/userboot.so", RTLD_LOCAL);
@@ -546,9 +562,110 @@ kload_load_image(void *image,unsigned long entry_pt) {
 	       kld.khdr[0].k_memsz,
 	       image,
 	       kld.k_entry_pt);
-	if (execute)
-		flags |= 0x8;
+	if (k_execute) {
+		flags &= ~KLOAD_REBOOT;
+		flags |= KLOAD_EXEC;
+	}
+	if (k_reboot) {
+		flags &= ~KLOAD_EXEC;
+		flags |= KLOAD_REBOOT;
+		shutdown_processes();
+	}
 
 	return syscall (syscall_num,&kld,sizeof(struct kload),flags);
 	return 1;
+}
+
+
+
+static int
+shutdown_processes(void) {
+	
+	int i;
+	u_int pageins;
+	int nflag = 0;
+	int sverrno;
+	/*
+	 * Do a sync early on, so disks start transfers while we're off
+	 * killing processes.  Don't worry about writes done before the
+	 * processes die, the reboot system call syncs the disks.
+	 */
+	if (!nflag)
+		sync();
+
+	/*
+	 * Ignore signals that we can get as a result of killing
+	 * parents, group leaders, etc.
+	 */
+	(void)signal(SIGHUP,  SIG_IGN);
+	(void)signal(SIGINT,  SIG_IGN);
+	(void)signal(SIGQUIT, SIG_IGN);
+	(void)signal(SIGTERM, SIG_IGN);
+	(void)signal(SIGTSTP, SIG_IGN);
+
+	/*
+	 * If we're running in a pipeline, we don't want to die
+	 * after killing whatever we're writing to.
+	 */
+	(void)signal(SIGPIPE, SIG_IGN);
+
+	/* Just stop init -- if we fail, we'll restart it. */
+	if (kill(1, SIGTSTP) == -1)
+		err(1, "SIGTSTP init");
+
+	/* Send a SIGTERM first, a chance to save the buffers. */
+	if (kill(-1, SIGTERM) == -1 && errno != ESRCH)
+		err(1, "SIGTERM processes");
+
+	/*
+	 * After the processes receive the signal, start the rest of the
+	 * buffers on their way.  Wait 5 seconds between the SIGTERM and
+	 * the SIGKILL to give everybody a chance. If there is a lot of
+	 * paging activity then wait longer, up to a maximum of approx
+	 * 60 seconds.
+	 */
+	sleep(2);
+	for (i = 0; i < 20; i++) {
+		pageins = get_pageins();
+		if (!nflag)
+			sync();
+		sleep(3);
+		if (get_pageins() == pageins)
+			break;
+	}
+
+	for (i = 1;; ++i) {
+		if (kill(-1, SIGKILL) == -1) {
+			if (errno == ESRCH)
+				break;
+			goto restart;
+		}
+		if (i > 5) {
+			(void)fprintf(stderr,
+			    "WARNING: some process(es) wouldn't die\n");
+			break;
+		}
+		(void)sleep(2 * i);
+	}
+	return 1;
+restart:
+	sverrno = errno;
+	errx(1, "%s%s", kill(1, SIGHUP) == -1 ? "(can't restart init): " : "", strerror(sverrno));
+	/* NOTREACHED */
+	return 0;
+}
+
+static u_int
+get_pageins(void)
+{
+	u_int pageins;
+	size_t len;
+
+	len = sizeof(pageins);
+	if (sysctlbyname("vm.stats.vm.v_swappgsin", &pageins, &len, NULL, 0)
+	    != 0) {
+		warnx("v_swappgsin");
+		return (0);
+	}
+	return pageins;
 }
