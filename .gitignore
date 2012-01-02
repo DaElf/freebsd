@@ -5,3 +5,5 @@ cscope.*
 *.o
 *.So
 *.a
+.pc
+qpatches
