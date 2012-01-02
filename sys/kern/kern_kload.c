@@ -45,7 +45,7 @@ static int kload_add_page(struct kload_items *items, unsigned long item_m);
 static p4_entry_t *kload_build_page_table(void);
 static void setup_freebsd_gdt(uint64_t *gdtr);
 static void kload_shutdown_final(void *arg, int howto);
-	
+
 static struct gdt_desc_ptr *mygdt;
 static	vm_offset_t control_page;
 static	vm_offset_t code_page;
@@ -86,7 +86,7 @@ struct kload_cpage {
 	unsigned long kcp_pgtbl;	/* 4 */
 	unsigned long kcp_cp;		/* 5 */
 	unsigned long kcp_entry_pt;	/* 6 */
-	unsigned long kcp_idt;		/* 7 */ 
+	unsigned long kcp_idt;		/* 7 */
 } __attribute__((packed)) ;
 
 struct gdt_desc_ptr {
@@ -106,7 +106,7 @@ static void
 update_max_min(vm_offset_t addr, int count) {
 
 	int i;
-	
+
 	for(i = 0; i < count; i++) {
 		if (vtophys(addr + (i * PAGE_SIZE)) < min_addr)
 			min_addr = vtophys(addr + (i * PAGE_SIZE));
@@ -116,7 +116,7 @@ update_max_min(vm_offset_t addr, int count) {
 }
 
 static p4_entry_t *
-kload_build_page_table(void) { 
+kload_build_page_table(void) {
 
 	unsigned long va;
 	unsigned long kl_start;
@@ -127,7 +127,7 @@ kload_build_page_table(void) {
 	p4_entry_t *PT2;
 	p4_entry_t *PT2KL;
 	int i;
-	
+
 	va = (unsigned long)kload_kmem_alloc(kernel_map,PAGE_SIZE * 4);
 	update_max_min(va,4);
 	memset((void *)va, 0, 4 * PAGE_SIZE);
@@ -157,7 +157,7 @@ kload_build_page_table(void) {
 		 */
 		panic("kload temp space spread over more than a 1gig range");
 	}
-		
+
 	for (i = 0; i < 512; i++) {
 		/* The level 2 page slots are mapped with 2MB pages for 1GB. */
 		PT2[i] = i * (2 * 1024 * 1024);
@@ -169,14 +169,14 @@ kload_build_page_table(void) {
 	PT4[KPML4I]  = (p4_entry_t)(vtophys(PT3));
 	PT4[KPML4I] |= PG_V | PG_RW | PG_U;
 	// map offset 0 since btext set the warm boot flag @ 0x472
-	// maybe btext should write KERNBASE + 0x472 
+	// maybe btext should write KERNBASE + 0x472
 	// or better yet set warm boot at shutdown time not startup
 	PT4[0]       = (p4_entry_t)(vtophys(PT3));
 	PT4[0]      |= PG_V | PG_RW | PG_U;
 
 	PT3[KPDPI]  = (p3_entry_t)(vtophys(PT2));
 	PT3[KPDPI] |= PG_V | PG_RW | PG_U;
-	// ditto 
+	// ditto
 	PT3[0]      = (p3_entry_t)(vtophys(PT2));
 	PT3[0]     |= PG_V | PG_RW | PG_U;
 
@@ -211,7 +211,7 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 		update_max_min(va,1);
 		if (items->head_va == 0)
 			items->head_va = va;
-		
+
 		phys = vtophys(va);
 		printf("%s indirect page item %p va %p stored %p phys %p\n",__FUNCTION__,
 		       (void *)*items->item,
@@ -237,7 +237,7 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 	return 0;
 }
 
-int 
+int
 kload_copyin_segment(struct kload_segment *khdr, int seg) {
 
 	int i;
@@ -258,11 +258,11 @@ kload_copyin_segment(struct kload_segment *khdr, int seg) {
 	for (i = 0; i < num_pages; i++) {
 		//printf("pages phys 0x%lx\n",(unsigned long)vtophys(va + (i * PAGE_SIZE)));
 		kload_add_page(k_items, (vtophys(va + (i * PAGE_SIZE)) + KLOADBASE)
-			       | KLOAD_SOURCE); 
+			       | KLOAD_SOURCE);
 	}
 	*k_items->item = KLOAD_DONE;
 	if ((error = copyin(khdr->k_buf, (void *)va, khdr->k_memsz)) != 0)
-                return error;
+		return error;
 	printf("copied %d bytes to va %p done marker at %p\n",
 	       (int)khdr->k_memsz, (void *)va,
 	       &k_items->item );
@@ -272,15 +272,15 @@ kload_copyin_segment(struct kload_segment *khdr, int seg) {
 
 int
 sys_kload(struct thread *td, struct kload_args *uap)
-{ 
+{
 	printf("%s:%d Says Hello!!!\n",__FUNCTION__,__LINE__);
-	
+
 	int error = 0;
 	struct region_descriptor *null_idt;
-        size_t bufsize = uap->buflen;
+	size_t bufsize = uap->buflen;
 	struct kload kld;
 	int i;
-		
+
 	error = priv_check(td, PRIV_REBOOT);
 	if (error)
 		return error;
@@ -297,14 +297,14 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		printf("Hmm size not right %jd %jd\n",(uintmax_t)bufsize,sizeof(struct kload));
 		return error;
 	}
-        if ((error = copyin(uap->buf, &kld, bufsize)) != 0)
-                return error;
+	if ((error = copyin(uap->buf, &kld, bufsize)) != 0)
+		return error;
 
 	if (!k_items) {
 		if((k_items = malloc(sizeof(struct kload_items),
 				     M_KLOAD, M_WAITOK|M_ZERO)) == NULL)
 			return ENOMEM;
-		
+
 		k_items->head = 0;
 		k_items->head_va = 0;
 		k_items->item = &k_items->head;
@@ -327,12 +327,12 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	mygdt = (struct gdt_desc_ptr *)kload_kmem_alloc(kernel_map,PAGE_SIZE);
 	update_max_min((vm_offset_t)mygdt,1);
 	((unsigned long *)control_page)[3] = (unsigned long)vtophys(mygdt) + KLOADBASE;
-	
+
 	gdt_desc = (char *)mygdt + sizeof(struct gdt_desc_ptr);
 	printf ("gdt %p paddr(0x%lx) size gdt_desc %lu gdt_desc %p\n",
 		mygdt, vtophys(mygdt),
 		sizeof(struct gdt_desc_ptr), gdt_desc);
-	
+
 	setup_freebsd_gdt(gdt_desc);
 	mygdt->size    = GUEST_GDTR_LIMIT;
 	mygdt->address = (unsigned long)(vtophys(gdt_desc) + KLOADBASE);
@@ -358,9 +358,9 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	null_idt->rd_base = 0;
 	//lidt(&null_idt);
 
-	/* 
+	/*
 	 * This must be built after all other allocations so it can
-	 * build a page table entry based on min max addresses 
+	 * build a page table entry based on min max addresses
 	 */
 	/* returns new page table phys addr */
 	pgtbl = kload_build_page_table();
@@ -404,7 +404,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	thread_unlock(curthread);
 	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
 #endif
-	
+
 	if(uap->flags & KLOAD_REBOOT) {
 		mtx_lock(&Giant);
 		kern_reboot(RB_KLOAD);
@@ -412,7 +412,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		mtx_unlock(&Giant);
 	}
 
-	/* 
+	/*
 	 * the reboot code will do a module shutdown so it is not
 	 * part kload_shutdown_final but it needs to happen.
 	 * So in the case of exec run it here
@@ -424,7 +424,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 
 just_testing:
 	printf("%s just testing not really trying to reboot\n",__FUNCTION__);
-		
+
 	return 0;
 }
 
@@ -458,7 +458,7 @@ kload_shutdown_final(void *arg, int howto)
 
 		printf("%s: clear all handlers\n",__FUNCTION__);
 		intr_clear_all_handlers();
-		
+
 		printf("%s disable_interrupts cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
 		disable_intr();
 		intr_suspend();
