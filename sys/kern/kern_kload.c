@@ -250,6 +250,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	struct region_descriptor *null_idt;
 	size_t bufsize = uap->buflen;
 	struct kload kld;
+	struct kload_cpage *k_cpage;
 	int i;
 
 	error = priv_check(td, PRIV_REBOOT);
@@ -283,6 +284,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	}
 
 	control_page = kload_kmem_alloc(kernel_map, PAGE_SIZE * 2);
+	k_cpage = (struct kload_cpage *)control_page;
 	update_max_min(control_page,2);
 	code_page = control_page + PAGE_SIZE;
 
@@ -291,25 +293,23 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	memset((void *)control_page, 0, PAGE_SIZE * 2);
 	memcpy((void *)code_page, relocate_kernel, relocate_kernel_size);
 
-	((unsigned long *)control_page)[0] = 0xC0DE;
-	((unsigned long *)control_page)[1] = kld.k_modulep;
-	((unsigned long *)control_page)[2] = kld.k_physfree;
+	k_cpage->kcp_magic = 0xC0DE;
+	k_cpage->kcp_modulep = kld.k_modulep;
+	k_cpage->kcp_physfree = kld.k_physfree;
 
 	mygdt = (struct gdt_desc_ptr *)kload_kmem_alloc(kernel_map,PAGE_SIZE);
 	update_max_min((vm_offset_t)mygdt,1);
-	((unsigned long *)control_page)[3] = (unsigned long)vtophys(mygdt) + KLOADBASE;
+	k_cpage->kcp_gdt = (unsigned long)vtophys(mygdt) + KLOADBASE;
 
 	gdt_desc = (char *)mygdt + sizeof(struct gdt_desc_ptr);
 	setup_freebsd_gdt(gdt_desc);
 	mygdt->size    = GUEST_GDTR_LIMIT;
 	mygdt->address = (unsigned long)(vtophys(gdt_desc) + KLOADBASE);
 
-
 	/* we pass the virt addr of control_page but we need
 	 * new virt addr as well */
-	((unsigned long *)control_page)[5] =
-		(unsigned long)(vtophys(control_page) + KLOADBASE);
-	((unsigned long *)control_page)[6] = (unsigned long)kld.k_entry_pt;
+	k_cpage->kcp_cp = (unsigned long)(vtophys(control_page) + KLOADBASE);
+	k_cpage->kcp_entry_pt = kld.k_entry_pt;
 
 	/* 10 segments should be more than enough */
 	for (i = 0 ; (i < kld.num_hdrs && i <= 10); i++) {
@@ -317,7 +317,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	}
 
 	null_idt = (struct region_descriptor*)kload_kmem_alloc(kernel_map,PAGE_SIZE);
-	((unsigned long *)control_page)[7] = (unsigned long)vtophys(null_idt) + KLOADBASE;
+	k_cpage->kcp_idt = (unsigned long)vtophys(null_idt) + KLOADBASE;
 	/* Wipe the IDT. */
 	null_idt->rd_limit = 0;
 	null_idt->rd_base = 0;
@@ -328,7 +328,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	/* returns new page table phys addr */
 	pgtbl = kload_build_page_table();
 	kload_pgtbl = (unsigned long)pgtbl;
-	((unsigned long *)control_page)[4] = (unsigned long)pgtbl;
+	k_cpage->kcp_pgtbl = (unsigned long)pgtbl;
 
 	kload_ready = 1;
 
