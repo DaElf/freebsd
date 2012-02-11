@@ -1428,6 +1428,9 @@ cpususpend_handler(void)
 	rf = intr_disable();
 	cr3 = rcr3();
 
+	lapic_clear_lapic(1 /* disable lapic */);
+ 	/* shutdown interrupts to the cpu and then set the mask as stopped */
+
 	if (savectx(susppcbs[cpu])) {
 		ctx_fpusave(suspfpusave[cpu]);
 		wbinvd();
@@ -1439,10 +1442,6 @@ cpususpend_handler(void)
 		PCPU_SET(switchticks, ticks);
 	}
 	
-	lapic_clear_lapic();
-	//load_cr0(0x60000010); // put cpu back into real mode
-	//load_cr4(0); // nothing special enabled
-	//	load_cr3(0);
 	/* make sure the page table is not the same one that boot process sets up */
 	load_cr3(kload_pgtbl);
 
