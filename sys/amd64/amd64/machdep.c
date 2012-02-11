@@ -208,9 +208,6 @@ struct mtx icu_lock;
 
 struct mtx dt_lock;	/* lock for GDT and LDT */
 
-// quick hack to get around  this not being zero at reinit time
-extern uma_zone_t	ksiginfo_zone;
-
 static void
 cpu_startup(dummy)
 	void *dummy;
@@ -1624,10 +1621,9 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	u_int64_t msr;
 	char *env;
 	size_t kstack0_sz;
-	u_int64_t physfree_save = physfree;
-	u_int64_t kernbase = KERNBASE;
+	u_int64_t  physfree_save = physfree;
 
-	thread0.td_kstack = physfree + kernbase;
+	thread0.td_kstack = physfree + KERNBASE;
 	thread0.td_kstack_pages = KSTACK_PAGES;
 	kstack0_sz = thread0.td_kstack_pages * PAGE_SIZE;
 	bzero((void *)thread0.td_kstack, kstack0_sz);
@@ -1637,21 +1633,15 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
  	 * This may be done better later if it gets more high level
  	 * components in it. If so just link td->td_proc here.
 	 */
-	ksiginfo_zone = NULL;
 	proc_linkup0(&proc0, &thread0);
 
-	/* so when we add 4k to the kernbase modulep is in the next page 
-	 * but when we add KERNBASE back into we are now one page to far
-	 * so there is some funky rounding going on
-	 */
-	preload_metadata = (caddr_t)(uintptr_t)(modulep + kernbase);
-	/* need to leave this at original kernbase location? */
+	preload_metadata = (caddr_t)(uintptr_t)(modulep + KERNBASE);
 	preload_bootstrap_relocate(KERNBASE);
 	kmdp = preload_search_by_type("elf kernel");
 	if (kmdp == NULL)
 		kmdp = preload_search_by_type("elf64 kernel");
 	boothowto = MD_FETCH(kmdp, MODINFOMD_HOWTO, int);
-	kern_envp = MD_FETCH(kmdp, MODINFOMD_ENVP, char *) + kernbase;
+	kern_envp = MD_FETCH(kmdp, MODINFOMD_ENVP, char *) + KERNBASE;
 #ifdef DDB
 	ksym_start = MD_FETCH(kmdp, MODINFOMD_SSYM, uintptr_t);
 	ksym_end = MD_FETCH(kmdp, MODINFOMD_ESYM, uintptr_t);
@@ -1681,9 +1671,8 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	wrmsr(MSR_GSBASE, (u_int64_t)pc);
 	wrmsr(MSR_KGSBASE, 0);		/* User value while in the kernel */
 
-	kload_step = 2;
 	pcpu_init(pc, 0, sizeof(struct pcpu));
-	dpcpu_init((void *)(physfree + kernbase), 0);
+	dpcpu_init((void *)(physfree + KERNBASE), 0);
 	physfree += DPCPU_SIZE;
 	PCPU_SET(prvspace, pc);
 	PCPU_SET(curthread, &thread0);
@@ -1702,14 +1691,9 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	 *	     must be able to get the icu lock, so it can't be
 	 *	     under witness.
 	 */
-	
-	kload_step = 2;
 	mutex_init();
-	kload_step = 3;
 	mtx_init(&icu_lock, "icu", NULL, MTX_SPIN | MTX_NOWITNESS);
-	kload_step = 4;
 	mtx_init(&dt_lock, "descriptor tables", NULL, MTX_DEF);
-	kload_step = 5;
 
 	/* exceptions */
 	for (x = 0; x < NIDT; x++)
@@ -1737,7 +1721,6 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	setidt(IDT_DTRACE_RET, &IDTVEC(dtrace_ret), SDT_SYSIGT, SEL_UPL, 0);
 #endif
 
-	kload_step = 6;
 	r_idt.rd_limit = sizeof(idt0) - 1;
 	r_idt.rd_base = (long) idt;
 	lidt(&r_idt);
@@ -1747,21 +1730,19 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	 * initialization can use DELAY().
 	 */
 	i8254_init();
-	kload_active = 0;
 
 	/*
 	 * Initialize the console before we print anything out.
 	 */
 	cninit();
-
-	printf("%s:%d\n\tmodulep 0x%jx physfree_save 0x%jx physfree 0x%jx\n",__FUNCTION__,__LINE__,
-	       modulep, physfree_save, physfree);
-	printf("\tpreload_metadata %p kmdp %p kern_envp %p\n",
-	       preload_metadata,kmdp,kern_envp);
-	printf("\tcr4 0x%lx cr3 0x%lx cr2 0x%lx cr0 0x%lx\n",rcr4(),rcr3(),rcr2(),rcr0());
-	//	printf("\tr_gdt %p (phys 0x%lx)\n",
-	//      &r_gdt,(unsigned long)vtophys(&r_gdt));
-	printf("\tboothowto 0x%lx \n",(unsigned long)boothowto);
+	
+	if (bootverbose) {
+		printf("%s:\n\tmodulep 0x%jx physfree_save 0x%jx physfree 0x%jx\n",__FUNCTION__,
+		       modulep, physfree_save, physfree);
+		printf("\tpreload_metadata %p kmdp %p kern_envp %p\n", preload_metadata,kmdp,kern_envp);
+		printf("\tcr4 0x%lx cr3 0x%lx cr2 0x%lx cr0 0x%lx\n",rcr4(),rcr3(),rcr2(),rcr0());
+		printf("\tboothowto 0x%lx \n",(unsigned long)boothowto);
+	}
 
 
 #ifdef DEV_ISA
@@ -1784,7 +1765,6 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 #endif
 
 	kdb_init();
-	//kdb_enter(KDB_WHY_BOOTFLAGS, "Boot flags requested debugger");
 
 #ifdef KDB
 	if (boothowto & RB_KDB)
