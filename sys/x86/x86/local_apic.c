@@ -341,38 +341,57 @@ lapic_dump(const char* str)
 }
 
 void
-lapic_clear_lapic(void) {
+lapic_clear_lapic(u_int disable) {
 
 	struct lapic *la;
 	la = &lapics[lapic_id()];
-	
-	printf("%s lapic_id(%d) cpu(%d) la %p lapic %p\n",__FUNCTION__,
-	       lapic_id(), PCPU_GET(cpuid), la, lapic);
 
-#if 1
-	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
-	//lapic->lvt_lint0 = lvt_mode(la, LVT_LINT0, APIC_LVTT_M);
-	//lapic->lvt_lint0 = APIC_LVT_M | APIC_LVT_DM;
-	lapic->lvt_lint0 = APIC_LVT_M;
-	//lapic->lvt_lint0 |= APIC_LVT_M;
-	printf("\tlint0 0x%x\n",lapic->lvt_lint0);
+	uint32_t value;
 
-	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
-	//lapic->lvt_lint1 = lvt_mode(la, LVT_LINT1, APIC_LVTT_M);
-	lapic->lvt_lint1 = APIC_LVT_M;
-	//lapic->lvt_lint1 |= APIC_LVT_M;
-	printf("\tlint1 0x%x\n",lapic->lvt_lint1);
+	if (bootverbose)
+		printf("%s lapic_id(%d) cpu(%d) la %p lapic %p\n",__FUNCTION__,
+		       lapic_id(), PCPU_GET(cpuid), la, lapic);
 
-	/* Program timer LVT and setup handler. */
-	printf("\ttimer 0x%x\n",lapic->lvt_timer);
-	//lapic->lvt_timer = lvt_mode(la, LVT_TIMER, APIC_LVTT_M);
-	lapic->lvt_timer = APIC_LVTT_M;
-	//lapic->lvt_timer |= APIC_LVTT_M;
-	printf("\ttimer 0x%x\n",lapic->lvt_timer);
+	/* 
+	 * Fist we set the mask bit to keep and new interrupts from
+	 * arriving but allowing any pending interrupts to finish
+	 * *THEN* set the registers to default values
+	 * If the interrupts are not allowed to clear a kload'ed / booted
+	 * kernel will see the old interrupts before the appropriate handlers
+	 * are in place and trigger a panic.
+	 */
+#ifdef notyet
+	/* this seems to be causing APIC error in the new kernel */
+	value = lapic->lvt_error;
+	value |= APIC_LVT_M;
+	lapic->lvt_error = value;
 #endif
 
-	printf("\tdiable lapic\n");
-	lapic_disable();
+	value = lapic->lvt_timer;
+	value |= APIC_LVT_M;
+	lapic->lvt_timer = value;
+
+	value = lapic->lvt_lint0;
+	value |= APIC_LVT_M;
+	lapic->lvt_lint0 = value;
+
+	value = lapic->lvt_lint1;
+	value |= APIC_LVT_M;
+	lapic->lvt_lint1 = value;
+
+	value = lapic->lvt_pcint;
+	value |= APIC_LVT_M;
+	lapic->lvt_pcint = value;
+
+	/* Program timer LVT and setup handler. */
+	lapic->lvt_timer = APIC_LVTT_M; /* masked */
+	lapic->lvt_lint0 = APIC_LVT_M; /* masked */
+	lapic->lvt_lint1 = APIC_LVT_M; /* masked */
+
+	if (disable) {
+		printf("\tlapic disable\n");
+		lapic_disable();
+	}
 }
 
 void
