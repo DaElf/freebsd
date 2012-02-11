@@ -107,7 +107,6 @@ test_open(void *arg, const char *filename, void **h_return)
 	struct test_file *tf;
 	char path[PATH_MAX];
 
-	printf("%s:%d filename %s\n",__FUNCTION__,__LINE__,filename);
 	if (!host_base)
 		return (ENOENT);
 
@@ -148,7 +147,6 @@ int
 test_close(void *arg, void *h)
 {
 	struct test_file *tf = h;
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 
 	if (tf->tf_isdir)
 		closedir(tf->tf_u.dir);
@@ -163,7 +161,6 @@ int
 test_isdir(void *arg, void *h)
 {
 	struct test_file *tf = h;
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 
 	return (tf->tf_isdir);
 }
@@ -174,7 +171,6 @@ test_read(void *arg, void *h, void *dst, size_t size, size_t *resid_return)
 	struct test_file *tf = h;
 	ssize_t sz;
 
-	printf("%s:%d fd %d dest addr %p size %d\n",__FUNCTION__,__LINE__,tf->tf_u.fd,dst,size);
 	if (tf->tf_isdir)
 		return (EINVAL);
 	sz = read(tf->tf_u.fd, dst, size);
@@ -191,7 +187,6 @@ test_readdir(void *arg, void *h, uint32_t *fileno_return, uint8_t *type_return,
 	struct test_file *tf = h;
 	struct dirent *dp;
 
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	if (!tf->tf_isdir)
 		return (EINVAL);
 
@@ -217,7 +212,6 @@ test_seek(void *arg, void *h, uint64_t offset, int whence)
 {
 	struct test_file *tf = h;
 
-	printf("%s offset %lld\n",__FUNCTION__, offset);
 	if (tf->tf_isdir)
 		return (EINVAL);
 	if (lseek(tf->tf_u.fd, offset, whence) < 0)
@@ -231,7 +225,6 @@ test_stat(void *arg, void *h, int *mode_return, int *uid_return, int *gid_return
 {
 	struct test_file *tf = h;
 
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	*mode_return = tf->tf_stat.st_mode;
 	*uid_return = tf->tf_stat.st_uid;
 	*gid_return = tf->tf_stat.st_gid;
@@ -248,7 +241,6 @@ test_diskread(void *arg, int unit, uint64_t offset, void *dst, size_t size,
     size_t *resid_return)
 {
 	ssize_t n;
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 
 	if (unit != 0 || disk_fd == -1)
 		return (EIO);
@@ -269,9 +261,7 @@ int
 test_copyin(void *arg, const void *from, uint64_t to, size_t size)
 {
 
-	printf("%s:%d from %p to 0x%jx size %d\t",__FUNCTION__,__LINE__,from,to,size);
 	to &= 0x7fffffff;
-	printf("updated to 0x%jx\n",to);
 	if (to > image_size)
 		return (EFAULT);
 	if (to + size > image_size)
@@ -283,9 +273,7 @@ int
 test_copyout(void *arg, uint64_t from, void *to, size_t size)
 {
 
-	printf("%s:%d from %p to 0x%jx size %d caller 0x%x\t",__FUNCTION__,__LINE__,from,to,size,__builtin_return_address(0));
 	from &= 0x7fffffff;
-	printf("updated from 0x%jx\n",from);
 	if (from > image_size)
 		return (EFAULT);
 	if (from + size > image_size)
@@ -297,7 +285,6 @@ void
 test_setreg(void *arg, int r, uint64_t v)
 {
 
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	if (r < 0 || r >= 16)
 		return;
 	regs[r] = v;
@@ -306,19 +293,16 @@ test_setreg(void *arg, int r, uint64_t v)
 void
 test_setmsr(void *arg, int r, uint64_t v)
 {
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 }
 
 void
 test_setcr(void *arg, int r, uint64_t v)
 {
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 }
 
 void
 test_setgdt(void *arg, uint64_t v, size_t sz)
 {
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 }
 
 void
@@ -351,7 +335,6 @@ void
 test_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem)
 {
 
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
         *lowmem = 128*1024*1024;
         *highmem = 0;
 }

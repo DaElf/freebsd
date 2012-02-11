@@ -67,9 +67,9 @@ elf32_exec(struct preloaded_file *fp)
 	return(err);
     entry = ehdr->e_entry & 0xffffff;
 
-    //#ifdef DEBUG
-    printf("\n\n%s:%d Start @ 0x%lx ...\n",__FUNCTION__,__LINE__, entry);
-    //#endif
+#ifdef DEBUG
+    printf("Start @ 0x%lx ...\n", entry);
+#endif
 
     dev_cleanup();
     __exec((void *)entry, boothowto, bootdev, 0, 0, 0, bootinfop, modulep, kernend);

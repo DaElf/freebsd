@@ -7,9 +7,9 @@ SRCS=	btxldr.S
 
 CFLAGS+=-DLOADER_ADDRESS=${LOADER_ADDRESS}
 
-#.if defined(BTXLDR_VERBOSE)
+.if defined(BTXLDR_VERBOSE)
 CFLAGS+=-DBTXLDR_VERBOSE
-#.endif
+.endif
 
 LDFLAGS=-e start -Ttext ${LOADER_ADDRESS} -Wl,-N,-S,--oformat,binary
 
