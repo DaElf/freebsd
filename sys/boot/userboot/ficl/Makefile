@@ -61,6 +61,10 @@ softcore.c: ${SOFTWORDS} softcore.awk
 	(cd ${.CURDIR}/../../ficl/softwords; cat ${SOFTWORDS} \
 	    | awk -f softcore.awk -v datestamp="`LC_ALL=C date`") > ${.TARGET}
 
+beforedepend ${OBJS}: no-machine
+
+no-machine:
+	rm -f   ${.CURDIR}/../../ficl/machine
 #.if ${MACHINE_CPUARCH} == "amd64"
 #${SRCS:M*.c:R:S/$/.o/g}: machine
 #
