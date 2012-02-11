@@ -85,8 +85,6 @@ typedef struct eventhandler_entry	*eventhandler_tag;
 			_t = (struct eventhandler_entry_ ## name *)_ep;	\
 			CTR1(KTR_EVH, "eventhandler_invoke: executing %p", \
  			    (void *)_t->eh_func);			\
-			/* printf("eventhandler_invoke: executing %p\n", \
-			   (void *)_t->eh_func);	*/		\
 			_t->eh_func(_ep->ee_arg , ## __VA_ARGS__);	\
 			EHL_LOCK((list));				\
 		}							\

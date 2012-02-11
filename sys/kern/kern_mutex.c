@@ -97,9 +97,6 @@ static int	owner_mtx(struct lock_object *lock, struct thread **owner);
 static int	unlock_mtx(struct lock_object *lock);
 static int	unlock_spin(struct lock_object *lock);
 
-extern int kload_active;
-extern int kload_step;
-
 /*
  * Lock classes for sleep and spin mutexes.
  */
@@ -510,12 +507,6 @@ _mtx_lock_spin(struct mtx *m, uintptr_t tid, int opts, const char *file,
 	uint64_t waittime = 0;
 #endif
 
-	if (kload_active) {
-		kload_active++;
-//	  breakpoint();
-		//  printf("%s:%d mtx %p\n",__FUNCTION__,__LINE__,m);
-	}
-
 	if (LOCK_LOG_TEST(&m->lock_object, opts))
 		CTR1(KTR_LOCK, "_mtx_lock_spin: %p spinning", m);
 
@@ -529,10 +520,9 @@ _mtx_lock_spin(struct mtx *m, uintptr_t tid, int opts, const char *file,
 				cpu_spinwait();
 				continue;
 			}
-			if (i < 60000000 || kdb_active || panicstr != NULL) {
-				if (!kload_active)
-					DELAY(1);
-			} else
+			if (i < 60000000 || kdb_active || panicstr != NULL)
+				DELAY(1);
+			else
 				_mtx_lock_spin_failed(m);
 			cpu_spinwait();
 		}
@@ -595,10 +585,9 @@ retry:
 				if (i++ < 10000000)
 					cpu_spinwait();
 				else if (i < 60000000 ||
-					 kdb_active || panicstr != NULL) {
-					if (!kload_active)
-						DELAY(1);
-				} else
+				    kdb_active || panicstr != NULL)
+					DELAY(1);
+				else
 					_mtx_lock_spin_failed(m);
 				cpu_spinwait();
 				if (m != td->td_lock)
@@ -866,43 +855,18 @@ mutex_init(void)
 {
 
 	/* Setup turnstiles so that sleep mutexes work. */
-	kload_step = 0xA;
 	init_turnstiles();
 
 	/*
 	 * Initialize mutexes.
 	 */
-	kload_step = 0xB;
 	mtx_init(&Giant, "Giant", NULL, MTX_DEF | MTX_RECURSE);
-	kload_step = 0xC;
 	mtx_init(&blocked_lock, "blocked lock", NULL, MTX_SPIN);
-	kload_step = 0xD;
 	blocked_lock.mtx_lock = 0xdeadc0de;	/* Always blocked. */
 	mtx_init(&proc0.p_mtx, "process lock", NULL, MTX_DEF | MTX_DUPOK);
-	kload_step = 0xE;
 	mtx_init(&proc0.p_slock, "process slock", NULL, MTX_SPIN | MTX_RECURSE);
-	kload_step = 0xF;
 	mtx_init(&devmtx, "cdev", NULL, MTX_DEF);
-	kload_step = 0x10;
 	mtx_lock(&Giant);
-}
-
-void
-mutex_shutdown(void) {
-	printf("%s devmtx %p p_slock %p p_mtx %p block_lock %p Giant %p\n",
-	       __FUNCTION__,&devmtx, &proc0.p_slock, &proc0.p_mtx, &blocked_lock, &Giant);
-	mtx_destroy(&devmtx);
-	printf("%s: devmtx\n",__FUNCTION__);
-	mtx_destroy(&proc0.p_slock);
-	printf("%s: p_slock\n",__FUNCTION__);
-	mtx_destroy(&proc0.p_mtx);
-	printf("%s: p_mtx\n",__FUNCTION__);
-//	mtx_destroy(&blocked_lock);
-	memset(&blocked_lock,0,sizeof(struct mtx));
-	printf("%s: blocked just zero\n",__FUNCTION__);
-	mtx_destroy(&Giant);
-	memset(&Giant,0,sizeof(struct mtx));
-	printf("%s: Giant\n",__FUNCTION__);
 }
 
 #ifdef DDB

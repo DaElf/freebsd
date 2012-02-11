@@ -213,7 +213,7 @@ trap(struct trapframe *frame)
 #endif
 
 	if (type == T_RESERVED) {
-		trap_fatal(frame, frame->tf_addr);
+		trap_fatal(frame, 0);
 		goto out;
 	}
 
@@ -783,7 +783,7 @@ trap_fatal(frame, eva)
 		msg = trap_msg[type];
 	else
 		msg = "UNKNOWN";
-	printf("\n\nFatal trap %d (0x%x): %s while in %s mode\n", type, type, msg,
+	printf("\n\nFatal trap %d: %s while in %s mode\n", type, msg,
 	    ISPL(frame->tf_cs) == SEL_UPL ? "user" : "kernel");
 #ifdef SMP
 	/* two separate prints in case of a trap on an unmapped page */
@@ -833,7 +833,6 @@ trap_fatal(frame, eva)
 		printf("Idle\n");
 	}
 
-	return;
 #ifdef KDB
 	if (debugger_on_panic || kdb_active)
 		if (kdb_trap(type, 0, frame))

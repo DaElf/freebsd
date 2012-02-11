@@ -69,7 +69,6 @@ ACPI_STATUS
 AcpiOsWritePort(ACPI_IO_ADDRESS OutPort, UINT32	Value, UINT32 Width)
 {
 
-  //	printf("%s 0x%lx Value 0x%x\n",__FUNCTION__,(unsigned long)OutPort, Value);
     switch (Width) {
     case 8:
 	iodev_write_1(OutPort, Value);
