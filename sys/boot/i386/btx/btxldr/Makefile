@@ -7,9 +7,9 @@ SRCS=	btxldr.S
 
 CFLAGS+=-DLOADER_ADDRESS=${LOADER_ADDRESS}
 
-#.if defined(BTXLDR_VERBOSE)
+.if defined(BTXLDR_VERBOSE)
 CFLAGS+=-DBTXLDR_VERBOSE
-#.endif
+.endif
 
 .if ${CC:T:Mclang} == "clang"
 # XXX: clang integrated-as doesn't grok .codeNN directives yet

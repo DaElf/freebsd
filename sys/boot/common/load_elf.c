@@ -41,8 +41,6 @@ __FBSDID("$FreeBSD$");
 
 #include "bootstrap.h"
 
-#define ELF_VERBOSE
-
 #define COPYOUT(s,d,l)	archsw.arch_copyout((vm_offset_t)(s), d, l)
 
 #if defined(__i386__) && __ELF_WORD_SIZE == 64
@@ -155,8 +153,6 @@ __elfN(loadfile)(char *filename, u_int64_t dest, struct preloaded_file **result)
     kfp = file_findfile(NULL, NULL);
     if (ehdr->e_type == ET_DYN) {
 	/* Looks like a kld module */
-	printf("%s found ET_DYN\n",__FUNCTION__);
-
 	if (kfp == NULL) {
 	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: can't load module before kernel\n");
 	    err = EPERM;
@@ -172,7 +168,6 @@ __elfN(loadfile)(char *filename, u_int64_t dest, struct preloaded_file **result)
 
     } else if (ehdr->e_type == ET_EXEC) {
 	/* Looks like a kernel */
-	printf("%s found ET_EXEC\n",__FUNCTION__);
 	if (kfp != NULL) {
 	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: kernel already loaded\n");
 	    err = EPERM;
@@ -182,8 +177,6 @@ __elfN(loadfile)(char *filename, u_int64_t dest, struct preloaded_file **result)
 	 * Calculate destination address based on kernel entrypoint 	
 	 */
 	dest = (ehdr->e_entry & ~PAGE_MASK);
-	printf("%s dest 0x%jx e_entry 0x%jx\n",__FUNCTION__,
-	       (uintmax_t)dest,(uintmax_t)ehdr->e_entry);
 	if (dest == 0) {
 	    printf("elf" __XSTRING(__ELF_WORD_SIZE) "_loadfile: not a kernel (maybe static binary?)\n");
 	    err = EPERM;
@@ -277,20 +270,12 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
     firstaddr = lastaddr = 0;
     ehdr = ef->ehdr;
     if (ef->kernel) {
-
-      printf("%s enter off 0x%llx mask 0x%llx 0x%llx\n",__FUNCTION__,(unsigned long long) off,
-	     (off & 0xffffffffff000000ull),
-	     off -  (off & 0xffffffffff000000ull)
-	     );
-      /* with this mask the kernel must start on a 256meg boundry */
-      /* why is this? can we move this down to slightly more reasonable boundry? */
 #if defined(__i386__) || defined(__amd64__)
 #if __ELF_WORD_SIZE == 64
 	off = - (off & 0xffffffffff000000ull);/* x86_64 relocates after locore */
 #else
 	off = - (off & 0xff000000u);	/* i386 relocates after locore */
 #endif
-	printf("%s after mask off 0x%llx\n",__FUNCTION__,(unsigned long long) off);
 #elif defined(__powerpc__)
 	/*
 	 * On the purely virtual memory machines like e500, the kernel is
@@ -338,7 +323,6 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
 
     for (i = 0; i < ehdr->e_phnum; i++) {
 	/* We want to load PT_LOAD segments only.. */
-	    printf("%s header # %d p_type 0x%x\n",__FUNCTION__,i,phdr[i].p_type);
 	if (phdr[i].p_type != PT_LOAD)
 	    continue;
 

@@ -241,9 +241,6 @@ bi_load64(char *args, vm_offset_t *modulep, vm_offset_t *kernendp)
     size = bi_copymodules64(0);
     kernend = roundup(addr + size, PAGE_SIZE);
     *kernendp = kernend;
-    printf("%s:%d addr 0x%llx modparam size %u kernend 0x%llx\n",
-	   __FUNCTION__,
-	   __LINE__, (unsigned long long)addr, size, (unsigned long long)kernend);
 
     /* patch MODINFOMD_KERNEND */
     md = file_findmetadata(kfp, MODINFOMD_KERNEND);

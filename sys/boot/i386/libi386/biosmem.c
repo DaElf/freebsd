@@ -72,8 +72,6 @@ bios_getmem(void)
 	    bios_extmem = smap.length;
 	}
 
-	printf("%s:%d bios_extmem 0x%x\n",__FUNCTION__,__LINE__,bios_extmem);
-	printf("%s:%d bios_basemem 0x%x\n",__FUNCTION__,__LINE__,bios_basemem);
 	/*
 	 * Look for the largest segment in 'extended' memory beyond
 	 * 1MB but below 4GB.
@@ -134,6 +132,4 @@ bios_getmem(void)
 	high_heap_size = HEAP_MIN;
 	high_heap_base = memtop - HEAP_MIN;
     }
-    printf("%s:%d bios_extmem 0x%x\n",__FUNCTION__,__LINE__,bios_extmem);
-    printf("%s:%d bios_basemem 0x%x\n",__FUNCTION__,__LINE__,bios_basemem);
 }    
