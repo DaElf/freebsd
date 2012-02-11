@@ -227,7 +227,7 @@ int	lapic_set_lvt_triggermode(u_int apic_id, u_int lvt,
 	    enum intr_trigger trigger);
 void	lapic_set_tpr(u_int vector);
 void	lapic_setup(int boot);
-void	lapic_clear_lapic(void);
+void	lapic_clear_lapic(u_int);
 
 #endif /* !LOCORE */
 #endif /* _MACHINE_APICVAR_H_ */
