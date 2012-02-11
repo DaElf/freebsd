@@ -161,8 +161,6 @@ static int	start_all_aps(void);
 static int	start_ap(int apic_id);
 static void	release_aps(void *dummy);
 
-void		ipi_suspend_ap(void);
-
 static u_int	hyperthreading_cpus;	/* logical cpus sharing L1 cache */
 static int	hyperthreading_allowed = 1;
 static u_int	bootMP_size;
@@ -424,9 +422,6 @@ mp_bootaddress(u_int basemem)
 		boot_address -= PAGE_SIZE;	/* not enough, lower by 4k */
 	/* 3 levels of page table pages */
 	mptramp_pagetables = boot_address - (PAGE_SIZE * 3);
-
-	printf("%s bootMP_size 0x%x boot_address 0x%x mptramp_pagetables 0x%x\n",
-	       __FUNCTION__,bootMP_size,boot_address, mptramp_pagetables);
 
 	return mptramp_pagetables;
 }
@@ -751,7 +746,7 @@ init_secondary(void)
 	if (cpu_logical > 1 && PCPU_GET(apic_id) % cpu_logical != 0)
 		CPU_SET(cpuid, &logical_cpus_mask);
 
-//	if (bootverbose)
+	if (bootverbose)
 		lapic_dump("AP");
 
 	if (smp_cpus == mp_ncpus) {
@@ -957,7 +952,6 @@ start_all_aps(void)
 		if (!start_ap(apic_id)) {
 			/* restore the warmstart vector */
 			*(u_int32_t *) WARMBOOT_OFF = mpbioswarmvec;
-			//printf("AP #%d (PHY# %d) Drat failed! oh well carry on\n", cpu, apic_id);
 			panic("AP #%d (PHY# %d) failed!", cpu, apic_id);
 		}
 
@@ -994,22 +988,12 @@ start_ap(int apic_id)
 	/* used as a watchpoint to signal AP startup */
 	cpus = mp_naps;
 
-	printf("%s starting apic_id %d\n",__FUNCTION__,apic_id);
 	/*
 	 * first we do an INIT/RESET IPI this INIT IPI might be run, reseting
 	 * and running the target CPU. OR this INIT IPI might be latched (P5
 	 * bug), CPU waiting for STARTUP IPI. OR this INIT IPI might be
 	 * ignored.
 	 */
-#if 0
-	/* do an INIT IPI: assert NMI */
-	printf("%s NMI apic_id %d\n",__FUNCTION__,apic_id);
-	lapic_ipi_raw(APIC_DEST_DESTFLD | APIC_TRIGMOD_EDGE |
-	    APIC_LEVEL_ASSERT | APIC_DESTMODE_PHY | APIC_DELMODE_NMI, apic_id);
-
-	/* wait for pending status end */
-	lapic_ipi_wait(-1);
-#endif
 
 	/* do an INIT IPI: assert RESET */
 	lapic_ipi_raw(APIC_DEST_DESTFLD | APIC_TRIGMOD_EDGE |
@@ -1061,7 +1045,6 @@ start_ap(int apic_id)
 			return 1;	/* return SUCCESS */
 		DELAY(1000);
 	}
-	printf("%s drat mp_naps %d cpus %d\n",__FUNCTION__,mp_naps,cpus);
 	return 0;		/* return FAILURE */
 }
 
@@ -1326,28 +1309,9 @@ ipi_selected(cpuset_t cpus, u_int ipi)
 		cpu--;
 		CPU_CLR(cpu, &cpus);
 		CTR3(KTR_SMP, "%s: cpu: %d ipi: %x", __func__, cpu, ipi);
-		//printf("%s: cpu: %d ipi: 0x%x\n", __func__, cpu, ipi);
 		ipi_send_cpu(cpu, ipi);
 	}
 }
-
-void
-ipi_suspend_ap(void)
-{  
-	int cpu;
-
-	if (PCPU_GET(cpuid) != 0){
-		printf("need to be called from cpu 0\n");
-		return;
-	}
-	
-	for (cpu = 1; cpu < mp_ncpus; cpu++) {
-		printf("%s sending IPI_STOP to cpu %d\n",__FUNCTION__,cpu);
-		ipi_send_cpu(cpu, IPI_STOP);
-	}
-}
-						    
-
 
 /*
  * send an IPI to a specific CPU.
@@ -1427,8 +1391,6 @@ cpustop_handler(void)
 
 	cpu = PCPU_GET(cpuid);
 
-	printf("%s: cpu(%d)\n",__FUNCTION__,cpu);
-
 	savectx(&stoppcbs[cpu]);
 
 	/* Indicate that we are stopped */
@@ -1481,7 +1443,6 @@ cpususpend_handler(void)
 	/* make sure the page table is not the same one that boot process sets up */
 	load_cr3(kload_pgtbl);
 
-#if 1
 	/* Disable PGE. */
 	cr4 = rcr4();
 	load_cr4(cr4 & ~CR4_PGE);
@@ -1489,19 +1450,12 @@ cpususpend_handler(void)
 	/* Disable caches (CD = 1, NW = 0) and paging*/
 	cr0 = rcr0();
 	load_cr0((cr0 & ~CR0_NW) | CR0_CD | CR0_PG);
-#endif
 
-#if 1
 	/* Flushes caches and TLBs. */
 	wbinvd();
 	invltlb();
-#endif
 
-#if 1
-	// restore interrupts so that we can be woken from halt
-	//	intr_restore(rf);
 	halt();
-#endif
 
 	/* Wait for resume */
 	while (!CPU_ISSET(cpu, &started_cpus))
