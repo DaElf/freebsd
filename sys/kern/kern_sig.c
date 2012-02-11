@@ -119,9 +119,7 @@ static int	filt_signal(struct knote *kn, long hint);
 static struct thread *sigtd(struct proc *p, int sig, int prop);
 static void	sigqueue_start(void);
 
-//static uma_zone_t	ksiginfo_zone = NULL;
-uma_zone_t	ksiginfo_zone = NULL;
-
+static uma_zone_t	ksiginfo_zone = NULL;
 struct filterops sig_filtops = {
 	.f_isfd = 0,
 	.f_attach = filt_sigattach,

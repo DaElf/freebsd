@@ -130,20 +130,6 @@ struct pic ioapic_template = { ioapic_enable_source, ioapic_disable_source,
 			       ioapic_source_pending, NULL, ioapic_resume,
 			       ioapic_config_intr, ioapic_assign_cpu };
 
-struct pic ioapic_templateII = {
-	.pic_enable_source	= ioapic_enable_source,
-	.pic_disable_source	= ioapic_disable_source,
-	.pic_eoi_source		= ioapic_eoi_source,
-	.pic_enable_intr	= ioapic_enable_intr,
-	.pic_disable_intr	= ioapic_disable_intr,
-	.pic_vector		= ioapic_vector,
-	.pic_source_pending	= ioapic_source_pending,
-	.pic_suspend		= NULL,
-	.pic_resume		= ioapic_resume,
-	.pic_config_intr	= ioapic_config_intr,
-	.pic_assign_cpu		= ioapic_assign_cpu
-};
-
 static int next_ioapic_base;
 static u_int next_id;
 
@@ -324,12 +310,6 @@ ioapic_program_intpin(struct ioapic_intsrc *intpin)
 		low |= IOART_DELFIXED | intpin->io_vector;
 	}
 
-	printf("%s:%d intpin %p io_irq %u return %p %p\n",__FUNCTION__,__LINE__,intpin,
-	       intpin->io_irq,
-	       __builtin_return_address(0),
-	       __builtin_return_address(1)
-	       );
-	//	ioapic_print_irq(intpin);
 	/* Write the values to the APIC. */
 	intpin->io_lowreg = low;
 	ioapic_write(io->io_addr, IOAPIC_REDTBL_LO(intpin->io_intpin), low);
@@ -429,7 +409,6 @@ ioapic_disable_intr(struct intsrc *isrc)
 	struct ioapic_intsrc *intpin = (struct ioapic_intsrc *)isrc;
 	u_int vector;
 
-	printf("%s isrc %p\n",__FUNCTION__,isrc);
 	if (intpin->io_vector != 0) {
 		/* Mask this interrupt pin and free its APIC vector. */
 		vector = intpin->io_vector;

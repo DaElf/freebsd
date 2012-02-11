@@ -30,14 +30,14 @@
 	movl $0, %eax
 	call print_string
 	popq %rsi
-.endm	
+.endm
 
 
 .p2align 4,0x90;
 	.globl kernel_jump;
 	.type kernel_jump,@function;
 kernel_jump:
-	
+
 	.globl relocate_kernel
 relocate_kernel:
 	// first install the new page table
@@ -53,6 +53,7 @@ relocate_kernel:
 	movq	$(X86_CR4_PSE | X86_CR4_PAE), %rax
 	movq	%rax, %cr4
 
+
 	// then move the stack to the end of control page
 	lea 4096(%r9), %rsp
 
@@ -66,12 +67,12 @@ relocate_kernel:
 	pushq $0
 	popfq
 	cli
-	
+
 	/* install simple gdt */
 	movq	24(%r9), %rax	// gdt
 	lgdt	(%rax)
 	movq	56(%r9), %rax
-	lidt	(%rax) 	// null idt 
+	lidt	(%rax) 	// null idt
 	// now move to the code page
 	// should have been passed code_page based on new PT
 	movq %rdx, %r8
@@ -108,7 +109,7 @@ identity_mapped:
 	andq	$~(X86_CR0_AM | X86_CR0_WP | X86_CR0_TS | X86_CR0_EM |  X86_CR0_MP | X86_CR0_NE), %rax
 	orl	$(X86_CR0_PG | X86_CR0_PE), %eax
 	movq	%rax, %cr0
-	
+
 	/* Do the copies */
 	cld
 	/* saved list of source pages */
@@ -120,7 +121,7 @@ identity_mapped:
 	movq 8(%rsp), %rdi
 0:	/* top, read another word for the indirection page */
 	movq	(%rbx), %rcx
-	
+
 	addq	$8, %rbx
 	testq	$0x1,   %rcx  /* is it a destination page */
 	jz	1f
@@ -177,7 +178,7 @@ print_string:
 //	pushq	%rsi
 //	movq	8(%rbp), %rsi
 	xorq	%rax, %rax
-print_string.1:	
+print_string.1:
 	lodsb %ds:(%rsi), %al
 	testb	$0xff, %al
 	jz	print_string.2
@@ -195,7 +196,7 @@ print_hex:
 //	movq	%rsp, %rbp
 	pushq	%rcx
 	movb	$64, %cl
-print_hex.1:	
+print_hex.1:
 //	movl	8(%ebp), %eax
 	movq	%rsi, %rax
 	subb	$4, %cl
@@ -205,7 +206,7 @@ print_hex.1:
 	ja	print_hex.2
 	addb	$'0', %al
 	jmp	print_hex.3
-print_hex.2:	
+print_hex.2:
 	addb	$'A' - 10, %al
 print_hex.3:
 	call	print_char
@@ -218,7 +219,7 @@ print_hex.3:
 
 print_char:
 .code64
-	# The character to print is in al 
+	# The character to print is in al
 	call serial_print_char
 	retq
 
@@ -229,23 +230,23 @@ print_char:
 #define TTYS0_LSR	(TTYS0_BASE + 0x05)
 serial_print_char:
 	.code64
-	# The character to print is in al 
+	# The character to print is in al
 	pushq	%rax
 	pushq	%rdx
-	
-	# Wait until the serial port is ready to receive characters 
+
+	# Wait until the serial port is ready to receive characters
 serial_print_char.1:
 	movq	$TTYS0_LSR, %rdx
 	inb	%dx, %al
 	testb	$0x20, %al
 	jz	serial_print_char.1
 
-	# Output the character 
+	# Output the character
 	movq	$TTYS0_TBR, %rdx
 	movb	0(%rsp), %al
 	outb	%al, %dx
 
-	# Wait until the serial port has transmitted the character 
+	# Wait until the serial port has transmitted the character
 serial_print_char.2:
 	movq	$TTYS0_LSR, %rdx
 	inb	%dx, %al
@@ -253,12 +254,12 @@ serial_print_char.2:
 	jz	serial_print_char.2
 
 	popq	%rdx
-	# Restore %rax 
+	# Restore %rax
 	popq	%rax
-	# Return to caller 
+	# Return to caller
 	ret
 
-	
+
 s_hello:
 	.ascii	"Hello from kernel kexec string1 \r\n"
 
@@ -286,12 +287,12 @@ s_done:
 	.p2align 4,,15
 
 hello_hex:
-        .string "Hello world 0x%lx\n"
-        .text
+	.string "Hello world 0x%lx\n"
+	.text
 	.p2align 4,,15
-	
+
 relocate_kernel_end:
 
 	.globl relocate_kernel_size
-relocate_kernel_size:	
+relocate_kernel_size:
 	.long relocate_kernel_end - relocate_kernel

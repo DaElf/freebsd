@@ -740,19 +740,12 @@ ram_attach(device_t dev)
 		    MODINFO_METADATA | MODINFOMD_SMAP);
 	else
 		smapbase = NULL;
-
-	printf("%s smapbase %p\n",__FUNCTION__,smapbase);
 	if (smapbase != NULL) {
 		smapsize = *((u_int32_t *)smapbase - 1);
 		smapend = (struct bios_smap *)((uintptr_t)smapbase + smapsize);
 
-		printf("\tsmapsize 0x%x\n",smapsize);
-
 		rid = 0;
 		for (smap = smapbase; smap < smapend; smap++) {
-
-			printf("\ttype %d base 0x%lx length 0x%lx\n",
-			       smap->type,smap->base, smap->length);
 			if (smap->type != SMAP_TYPE_MEMORY ||
 			    smap->length == 0)
 				continue;
