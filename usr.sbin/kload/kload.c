@@ -496,8 +496,8 @@ main(int argc, char** argv) {
 		err(1, NULL);
 	}
 
-//	dl_lib = dlopen("/boot/userboot.so", RTLD_LOCAL);
-	dl_lib = dlopen("userboot.so", RTLD_LOCAL);
+	dl_lib = dlopen("/boot/userboot.so", RTLD_LOCAL);
+//	dl_lib = dlopen("userboot.so", RTLD_LOCAL);
 	if (!dl_lib) {
 		printf("%s\n", dlerror());
 		return (1);
