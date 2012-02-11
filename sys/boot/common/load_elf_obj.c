@@ -292,10 +292,6 @@ __elfN(obj_loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
 	}
 
 	/* Clear the whole area, including bss regions. */
-	printf("%s:%d ZERO this section addr 0x%lx size 0x%lx\n",
-	       __FUNCTION__,__LINE__,
-	       (unsigned long)firstaddr,
-	       (unsigned long)(lastaddr - firstaddr));
 	kern_bzero(firstaddr, lastaddr - firstaddr);
 
 	/* Figure section with the lowest file offset we haven't loaded yet. */

@@ -275,7 +275,6 @@ file_load(char *filename, vm_offset_t dest, struct preloaded_file **result)
     int error;
     int i;
 
-    printf("%s:%d filename %s dest %llu\n",__FUNCTION__,__LINE__,filename,(long long unsigned)dest);
     if (archsw.arch_loadaddr != NULL)
 	dest = archsw.arch_loadaddr(LOAD_RAW, filename, dest);
 
@@ -616,7 +615,6 @@ file_lookup(const char *path, const char *name, int namelen, char **extlist)
     char	*result, *cp, **cpp;
     int		pathlen, extlen, len;
 
-    printf("%s:%d path %s name %s\n",__FUNCTION__,__LINE__,path,name);
     pathlen = strlen(path);
     extlen = 0;
     if (extlist == NULL)

@@ -54,7 +54,6 @@ cons_probe(void)
     
     /* Do all console probes */
     for (cons = 0; consoles[cons] != NULL; cons++) {
-      printf("%s cons %d c_probe %p\n",__FUNCTION__,cons,consoles[cons]->c_probe);
 	consoles[cons]->c_flags = 0;
  	consoles[cons]->c_probe(consoles[cons]);
     }
@@ -72,7 +71,6 @@ cons_probe(void)
 
     /* Check to see if a console preference has already been registered */
     prefconsole = getenv("console");
-    printf("%s prefconsole %s\n",__FUNCTION__,prefconsole);
     if (prefconsole != NULL)
 	prefconsole = strdup(prefconsole);
     if (prefconsole != NULL) {
