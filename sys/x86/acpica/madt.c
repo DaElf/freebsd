@@ -133,10 +133,9 @@ madt_setup_local(void)
 
 	madt = pmap_mapbios(madt_physaddr, madt_length);
 	lapic_init(madt->Address);
-	printf("ACPI APIC Table: <%.*s %.*s> addr 0x%x\n",
-	       (int)sizeof(madt->Header.OemId), madt->Header.OemId,
-	       (int)sizeof(madt->Header.OemTableId), madt->Header.OemTableId,
-	       madt->Address );
+	printf("ACPI APIC Table: <%.*s %.*s>\n",
+	    (int)sizeof(madt->Header.OemId), madt->Header.OemId,
+	    (int)sizeof(madt->Header.OemTableId), madt->Header.OemTableId);
 
 	/*
 	 * We ignore 64-bit local APIC override entries.  Should we

@@ -119,7 +119,6 @@ int
 intr_register_pic(struct pic *pic)
 {
 	int error;
-	printf("%s pic %p\n",__FUNCTION__,pic);
 
 	mtx_lock(&intr_table_lock);
 	if (intr_pic_registered(pic))
@@ -142,7 +141,6 @@ intr_register_source(struct intsrc *isrc)
 {
 	int error, vector;
 
-	//	printf("\n\t%s isrc %p\n",__FUNCTION__,isrc);
 	KASSERT(intr_pic_registered(isrc->is_pic), ("unregistered PIC"));
 	vector = isrc->is_pic->pic_vector(isrc);
 	if (interrupt_sources[vector] != NULL)
@@ -180,15 +178,9 @@ intr_add_handler(const char *name, int vector, driver_filter_t filter,
 	struct intsrc *isrc;
 	int error;
 
-	printf("%s:%d name %s vector %d\n",__FUNCTION__,__LINE__,
-	       name, vector
-		);
-
 	isrc = intr_lookup_source(vector);
-	if (isrc == NULL) {
-		printf("%s:%d ret EINVAL\n",__FUNCTION__,__LINE__);
+	if (isrc == NULL)
 		return (EINVAL);
-	}
 	error = intr_event_add_handler(isrc->is_event, name, filter, handler,
 	    arg, intr_priority(flags), flags, cookiep);
 	if (error == 0) {
@@ -201,12 +193,6 @@ intr_add_handler(const char *name, int vector, driver_filter_t filter,
 		}
 		mtx_unlock(&intr_table_lock);
 	}
-
-	printf("%s:%d cookiep %p ret %p %p\n",
-	       __FUNCTION__,__LINE__,
-	       *cookiep,
-	       __builtin_return_address(0),
-	       __builtin_return_address(1) );
 	return (error);
 }
 
@@ -346,7 +332,6 @@ intr_suspend(void)
 
 	mtx_lock(&intr_table_lock);
 	STAILQ_FOREACH(pic, &pics, pics) {
-		printf("%s pic %p suspend func %p\n",__FUNCTION__,pic,pic->pic_suspend);
 		if (pic->pic_suspend != NULL)
 			pic->pic_suspend(pic);
 	}
@@ -511,11 +496,8 @@ intr_next_cpu(void)
 	u_int apic_id;
 
 	/* Leave all interrupts on the BSP during boot. */
-	if (!assign_cpu) {
-		printf("%s:%d same cpu %u\n",__FUNCTION__,__LINE__,
-		       PCPU_GET(apic_id) );
-		return PCPU_GET(apic_id);
-	}
+	if (!assign_cpu)
+		return (PCPU_GET(apic_id));
 
 	mtx_lock_spin(&icu_lock);
 	apic_id = cpu_apic_ids[current_cpu];
@@ -525,7 +507,6 @@ intr_next_cpu(void)
 			current_cpu = 0;
 	} while (!CPU_ISSET(current_cpu, &intr_cpus));
 	mtx_unlock_spin(&icu_lock);
-	printf("%s:%d assigned to %u\n",__FUNCTION__,__LINE__,apic_id);
 	return (apic_id);
 }
 
@@ -551,7 +532,7 @@ intr_add_cpu(u_int cpu)
 
 	if (cpu >= MAXCPU)
 		panic("%s: Invalid CPU ID", __func__);
-	//if (bootverbose)
+	if (bootverbose)
 		printf("INTR: Adding local APIC %d as a target\n",
 		    cpu_apic_ids[cpu]);
 

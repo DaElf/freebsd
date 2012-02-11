@@ -64,8 +64,6 @@ uart_cnprobe(struct consdev *cp)
 {
 
 	cp->cn_pri = CN_DEAD;
-	// Q&D to allow for restart
-	memset(&uart_console, 0, sizeof(struct uart_devinfo));
 
 	KASSERT(uart_console.cookie == NULL, ("foo"));
 
@@ -100,7 +98,6 @@ uart_cninit(struct consdev *cp)
 	di->type = UART_DEV_CONSOLE;
 	uart_add_sysdev(di);
 	uart_init(di);
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 }
 
 static void

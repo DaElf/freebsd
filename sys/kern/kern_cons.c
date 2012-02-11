@@ -121,9 +121,6 @@ cninit(void)
 	 * Find the first console with the highest priority.
 	 */
 	best_cn = NULL;
-	printf("%s:%d\n",
-	       __FUNCTION__,
-	       __LINE__);
 	SET_FOREACH(list, cons_set) {
 		cn = *list;
 		cnremove(cn);

@@ -11,7 +11,7 @@ struct kload_segment {
 	unsigned long	       *k_pages;
 	unsigned long		k_seg_start;
 };
-	
+
 struct kload {
 	struct kload_segment	khdr[10];
 	int			num_hdrs;
@@ -32,11 +32,8 @@ struct kload_items {
 	unsigned long *last_item;
 	unsigned long *item;
 	int i_count;
-  
-	
+
+
 	unsigned long flags;  /* not used yet */
   //struct vm_object *kload_obj;
 };
-
-
-

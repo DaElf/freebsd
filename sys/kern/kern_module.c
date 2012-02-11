@@ -99,14 +99,12 @@ module_shutdown(void *arg1, int arg2)
 
 	if (arg2 & RB_NOSYNC)
 		return;
-	printf("%s:%d enter\n",__FUNCTION__,__LINE__);
 	mtx_lock(&Giant);
 	MOD_SLOCK;
 	TAILQ_FOREACH_REVERSE(mod, &modules, modulelist, link)
 		MOD_EVENT(mod, MOD_SHUTDOWN);
 	MOD_SUNLOCK;
 	mtx_unlock(&Giant);
-	printf("%s:%d exit\n",__FUNCTION__,__LINE__);
 }
 
 void

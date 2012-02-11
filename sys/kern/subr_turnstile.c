@@ -166,8 +166,6 @@ static void	turnstile_dtor(void *mem, int size, void *arg);
 static int	turnstile_init(void *mem, int size, int flags);
 static void	turnstile_fini(void *mem, int size);
 
-void shutdown_turnstiles(void);
-
 /*
  * Walks the chain of turnstiles and their owners to propagate the priority
  * of the thread being blocked to all the threads holding locks that have to
@@ -366,17 +364,6 @@ init_turnstiles(void)
 	mtx_init(&td_contested_lock, "td_contested", NULL, MTX_SPIN);
 	LIST_INIT(&thread0.td_contested);
 	thread0.td_turnstile = NULL;
-}
-void
-shutdown_turnstiles(void)
-{
-	int i;
-  
-	for (i = 0; i < TC_TABLESIZE; i++) {
-		LIST_INIT(&turnstile_chains[i].tc_turnstiles);
-		mtx_destroy(&turnstile_chains[i].tc_lock);
-	}
-	mtx_destroy(&td_contested_lock);
 }
 
 #ifdef TURNSTILE_PROFILING

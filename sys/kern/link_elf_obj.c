@@ -457,8 +457,6 @@ link_elf_load_file(linker_class_t cls, const char *filename,
 	mapsize = 0;
 	hdr = NULL;
 
-	printf("%s:%d filename %s\n",__FUNCTION__,__LINE__,filename);
-
 	NDINIT(&nd, LOOKUP, FOLLOW | MPSAFE, UIO_SYSSPACE, filename, td);
 	flags = FREAD;
 	error = vn_open(&nd, &flags, 0, NULL);

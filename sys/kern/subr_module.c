@@ -159,21 +159,13 @@ preload_search_info(caddr_t mod, int inf)
     uint32_t	*hdr;
     uint32_t	type = 0;
     int		next;
-    int		max = 256;
 
     curp = mod;
     for (;;) {
 	hdr = (uint32_t *)curp;
-#if 0
-	printf("%s:%d hdr %p hdr[0] %u hdr[1] %u\n",
-	       __FUNCTION__,__LINE__,
-	       hdr,hdr[0],hdr[1]);
-#endif
 	/* end of module data? */
 	if (hdr[0] == 0 && hdr[1] == 0)
 	    break;
-	if (max-- == 0)  /* something not right bail out */
-		break;
 	/* 
 	 * We give up once we've looped back to what we were looking at 
 	 * first - this should normally be a MODINFO_NAME field.
@@ -284,9 +276,7 @@ preload_bootstrap_relocate(vm_offset_t offset)
 	    case MODINFO_METADATA|MODINFOMD_SSYM:
 	    case MODINFO_METADATA|MODINFOMD_ESYM:
 		ptr = (vm_offset_t *)(curp + (sizeof(uint32_t) * 2));
-		/* check to see if we have already added the offset */
-		if (!(*ptr & offset))
-			*ptr += offset;
+		*ptr += offset;
 		break;
 	    }
 	    /* The rest is beyond us for now */
