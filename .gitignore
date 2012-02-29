@@ -10,6 +10,9 @@ cscope.*
 .pc
 qpatches
 patches
+sys/amd64/conf
+sys/i386/compile
+sys/i386/conf
 cscope.*
 *~
 \#*\#
