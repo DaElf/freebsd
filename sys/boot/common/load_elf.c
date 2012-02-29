@@ -132,6 +132,16 @@ __elfN(loadfile)(char *filename, u_int64_t dest, struct preloaded_file **result)
 	ehdr->e_ident[EI_VERSION] != EV_CURRENT ||	/* Version ? */
 	ehdr->e_version != EV_CURRENT ||
 	ehdr->e_machine != ELF_TARG_MACH) {		/* Machine ? */
+      printf("%d %d\n"
+	     "%d %d\n"
+	     "%d %d\n"
+	     "%d %d\n"
+	     "%d %d\n",
+	     ehdr->e_ident[EI_CLASS] , ELF_TARG_CLASS,
+	     ehdr->e_ident[EI_DATA] , ELF_TARG_DATA,
+	     ehdr->e_ident[EI_VERSION] , EV_CURRENT,
+	     ehdr->e_version , EV_CURRENT,
+	     ehdr->e_machine, ELF_TARG_MACH);
 	err = EFTYPE;
 	goto oerr;
     }
@@ -329,25 +339,30 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
 	    continue;
 
 #ifdef ELF_VERBOSE
-	printf("Segment: 0x%lx@0x%lx -> 0x%lx-0x%lx",
-	    (long)phdr[i].p_filesz, (long)phdr[i].p_offset,
-	    (long)(phdr[i].p_vaddr + off),
-	    (long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1));
+	printf("Segment: filesz 0x%llx @ 0x%016llx ->  vaddr_range 0x%016llx - 0x%016llx",
+	    (long long)phdr[i].p_filesz, (long long)phdr[i].p_offset,
+	    (long long)(phdr[i].p_vaddr + off),
+	    (long long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1));
 #else
 	if ((phdr[i].p_flags & PF_W) == 0) {
-	    printf("text=0x%lx ", (long)phdr[i].p_filesz);
+	    printf("text=0x%llx ", (long long)phdr[i].p_filesz);
 	} else {
-	    printf("data=0x%lx", (long)phdr[i].p_filesz);
+	    printf("data=0x%llx", (long long)phdr[i].p_filesz);
 	    if (phdr[i].p_filesz < phdr[i].p_memsz)
-		printf("+0x%lx", (long)(phdr[i].p_memsz -phdr[i].p_filesz));
+		printf("+0x%llx", (long long)(phdr[i].p_memsz -phdr[i].p_filesz));
 	    printf(" ");
 	}
 #endif
 	fpcopy = 0;
 	if (ef->firstlen > phdr[i].p_offset) {
 	    fpcopy = ef->firstlen - phdr[i].p_offset;
-	    archsw.arch_copyin(ef->firstpage + phdr[i].p_offset,
-			       phdr[i].p_vaddr + off, fpcopy);
+	    printf("\n%s:%d firstpage 0x%lx p_offset 0x%lx p_vaddr 0x%lx off 0x%lx\n",
+		   __FUNCTION__,__LINE__,
+		   (unsigned long)ef->firstpage,
+		   (unsigned long) phdr[i].p_offset,
+		   (unsigned long)phdr[i].p_vaddr,
+		   (unsigned long)off);
+	    archsw.arch_copyin(ef->firstpage + phdr[i].p_offset, phdr[i].p_vaddr + off, fpcopy);
 	}
 	if (phdr[i].p_filesz > fpcopy) {
 	    if (kern_pread(ef->fd, phdr[i].p_vaddr + off + fpcopy,
@@ -360,9 +375,11 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
 	/* clear space from oversized segments; eg: bss */
 	if (phdr[i].p_filesz < phdr[i].p_memsz) {
 #ifdef ELF_VERBOSE
-	    printf(" (bss: 0x%lx-0x%lx)",
-		(long)(phdr[i].p_vaddr + off + phdr[i].p_filesz),
-		(long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1));
+	    printf("\n\t(bss: 0x%lx-0x%lx) vaddr 0x%lx  size 0x%lx clearing\n",
+		   (long)(phdr[i].p_vaddr + off + phdr[i].p_filesz),
+		   (long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1),
+		   (long)(phdr[i].p_vaddr + phdr[i].p_filesz),
+		   (long)(phdr[i].p_memsz - phdr[i].p_filesz) );
 #endif
 
 	    kern_bzero(phdr[i].p_vaddr + off + phdr[i].p_filesz,

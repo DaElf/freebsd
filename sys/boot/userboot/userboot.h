@@ -195,4 +195,11 @@ struct loader_callbacks {
 	 * each invocation will add 1 to the previous value of 'num'.
 	 */
 	const char *	(*getenv)(void *arg, int num);
+
+	/*
+	 * build system smap
+	 * this is for kload to build pass back in a copy of the running
+	 * systems smap returns
+	 */
+	int (*buildsmap)(void *arg, void **smap, size_t *len);
 };

@@ -81,6 +81,9 @@ __FBSDID("$FreeBSD$");
 #define BIOS_RESET		(0x0f)
 #define BIOS_WARM		(0x0a)
 
+
+// quick hack to access the kload page table so we can set the APs to a know pgtbl */
+extern unsigned long kload_pgtbl;
 /* lock region used by kernel profiling */
 int	mcount_lock;
 
@@ -1458,11 +1461,21 @@ cpustop_handler(void)
 void
 cpususpend_handler(void)
 {
+	register_t cr3, rf;
+	register_t cr0, cr4;
 	u_int cpu;
 
 	mtx_assert(&smp_ipi_mtx, MA_NOTOWNED);
 
 	cpu = PCPU_GET(cpuid);
+	printf("%s called on cpu%d\n",__FUNCTION__,cpu);
+
+	rf = intr_disable();
+	cr3 = rcr3();
+
+	lapic_clear_lapic(1 /* disable lapic */);
+ 	/* shutdown interrupts to the cpu and then set the mask as stopped */
+
 	if (savectx(susppcbs[cpu])) {
 		fpususpend(susppcbs[cpu]->pcb_fpususpend);
 		wbinvd();
@@ -1476,6 +1489,23 @@ cpususpend_handler(void)
 		/* Indicate that we are resumed */
 		CPU_CLR_ATOMIC(cpu, &suspended_cpus);
 	}
+
+	/* make sure the page table is not the same one that boot process sets up */
+	load_cr3(kload_pgtbl);
+
+	/* Disable PGE. */
+	cr4 = rcr4();
+	load_cr4(cr4 & ~CR4_PGE);
+
+	/* Disable caches (CD = 1, NW = 0) and paging*/
+	cr0 = rcr0();
+	load_cr0((cr0 & ~CR0_NW) | CR0_CD | CR0_PG);
+
+	/* Flushes caches and TLBs. */
+	wbinvd();
+	invltlb();
+
+	halt();
 
 	/* Wait for resume */
 	while (!CPU_ISSET(cpu, &started_cpus))

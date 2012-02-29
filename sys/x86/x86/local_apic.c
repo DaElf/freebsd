@@ -347,6 +347,60 @@ lapic_dump(const char* str)
 }
 
 void
+lapic_clear_lapic(u_int disable) {
+
+	struct lapic *la;
+	la = &lapics[lapic_id()];
+
+	uint32_t value;
+
+	if (bootverbose)
+		printf("%s lapic_id(%d) cpu(%d) la %p lapic %p\n",__FUNCTION__,
+		       lapic_id(), PCPU_GET(cpuid), la, lapic);
+
+	/*
+	 * Fist we set the mask bit to keep and new interrupts from
+	 * arriving but allowing any pending interrupts to finish
+	 * *THEN* set the registers to default values
+	 * If the interrupts are not allowed to clear a kload'ed / booted
+	 * kernel will see the old interrupts before the appropriate handlers
+	 * are in place and trigger a panic.
+	 */
+#ifdef notyet
+	/* this seems to be causing APIC error in the new kernel */
+	value = lapic->lvt_error;
+	value |= APIC_LVT_M;
+	lapic->lvt_error = value;
+#endif
+
+	value = lapic->lvt_timer;
+	value |= APIC_LVT_M;
+	lapic->lvt_timer = value;
+
+	value = lapic->lvt_lint0;
+	value |= APIC_LVT_M;
+	lapic->lvt_lint0 = value;
+
+	value = lapic->lvt_lint1;
+	value |= APIC_LVT_M;
+	lapic->lvt_lint1 = value;
+
+	value = lapic->lvt_pcint;
+	value |= APIC_LVT_M;
+	lapic->lvt_pcint = value;
+
+	/* Program timer LVT and setup handler. */
+	lapic->lvt_timer = APIC_LVTT_M; /* masked */
+	lapic->lvt_lint0 = APIC_LVT_M; /* masked */
+	lapic->lvt_lint1 = APIC_LVT_M; /* masked */
+
+	if (disable) {
+		printf("\tlapic disable\n");
+		lapic_disable();
+	}
+}
+
+void
 lapic_setup(int boot)
 {
 	struct lapic *la;
@@ -914,7 +968,20 @@ lapic_handle_error(void)
 	lapic->esr = 0;
 	esr = lapic->esr;
 
-	printf("CPU%d: local APIC error 0x%x\n", PCPU_GET(cpuid), esr);
+	printf("CPU%d: local APIC error 0x%x\t", PCPU_GET(cpuid), esr);
+	if (lapic->esr & APIC_ESR_SEND_CS_ERROR)
+		printf("send_cs_error\n");
+	if (lapic->esr & APIC_ESR_RECEIVE_CS_ERROR)
+		printf("receive_cs_error\n");
+	if (lapic->esr & APIC_ESR_SEND_ACCEPT)
+		printf("send_accept\n");
+	if (lapic->esr & APIC_ESR_RECEIVE_ACCEPT)
+		printf("receive_accept\n");
+	if (lapic->esr & APIC_ESR_SEND_ILLEGAL_VECTOR)
+		printf("send_illegal_vector\n");
+	if (lapic->esr & APIC_ESR_ILLEGAL_REGISTER)
+		printf("illegal_register\n");
+
 	lapic_eoi();
 }
 

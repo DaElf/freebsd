@@ -64,6 +64,7 @@ static TAILQ_HEAD(modulelist, module) modules;
 struct sx modules_sx;
 static int nextid = 1;
 static void module_shutdown(void *, int);
+void kload_module_shutdown(void);
 
 static int
 modevent_nop(module_t mod, int what, void *arg)
@@ -105,6 +106,12 @@ module_shutdown(void *arg1, int arg2)
 	MOD_SUNLOCK;
 	mtx_unlock(&Giant);
 }
+
+void
+kload_module_shutdown(void) {
+	module_shutdown(NULL, 0);
+}
+
 
 void
 module_register_init(const void *arg)

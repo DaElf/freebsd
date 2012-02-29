@@ -1853,6 +1853,7 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	u_int64_t msr;
 	char *env;
 	size_t kstack0_sz;
+	u_int64_t  physfree_save = physfree;
 
 	thread0.td_kstack = physfree + KERNBASE;
 	thread0.td_kstack_pages = KSTACK_PAGES;
@@ -1959,6 +1960,15 @@ hammer_time(u_int64_t modulep, u_int64_t physfree)
 	 * Initialize the console before we print anything out.
 	 */
 	cninit();
+
+	if (bootverbose) {
+		printf("%s:\n\tmodulep 0x%jx physfree_save 0x%jx physfree 0x%jx\n",__FUNCTION__,
+		       modulep, physfree_save, physfree);
+		printf("\tpreload_metadata %p kmdp %p kern_envp %p\n", preload_metadata,kmdp,kern_envp);
+		printf("\tcr4 0x%lx cr3 0x%lx cr2 0x%lx cr0 0x%lx\n",rcr4(),rcr3(),rcr2(),rcr0());
+		printf("\tboothowto 0x%lx \n",(unsigned long)boothowto);
+	}
+
 
 #ifdef DEV_ISA
 #ifdef DEV_ATPIC
