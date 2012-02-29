@@ -169,6 +169,66 @@ bi_checkcpu(void)
 #endif
 }
 
+struct smap {
+        uint64_t       base;
+        uint64_t       length;
+        uint32_t       type;
+} __packed;
+
+/* From FreeBSD <machine/pc/bios.h> */
+#define SMAP_TYPE_MEMORY	1
+
+#define GB (1024UL * 1024 * 1024)
+
+#define MODINFOMD_SMAP          0x1001
+
+static void
+bios_addsmapdata(struct preloaded_file *kfp)
+{
+	uint64_t lowmem, highmem;
+	int smapnum, len;
+	struct smap *smap = NULL, *sm = NULL;
+	int error = 1;
+
+	printf("%s\n",__FUNCTION__);
+
+	if (callbacks->buildsmap)
+		error = callbacks->buildsmap(NULL, (void **)&smap, &len);
+
+	/* either there is no buildsmap function or it failed
+	 * revert back to using getmem and a simple smap
+	 */
+
+	if (error) {
+		smap = sm = malloc(3 * sizeof(struct smap));
+		CALLBACK(getmem, &lowmem, &highmem);
+
+		sm->base = 0;				/* base memory */
+		sm->length = 640 * 1024;
+		sm->type = SMAP_TYPE_MEMORY;
+		sm++;
+
+		sm->base = 0x100000;			/* extended memory */
+		sm->length = lowmem - 0x100000;
+		sm->type = SMAP_TYPE_MEMORY;
+		sm++;
+
+		smapnum = 2;
+
+		if (highmem != 0) {
+			sm->base = 4 * GB;
+			sm->length = highmem;
+			sm->type = SMAP_TYPE_MEMORY;
+			smapnum++;
+		}
+
+		len = smapnum * sizeof (struct smap);
+	}
+
+	file_addmetadata(kfp, MODINFOMD_SMAP, len, smap);
+	free(smap);
+}
+
 /*
  * Load the information expected by an amd64 kernel.
  *

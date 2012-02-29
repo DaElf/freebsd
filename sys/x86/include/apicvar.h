@@ -449,6 +449,7 @@ lapic_set_lvt_triggermode(u_int apic_id, u_int lvt, enum intr_trigger trigger)
 	return (apic_ops.set_lvt_triggermode(apic_id, lvt, trigger));
 }
 
+void	lapic_clear_lapic(u_int);
 void	lapic_handle_cmc(void);
 void	lapic_handle_error(void);
 void	lapic_handle_intr(int vector, struct trapframe *frame);

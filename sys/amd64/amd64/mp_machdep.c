@@ -81,7 +81,23 @@ __FBSDID("$FreeBSD$");
 #define BIOS_RESET		(0x0f)
 #define BIOS_WARM		(0x0a)
 
-extern	struct pcpu __pcpu[];
+
+// quick hack to access the kload page table so we can set the APs to a know pgtbl */
+extern unsigned long kload_pgtbl;
+/* lock region used by kernel profiling */
+int	mcount_lock;
+
+int	mp_naps;		/* # of Applications processors */
+int	boot_cpu_id = -1;	/* designated BSP */
+
+extern  struct pcpu __pcpu[];
+
+/* AP uses this during bootstrap.  Do not staticize.  */
+char *bootSTK;
+int bootAP;
+
+/* Free these after use */
+void *bootstacks[MAXCPU];
 
 /* Temporary variables for init_secondary()  */
 char *doublefault_stack;
@@ -508,6 +524,80 @@ smp_cache_flush(void)
 }
 
 /*
+<<<<<<< HEAD
+=======
+ * Handle an IPI_SUSPEND by saving our current context and spinning until we
+ * are resumed.
+ */
+void
+cpususpend_handler(void)
+{
+	register_t cr3, rf;
+	register_t cr0, cr4;
+	u_int cpu;
+
+	mtx_assert(&smp_ipi_mtx, MA_NOTOWNED);
+
+	cpu = PCPU_GET(cpuid);
+	printf("%s called on cpu%d\n",__FUNCTION__,cpu);
+
+	rf = intr_disable();
+	cr3 = rcr3();
+
+	lapic_clear_lapic(1 /* disable lapic */);
+ 	/* shutdown interrupts to the cpu and then set the mask as stopped */
+
+	if (savectx(susppcbs[cpu])) {
+		fpususpend(susppcbs[cpu]->pcb_fpususpend);
+		wbinvd();
+		CPU_SET_ATOMIC(cpu, &suspended_cpus);
+	} else {
+		pmap_init_pat();
+		initializecpu();
+		PCPU_SET(switchtime, 0);
+		PCPU_SET(switchticks, ticks);
+
+		/* Indicate that we are resumed */
+		CPU_CLR_ATOMIC(cpu, &suspended_cpus);
+	}
+
+	/* make sure the page table is not the same one that boot process sets up */
+	load_cr3(kload_pgtbl);
+
+	/* Disable PGE. */
+	cr4 = rcr4();
+	load_cr4(cr4 & ~CR4_PGE);
+
+	/* Disable caches (CD = 1, NW = 0) and paging*/
+	cr0 = rcr0();
+	load_cr0((cr0 & ~CR0_NW) | CR0_CD | CR0_PG);
+
+	/* Flushes caches and TLBs. */
+	wbinvd();
+	invltlb();
+
+	halt();
+
+	/* Wait for resume */
+	while (!CPU_ISSET(cpu, &started_cpus))
+		ia32_pause();
+
+	if (cpu_ops.cpu_resume)
+		cpu_ops.cpu_resume();
+	if (vmm_resume_p)
+		vmm_resume_p();
+
+	/* Resume MCA and local APIC */
+	mca_resume();
+	lapic_setup(0);
+
+	CPU_CLR_ATOMIC(cpu, &started_cpus);
+	/* Indicate that we are resumed */
+	CPU_CLR_ATOMIC(cpu, &suspended_cpus);
+}
+
+/*
+>>>>>>> Move kload to current
  * Handlers for TLB related IPIs
  */
 void

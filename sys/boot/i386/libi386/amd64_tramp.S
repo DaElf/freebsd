@@ -65,7 +65,7 @@ gdt:
 	.long	0x00000000		# %cs
 	.long	0x00209800
 	.long	0x00000000		# %ds
-	.long	0x00008000
+	.long	0x00009000
 gdtend:
 	
 	.text
