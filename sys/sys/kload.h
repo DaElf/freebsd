@@ -1,6 +1,9 @@
 /* Russell Cattelan Digital Elves Inc 2011 */
 
 
+#if defined(__i386__)
+#include <machine/bootinfo.h>
+#endif
 #define KLOAD_LOAD		 0
 #define KLOAD_REBOOT		(1 << 0 )
 #define KLOAD_EXEC		(1 << 1 )
@@ -18,6 +21,11 @@ struct kload {
 	unsigned long		k_entry_pt;
 	unsigned int		k_modulep;
 	unsigned int		k_physfree;
+#if defined(__i386__)
+	struct bootinfo		k_bootinfo;
+	unsigned int		k_boothowto;
+#endif
+  
 };
 
 //typedef unsigned long kload_item_t;

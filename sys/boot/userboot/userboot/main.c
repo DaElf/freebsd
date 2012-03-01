@@ -44,6 +44,7 @@ extern char bootprog_rev[];
 extern char bootprog_date[];
 extern char bootprog_maker[];
 static jmp_buf jb;
+static char malloc_buf[512*1024];
 
 struct arch_switch archsw;	/* MI/MD interface boundary */
 
@@ -65,9 +66,14 @@ exit(int v)
 }
 
 void
+loader_init(void)
+{
+	setheap((void *)malloc_buf, (void *)(malloc_buf + 512*1024));
+}
+
+void
 loader_main(struct loader_callbacks_v1 *cb, void *arg, int version, int ndisks)
 {
-	static char malloc[512*1024];
 	int i;
 
         if (version != USERBOOT_VERSION_1)
@@ -82,7 +88,7 @@ loader_main(struct loader_callbacks_v1 *cb, void *arg, int version, int ndisks)
 	 * alloc() is usable. The stack is buried inside us, so this is
 	 * safe.
 	 */
-	setheap((void *)malloc, (void *)(malloc + 512*1024));
+	setheap((void *)malloc_buf, (void *)(malloc_buf + 512*1024));
 
         /*
          * Hook up the console
@@ -122,7 +128,7 @@ loader_main(struct loader_callbacks_v1 *cb, void *arg, int version, int ndisks)
 }
 
 /*
- * Set the 'current device' by (if possible) recovering the boot device as 
+ * Set the 'current device' by (if possible) recovering the boot device as
  * supplied by the initial bootstrap.
  */
 static void

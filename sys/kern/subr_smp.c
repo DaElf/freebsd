@@ -259,14 +259,14 @@ stop_cpus_hard(cpuset_t map)
 	return (generic_stop_cpus(map, IPI_STOP_HARD));
 }
 
-#if defined(__amd64__)
+//#if defined(__amd64__)
 int
 suspend_cpus(cpuset_t map)
 {
-
-	return (generic_stop_cpus(map, IPI_SUSPEND));
+	printf("%s FIXME\n",__FUNCTION__);
+	//return (generic_stop_cpus(map, IPI_SUSPEND));
 }
-#endif
+//#endif
 
 /*
  * Called by a CPU to restart stopped CPUs. 

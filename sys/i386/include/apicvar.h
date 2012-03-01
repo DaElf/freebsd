@@ -128,7 +128,8 @@
 #define IPI_IS_BITMAPED(x) ((x) <= IPI_BITMAP_LAST)
 
 #define	IPI_STOP	(APIC_IPI_INTS + 7)	/* Stop CPU until restarted. */
-#define	IPI_STOP_HARD	(APIC_IPI_INTS + 8)	/* Stop CPU with a NMI. */
+#define	IPI_SUSPEND	(APIC_IPI_INTS + 8)	/* Suspend CPU until restarted. */
+#define	IPI_STOP_HARD	(APIC_IPI_INTS + 9)	/* Stop CPU with a NMI. */
 
 #else /* XEN */
 /* These are the normal i386 APIC definitions */
@@ -155,7 +156,8 @@
 #define IPI_IS_BITMAPED(x) ((x) <= IPI_BITMAP_LAST)
 
 #define	IPI_STOP	(APIC_IPI_INTS + 7)	/* Stop CPU until restarted. */
-#define	IPI_STOP_HARD	(APIC_IPI_INTS + 8)	/* Stop CPU with a NMI. */
+#define	IPI_SUSPEND	(APIC_IPI_INTS + 8)	/* Suspend CPU until restarted. */
+#define	IPI_STOP_HARD	(APIC_IPI_INTS + 9)	/* Stop CPU with a NMI. */
 #endif /* XEN */
 
 /*
@@ -255,6 +257,7 @@ int	lapic_set_lvt_triggermode(u_int apic_id, u_int lvt,
 	    enum intr_trigger trigger);
 void	lapic_set_tpr(u_int vector);
 void	lapic_setup(int boot);
+void	lapic_clear_lapic(u_int);
 
 #endif /* !LOCORE */
 #endif /* _MACHINE_APICVAR_H_ */
