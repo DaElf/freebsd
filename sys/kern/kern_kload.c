@@ -46,9 +46,6 @@
 #include <sys/syscall.h>
 
 #include <machine/smp.h>
-//#include <machine/intr_machdep.h>
-//#include <machine/apicvar.h>
-//#include <machine/segments.h>
 
 #include <vm/vm_param.h>
 #include <vm/vm.h>
@@ -59,6 +56,10 @@
 #include <vm/vm_pageout.h>
 #include <vm/vm_map.h>
 
+
+#if defined(__i386__)
+#include <machine/bootinfo.h>
+#endif
 
 static struct kload_items *k_items = NULL;
 static MALLOC_DEFINE(M_KLOAD, "kload_items", "kload items");
@@ -84,6 +85,7 @@ static struct region_descriptor *mygdt;
 static	vm_offset_t control_page;
 static	vm_offset_t code_page;
 static 	void *gdt_desc;
+<<<<<<< HEAD
 pt_entry_t *kload_pgtbl = NULL; /* used as a test */
 static unsigned long max_addr = 0 , min_addr = 0;
 
@@ -93,6 +95,74 @@ static unsigned long max_addr = 0 , min_addr = 0;
 
 extern char kernphys[];
 #define	KLOADBASE		KERNBASE
+=======
+static	pt_entry_t *pgtbl;
+unsigned long kload_pgtbl;
+static unsigned long max_addr = 0 , min_addr = 0;
+
+extern void kload_module_shutdown(void);
+extern unsigned long relocate_kernel(unsigned long indirection_page,
+				     unsigned long page_list,
+				     unsigned long code_page,
+				     unsigned long control_page);
+extern int relocate_kernel_size;
+#ifdef __amd64__
+extern char kernphys[];
+#else
+vm_paddr_t kernphys = KERNLOAD;
+#endif
+
+
+
+#define GIGMASK			(~((1<<30)-1))
+//#define KLOADBASE		KVADDR(KPML4I, (NPDPEPG-48), 0, 0)
+#if defined(__amd64__)
+#define KLOADBASE		KERNBASE	
+#elif defined(__i386__)
+//#define KLOADBASE		0
+#define KLOADBASE		KERNBASE	
+#else
+#error unsupported arch
+#endif
+
+#define	GUEST_NULL_SEL		0
+#define	GUEST_CODE_SEL		1
+#define	GUEST_DATA_SEL		2
+
+#define	GUEST_RCODE_SEL		3
+#define	GUEST_RDATA_SEL		4
+
+#define	GUEST_UCODE_SEL		5
+#define	GUEST_UDATA_SEL		6
+
+#define	GUEST_TSS_SEL		6
+#define	GUEST_GDTR_LIMIT	(8 * 8 - 1)
+
+#define kload_kmem_alloc(map,size) kmem_alloc_attr(map, size,\
+						   /* M_WAITOK */ M_NOWAIT | M_ZERO, \
+						   0, (1 << 30) /* 1Gig limit */, \
+						   VM_MEMATTR_WRITE_COMBINING)
+
+struct kload_cpage {
+	unsigned long kcp_magic;	/* 0 */
+	unsigned long kcp_modulep;	/* 1 */
+	unsigned long kcp_physfree;	/* 2 */
+	unsigned long kcp_gdt;		/* 3 */
+	unsigned long kcp_pgtbl;	/* 4 */
+	unsigned long kcp_cp;		/* 5 */
+	unsigned long kcp_entry_pt;	/* 6 */
+	unsigned long kcp_idt;		/* 7 */
+#if defined(__i386__)
+	unsigned long kcp_boothowto;	/* 8 */
+	unsigned long kcp_bootinfop;	/* 9 */
+	struct bootinfo kcp_bootinfo;	/* always keep at end */
+#endif
+} __attribute__((packed)) ;
+
+struct gdt_desc_ptr {
+	unsigned short size;
+	unsigned long address;
+} __attribute__((packed)) ;
 
 static void
 update_max_min(vm_offset_t addr, int count)
@@ -106,6 +176,68 @@ update_max_min(vm_offset_t addr, int count)
 			max_addr = vtophys(addr + (i * PAGE_SIZE));
 	}
 }
+
+#if 0
+		.word 0x0,0x0,0x0,0x0		# Null entry
+		.word 0xffff,0x0,0x9a00,0xcf	# SEL_SCODE
+		.word 0xffff,0x0,0x9200,0xcf	# SEL_SDATA
+		.word 0xffff,0x0,0x9a00,0x0	# SEL_RCODE
+		.word 0xffff,0x0,0x9200,0x0	# SEL_RDATA
+		.word 0xffff,MEM_USR,0xfa00,0xcf# SEL_UCODE
+		.word 0xffff,MEM_USR,0xf200,0xcf# SEL_UDATA
+		.word _TSSLM,MEM_TSS,0x8900,0x0 # SEL_TSS
+#endif
+static void
+setup_freebsd_gdti386(uint64_t *gdtr)
+{
+	gdtr[GUEST_NULL_SEL]  = 0x0000000000000000ull;
+
+	gdtr[GUEST_CODE_SEL]  = 0x00cf9b000000FFFFull;
+	gdtr[GUEST_DATA_SEL]  = 0x00cf93000000FFFFull;
+
+	gdtr[GUEST_RCODE_SEL] = 0x00009b000000FFFFull;
+	gdtr[GUEST_RDATA_SEL] = 0x000092000000FFFFull;
+
+	gdtr[GUEST_UCODE_SEL] = 0x00cffb00a000FFFFull;
+	gdtr[GUEST_UDATA_SEL] = 0x00cff300a000FFFFull;
+	//0x5f982067      0x00008b00
+	gdtr[GUEST_TSS_SEL]   = 0x6720985f008b0000ull;
+}
+
+
+static pt_entry_t *
+kload_build_page_tablei386(void) {
+
+	unsigned long va;
+	pt_entry_t *pde;
+	pt_entry_t *pte;
+	int i;
+
+	va = (unsigned long)kmem_alloc(kernel_map,PAGE_SIZE * 2);
+	memset((void *)va, 0, PAGE_SIZE * 2);
+	pde = (pt_entry_t *)va;
+	pte = (pt_entry_t *)(pde + (PAGE_SIZE / sizeof(pt_entry_t)));
+
+	printf("%s pde 0x%lx (0x%lx) pte 0x%lx (0x%lx)\n",
+	       __FUNCTION__,
+	       (unsigned long)pde, (unsigned long)vtophys(pde),
+	       (unsigned long)pte, (unsigned long)vtophys(pte));
+
+	for (i = 0; i < 1024; i++) {
+		/* Each slot of the level 3 pages points to the same level 2 page */
+		//pde[i] = (pt_entry_t)(vtophys(pte));
+		// identity map the first 1G 4 times.
+		pde[i] = (i % 256) * (4 * 1024 * 1024);
+		pde[i] |= PG_V | PG_RW | PG_U | PG_PS;
+
+		/* The level 2 page slots are mapped with 2MB pages for 1GB. */
+		//pte[i] = i * (2 * 1024 * 1024);
+		//pte[i] |= PG_V | PG_RW | PG_PS | PG_U;
+	}
+
+	return (pt_entry_t *)vtophys(pde);
+}
+
 
 static vm_offset_t
 kload_kmem_alloc(vm_size_t size)
@@ -149,6 +281,12 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 		items->i_count--;
 	}
 
+<<<<<<< HEAD
+=======
+	if (0 && bootverbose)
+		printf("%s%d item 0x%lx\n", __FUNCTION__, __LINE__, (unsigned long)item_m);
+
+>>>>>>> 6a5118f... First pass of working kload for i386. SMP not working yet
 	if ((items->item == items->last_item) || (items->i_count == 0)) {
 		/* out of space in current page grab a new one */
 		va = (unsigned long)kload_kmem_alloc(PAGE_SIZE);
@@ -187,6 +325,18 @@ kload_init(void)
 	}
 
 }
+=======
+kload_init(void) 
+{
+	//int size = 20 * 1024 * 1024;
+	int size = 0;
+	//kload_image_va = kload_kmem_alloc(kernel_map, size);
+	printf("%s:%d 0x%x size %d\n",__FUNCTION__,__LINE__,kload_image_va,size);
+}
+
+int
+kload_copyin_segment(struct kload_segment *khdr, int seg) {
+>>>>>>> 6a5118f... First pass of working kload for i386. SMP not working yet
 
 int
 kload_copyin_segment(struct kload_segment *khdr, int seg)
@@ -197,6 +347,7 @@ kload_copyin_segment(struct kload_segment *khdr, int seg)
 	vm_offset_t va = kload_image_va;
 
 	num_pages = roundup2(khdr->k_memsz,PAGE_SIZE) >> PAGE_SHIFT;
+<<<<<<< HEAD
 
 	/* check to make sure the preallocate space is beg enough */
 	if (va && ((num_pages * PAGE_SIZE) > kload_prealloc)) {
@@ -326,7 +477,12 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	if (kload_pgtbl == NULL)
 		return (ENOMEM);
 	k_cpage->kcp_pgtbl = (unsigned long)kload_pgtbl;
-
+#if defined(__i386__)
+	k_cpage->kcp_boothowto = kld.k_boothowto;
+	k_cpage->kcp_bootinfop = vtophys(k_cpage) + offsetof(struct kload_cpage, kcp_bootinfo) + KERNBASE;
+	memcpy(&(k_cpage->kcp_bootinfo),&(kld.k_bootinfo),sizeof(struct bootinfo));
+#endif
+	
 	/*
 	 * We could simply not install the handler and never
 	 * hit kload_shutdown_final. But this way we can log
@@ -366,6 +522,15 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		       (unsigned long)kld.k_modulep,
 		       (unsigned long)kld.k_physfree);
 	
+
+#if defined(__i386__)
+	printf("\n\t"
+	       "k_boothowto    0x%lx\n\t"
+	       "kcp_bootinfop  0x%lx\n",
+	       (unsigned long)kld.k_boothowto,
+	       (unsigned long)k_cpage->kcp_bootinfop);
+#endif
+
 	if(!(uap->flags & (KLOAD_EXEC | KLOAD_REBOOT)))
 		goto just_load;
 #if defined(SMP)

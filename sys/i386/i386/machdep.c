@@ -3025,6 +3025,13 @@ init386(first)
 	if (boothowto & RB_KDB)
 		kdb_enter(KDB_WHY_BOOTFLAGS, "Boot flags requested debugger");
 #endif
+	if (1 || bootverbose) {
+		printf("%s:\n\tmodulep 0x%lx bootinfo 0x%lx\n",__FUNCTION__,
+		       (unsigned long)preload_metadata, (unsigned long) &bootinfo);
+		printf("\tpreload_metadata %p envmode %d kern_envp %p\n", preload_metadata,envmode,kern_envp);
+		printf("\tcr4 0x%x cr3 0x%x cr2 0x%x cr0 0x%x\n",rcr4(),rcr3(),rcr2(),rcr0());
+		printf("\tboothowto 0x%lx \n",(unsigned long)boothowto);
+	}
 
 	finishidentcpu();	/* Final stage of CPU initialization */
 	setidt(IDT_UD, &IDTVEC(ill),  SDT_SYS386TGT, SEL_KPL,

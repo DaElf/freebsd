@@ -9,6 +9,7 @@ NO_MAN=
 
 WARNS?=	3
 
+CFLAGS+=-g3
 CFLAGS+=-I${.CURDIR}/../../sys/boot/userboot
 CFLAGS+=-I${.CURDIR}/../../sys
 

@@ -616,10 +616,15 @@ kload_load_image(void *image, unsigned long entry_pt)
 	 */
 	unsigned long kernphys = 0x200000;
 
-	kld.khdr[0].k_buf = &((char *)image)[kernphys];
-	kld.khdr[0].k_memsz = roundup2(image_max_used,PAGE_SIZE) - kernphys;
-	kld.k_entry_pt = entry_pt;
-	kld.num_hdrs = 1;
+#if defined(__amd64__)
+	unsigned long  kernphys = 0x200000; /* This must the same value sys/conf/ldscript.xxx */
+#elif defined(__i386__)
+	unsigned long  kernphys = 0x400000;
+	unsigned int  bi_loc = ((unsigned int *)stack)[5];
+#else
+#error Unknown arch
+#endif
+	
 
 	/*
 	 * pull paramaters from the stack page
@@ -643,6 +648,33 @@ kload_load_image(void *image, unsigned long entry_pt)
 	printf("WARNING kernphys set to 0x%lx make sure this matches kernphys "
 	    "from sys/config/ldscript\n", kernphys);
 
+#if defined(__amd64__)
+	kld.k_modulep  =  ((unsigned int *)stack)[1];
+	kld.k_physfree =  ((unsigned int *)stack)[2];
+#elif defined(__i386__)
+	printf("%s boothowto 0x%x bootdev 0x%x bootinfop 0x%x\n",
+	       __FUNCTION__,
+	       ((unsigned int *)stack)[0],
+	       ((unsigned int *)stack)[1],
+	       ((unsigned int *)stack)[5]);
+	kld.k_boothowto =  ((unsigned int *)stack)[0];
+	kld.k_modulep  =  ((unsigned int *)stack)[6];
+	kld.k_physfree =  ((unsigned int *)stack)[7];
+	memcpy(&kld.k_bootinfo,&((char *)image)[bi_loc],sizeof(struct bootinfo));
+	/* bootdev appears to be ignored */
+#else
+#error Unknown arch
+#endif
+
+	printf("WARNING kernphys set to 0x%lx make sure this matches kernphys from sys/config/ldscript\n",
+	       kernphys);
+	printf("loading k_buf %p with size %ld to kernel image addr %p entry_pt 0x%lx modulep 0x%x physfree 0x%x\n",
+	       kld.khdr[0].k_buf,
+	       (long)kld.khdr[0].k_memsz,
+	       image,
+	       (unsigned long)kld.k_entry_pt,
+	       kld.k_modulep,
+	       kld.k_physfree);
 	if (k_execute) {
 		flags &= ~KLOAD_REBOOT;
 		flags |= KLOAD_EXEC;

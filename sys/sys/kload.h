@@ -40,6 +40,9 @@
 #include <vm/vm_object.h>
 #include <vm/vm_page.h>
 
+#if defined(__i386__)
+#include <machine/bootinfo.h>
+#endif
 #define KLOAD_LOAD		 0
 #define KLOAD_REBOOT		(1 << 0 )
 #define KLOAD_EXEC		(1 << 1 )
@@ -58,6 +61,11 @@ struct kload {
 	unsigned long		k_entry_pt;
 	unsigned int		k_modulep;
 	unsigned int		k_physfree;
+#if defined(__i386__)
+	struct bootinfo		k_bootinfo;
+	unsigned int		k_boothowto;
+#endif
+  
 };
 
 #define KLOAD_DESTINATION  0x1
