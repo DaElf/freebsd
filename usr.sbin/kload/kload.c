@@ -91,7 +91,6 @@ name2oid(char *name, int *oidp)
 		return (i);
 	j /= sizeof(int);
 
-	printf("%s: oid %d %d\n",__FUNCTION__,oidp[0],oidp[1]);
 	return j;
 }
 
@@ -343,8 +342,10 @@ k_setgdt(void *arg, uint64_t v, size_t sz) {
 
 static void
 k_exec(void *arg, uint64_t entry_pt) {
+#ifdef DEBUG
 	printf("Execute at 0x%jx\n", entry_pt);
 	printf("image size max used %jd endof page %jd\n",image_max_used,roundup2(image_max_used,PAGE_SIZE));
+#endif
 	kload_load_image(image,entry_pt);
 	k_exit(arg, 0);
 }
@@ -394,7 +395,6 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen) {
 
 	/* get the size	 */
 	i = sysctl(mib, 2, 0, &j, 0, 0);
-	printf("Size %jd\n",j);
 	len = j;
 
 	/* this is a nasty hack to allocate memory here
@@ -413,6 +413,7 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen) {
 	*outlen = len;
 	*smap_void = smapbase;
 
+#ifdef DEBUG
 	{
 		struct smap *smap, *smapend;
 		smapend = (struct smap *)((uintptr_t)smapbase + len);
@@ -421,12 +422,10 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen) {
 			       smap->type,smap->base, smap->length);
 		}
 	}
+#endif
 
 	return 0;
 }
-
-
-
 
 struct loader_callbacks_v1 cb = {
 
@@ -467,10 +466,48 @@ usage(void) {
 int
 main(int argc, char** argv) {
 	void (*func)(struct loader_callbacks_v1 *, void *, int, int);
+	int (*setenv)(const char *, const char *, int);
+	int (*loader_init)(void);
 	int opt;
 	char *disk_image = NULL;
+	char karg[20];
+	char kval[128];
 
-	while ((opt = getopt(argc, argv, "d:h:er")) != -1) {
+	if (geteuid()) {
+		errno = EPERM;
+		err(1, NULL);
+	}
+
+	dl_lib = dlopen("/boot/userboot.so", RTLD_LOCAL);
+	if (!dl_lib) {
+		printf("%s\n", dlerror());
+		return 1;
+	}
+	func = dlsym(dl_lib, "loader_main");
+	if (!func) {
+		printf("%s\n", dlerror());
+		return 1;
+	}
+	/* this is a hack for now */
+	Malloc_func = dlsym(dl_lib, "Malloc");
+	if (!Malloc_func) {
+		printf("%s\n", dlerror());
+		return 1;
+	}
+	/* this is a hack II for now */
+	setenv = dlsym(dl_lib, "setenv");
+	if (!setenv) {
+		printf("%s\n", dlerror());
+		return 1;
+	}
+	loader_init = dlsym(dl_lib, "loader_init");
+	if (!loader_init) {
+		printf("%s\n", dlerror());
+		return 1;
+	}
+	loader_init();
+
+	while ((opt = getopt(argc, argv, "d:h:erk:")) != -1) {
 		switch (opt) {
 		case 'd':
 			disk_image = optarg;
@@ -485,34 +522,22 @@ main(int argc, char** argv) {
 		case 'r':
 			k_reboot = 1;
 			break;
+		case 'k':
+			memset(karg,0,sizeof(karg));
+			memset(kval,0,sizeof(kval));
+			if(sscanf(optarg,"%[a-zA-Z_-]=%s",karg,kval) == 2) {
+				printf("got value %s %s\n",karg,kval);
+				setenv(karg, kval, 1);
+			} else {
+				fprintf(stderr,"-k failure %s\n",optarg);
+			}
+			break;	
 
 		case '?':
 			usage();
 		}
 	}
 	
-	if (geteuid()) {
-		errno = EPERM;
-		err(1, NULL);
-	}
-
-	dl_lib = dlopen("/boot/userboot.so", RTLD_LOCAL);
-//	dl_lib = dlopen("userboot.so", RTLD_LOCAL);
-	if (!dl_lib) {
-		printf("%s\n", dlerror());
-		return (1);
-	}
-	func = dlsym(dl_lib, "loader_main");
-	if (!func) {
-		printf("%s\n", dlerror());
-		return (1);
-	}
-	/* this is a hack for now */
-	Malloc_func = dlsym(dl_lib, "Malloc");
-	if (!Malloc_func) {
-		printf("%s\n", dlerror());
-		return (1);
-	}
 
 
 	image_size = 128*1024*1024;
@@ -531,6 +556,7 @@ main(int argc, char** argv) {
 
 	func(&cb, NULL, USERBOOT_VERSION_1, disk_fd >= 0);
 
+	return 0;
 }
 
 int
@@ -539,29 +565,29 @@ kload_load_image(void *image,unsigned long entry_pt) {
 	struct kload kld;
 	int syscall_num = 532;
 	int flags = KLOAD_LOAD;
-	char *stack = (char *)image + 0x1000;
+	char *stack = (char *)image + 0x1000; /* PAGESIZE */
+	unsigned long  kernphys = 0x200000; /* This must the same value sys/conf/ldscript.xxx */
 	
-	kld.khdr[0].k_buf = &((char *)image)[0x200000];
-	kld.khdr[0].k_memsz = roundup2(image_max_used,PAGE_SIZE) - 0x200000;
+	kld.khdr[0].k_buf = &((char *)image)[kernphys];
+	kld.khdr[0].k_memsz = roundup2(image_max_used,PAGE_SIZE) - kernphys;
 	kld.k_entry_pt = entry_pt;
 	kld.num_hdrs=1;
 
-
-	printf("modulep 0x%x kernend 0x%x\n",
-	       ((unsigned int *)stack)[1],
-	       ((unsigned int *)stack)[2]);
-	
 	/* hack for now ... pull from the stack page 
 	 * fix the interface to pass as parameters
 	 */
 	kld.k_modulep  =  ((unsigned int *)stack)[1];
 	kld.k_physfree =  ((unsigned int *)stack)[2];
 
-	printf("loading k_buf %p with size %jd to kernel image addr %p entry_pt 0x%jx\n",
+	printf("WARNING kernphys set to 0x%lx make sure this matches kernphys from sys/config/ldscript\n",
+	       kernphys);
+	printf("loading k_buf %p with size %jd to kernel image addr %p entry_pt 0x%jx modulep 0x%x physfree 0x%x\n",
 	       kld.khdr[0].k_buf,
 	       kld.khdr[0].k_memsz,
 	       image,
-	       kld.k_entry_pt);
+	       kld.k_entry_pt,
+	       kld.k_modulep,
+	       kld.k_physfree);
 	if (k_execute) {
 		flags &= ~KLOAD_REBOOT;
 		flags |= KLOAD_EXEC;
