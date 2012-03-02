@@ -42,16 +42,10 @@ static vm_offset_t kload_image_va;
 static void kload_init(void);
 SYSINIT(kload_mem, SI_SUB_KMEM, SI_ORDER_ANY, kload_init, NULL);
 
-typedef u_int64_t p4_entry_t;
-typedef u_int64_t p3_entry_t;
-typedef u_int64_t p2_entry_t;
-
 int kload_copyin_segment(struct kload_segment *,int);
 static int kload_add_page(struct kload_items *items, unsigned long item_m);
-static p4_entry_t *kload_build_page_table(void);
-static pt_entry_t *kload_build_page_tablei386(void);
+static pt_entry_t *kload_build_page_table(void);
 static void setup_freebsd_gdt(uint64_t *gdtr);
-static void setup_freebsd_gdti386(uint64_t *gdtr);
 static void kload_shutdown_final(void *arg, int howto);
 
 static struct gdt_desc_ptr *mygdt;
@@ -68,20 +62,16 @@ extern unsigned long relocate_kernel(unsigned long indirection_page,
 				     unsigned long code_page,
 				     unsigned long control_page);
 extern int relocate_kernel_size;
-#ifdef __amd64__
-extern char kernphys[];
-#else
-vm_paddr_t kernphys = KERNLOAD;
-#endif
-
-
 
 #define GIGMASK			(~((1<<30)-1))
+#define ONEGIG			(1<<30)
+
 //#define KLOADBASE		KVADDR(KPML4I, (NPDPEPG-48), 0, 0)
 #if defined(__amd64__)
+extern char kernphys[];
 #define KLOADBASE		KERNBASE	
 #elif defined(__i386__)
-//#define KLOADBASE		0
+vm_paddr_t kernphys = KERNLOAD;
 #define KLOADBASE		KERNBASE	
 #else
 #error unsupported arch
@@ -126,6 +116,7 @@ struct gdt_desc_ptr {
 	unsigned long address;
 } __attribute__((packed)) ;
 
+#if defined(__amd64__)
 static void
 setup_freebsd_gdt(uint64_t *gdtr)
 {
@@ -134,7 +125,62 @@ setup_freebsd_gdt(uint64_t *gdtr)
 	gdtr[GUEST_DATA_SEL] = 0x0000920000000000;
 }
 
-#if 0
+static pt_entry_t *
+kload_build_page_table(void) {
+
+	unsigned long va;
+
+	pt_entry_t *PT4;
+	pt_entry_t *PT3;
+	pt_entry_t *PT2;
+	int i;
+
+	va = (unsigned long)kmem_alloc(kernel_map,PAGE_SIZE * 3);
+
+	PT4 = (pt_entry_t *)va;
+	PT3 = (pt_entry_t *)(PT4 + (PAGE_SIZE / sizeof(unsigned long)));
+	PT2 = (pt_entry_t *)(PT3 + (PAGE_SIZE / sizeof(unsigned long)));
+
+	printf("%s PT4 0x%lx (0x%lx) PT3 0x%lx (0x%lx) PT2 0x%lx (0x%lx)\n",
+	       __FUNCTION__,
+	       (unsigned long)PT4, (unsigned long)vtophys(PT4),
+	       (unsigned long)PT3, (unsigned long)vtophys(PT3),
+	       (unsigned long)PT2, (unsigned long)vtophys(PT2));
+
+
+	bzero(PT4, PAGE_SIZE);
+	bzero(PT3, PAGE_SIZE);
+	bzero(PT2, PAGE_SIZE);
+
+	if (max_addr > ((1 << 30)-1)) {
+		/* make this a warn and fail in future
+		 * but for now panic to debug
+		 */
+		panic("kload temp space spread over more than a 1gig range");
+	}
+	/*
+	 * This is kinda brutal, but every single 1GB VM memory segment points to
+	 * the same first 1GB of physical memory.  But it is more than adequate.
+	 */
+	for (i = 0; i < 512; i++) {
+		/* Each slot of the level 4 pages points to the same level 3 page */
+		PT4[i] = (pt_entry_t)(vtophys(PT3));
+		PT4[i] |= PG_V | PG_RW | PG_U;
+
+		/* Each slot of the level 3 pages points to the same level 2 page */
+		PT3[i] = (pt_entry_t)(vtophys(PT2));
+		PT3[i] |= PG_V | PG_RW | PG_U;
+
+		/* The level 2 page slots are mapped with 2MB pages for 1GB. */
+		PT2[i] = i * (2 * 1024 * 1024);
+		PT2[i] |= PG_V | PG_RW | PG_PS | PG_U;
+	}
+
+	return (pt_entry_t *)vtophys(PT4);
+}
+
+#elif defined(__i386__)
+/*
 		.word 0x0,0x0,0x0,0x0		# Null entry
 		.word 0xffff,0x0,0x9a00,0xcf	# SEL_SCODE
 		.word 0xffff,0x0,0x9200,0xcf	# SEL_SDATA
@@ -143,9 +189,9 @@ setup_freebsd_gdt(uint64_t *gdtr)
 		.word 0xffff,MEM_USR,0xfa00,0xcf# SEL_UCODE
 		.word 0xffff,MEM_USR,0xf200,0xcf# SEL_UDATA
 		.word _TSSLM,MEM_TSS,0x8900,0x0 # SEL_TSS
-#endif
+*/
 static void
-setup_freebsd_gdti386(uint64_t *gdtr)
+setup_freebsd_gdt(uint64_t *gdtr)
 {
 	gdtr[GUEST_NULL_SEL]  = 0x0000000000000000ull;
 
@@ -161,22 +207,8 @@ setup_freebsd_gdti386(uint64_t *gdtr)
 	gdtr[GUEST_TSS_SEL]   = 0x6720985f008b0000ull;
 }
 
-static void
-update_max_min(vm_offset_t addr, int count) {
-
-	int i;
-
-	for(i = 0; i < count; i++) {
-		if (vtophys(addr + (i * PAGE_SIZE)) < min_addr)
-			min_addr = vtophys(addr + (i * PAGE_SIZE));
-		if (vtophys(addr + (i * PAGE_SIZE)) > max_addr)
-			max_addr = vtophys(addr + (i * PAGE_SIZE));
-	}
-}
-
-
 static pt_entry_t *
-kload_build_page_tablei386(void) {
+kload_build_page_table(void) {
 
 	unsigned long va;
 	pt_entry_t *pde;
@@ -208,59 +240,22 @@ kload_build_page_tablei386(void) {
 	return (pt_entry_t *)vtophys(pde);
 }
 
-static p4_entry_t *
-kload_build_page_table(void) {
+#endif
 
-	unsigned long va;
+static void
+update_max_min(vm_offset_t addr, int count) {
 
-	p4_entry_t *PT4;
-	p4_entry_t *PT3;
-	p4_entry_t *PT2;
 	int i;
 
-	va = (unsigned long)kmem_alloc(kernel_map,PAGE_SIZE * 3);
-
-	PT4 = (p4_entry_t *)va;
-	PT3 = (p4_entry_t *)(PT4 + (PAGE_SIZE / sizeof(unsigned long)));
-	PT2 = (p4_entry_t *)(PT3 + (PAGE_SIZE / sizeof(unsigned long)));
-
-	printf("%s PT4 0x%lx (0x%lx) PT3 0x%lx (0x%lx) PT2 0x%lx (0x%lx)\n",
-	       __FUNCTION__,
-	       (unsigned long)PT4, (unsigned long)vtophys(PT4),
-	       (unsigned long)PT3, (unsigned long)vtophys(PT3),
-	       (unsigned long)PT2, (unsigned long)vtophys(PT2));
-
-
-	bzero(PT4, PAGE_SIZE);
-	bzero(PT3, PAGE_SIZE);
-	bzero(PT2, PAGE_SIZE);
-
-	if (max_addr > ((1 << 30)-1)) {
-		/* make this a warn and fail in future
-		 * but for now panic to debug
-		 */
-		panic("kload temp space spread over more than a 1gig range");
+	for(i = 0; i < count; i++) {
+		if (vtophys(addr + (i * PAGE_SIZE)) < min_addr)
+			min_addr = vtophys(addr + (i * PAGE_SIZE));
+		if (vtophys(addr + (i * PAGE_SIZE)) > max_addr)
+			max_addr = vtophys(addr + (i * PAGE_SIZE));
 	}
-	/*
-	 * This is kinda brutal, but every single 1GB VM memory segment points to
-	 * the same first 1GB of physical memory.  But it is more than adequate.
-	 */
-	for (i = 0; i < 512; i++) {
-		/* Each slot of the level 4 pages points to the same level 3 page */
-		PT4[i] = (p4_entry_t)(vtophys(PT3));
-		PT4[i] |= PG_V | PG_RW | PG_U;
-
-		/* Each slot of the level 3 pages points to the same level 2 page */
-		PT3[i] = (p3_entry_t)(vtophys(PT2));
-		PT3[i] |= PG_V | PG_RW | PG_U;
-
-		/* The level 2 page slots are mapped with 2MB pages for 1GB. */
-		PT2[i] = i * (2 * 1024 * 1024);
-		PT2[i] |= PG_V | PG_RW | PG_PS | PG_U;
-	}
-
-	return (p4_entry_t *)vtophys(PT4);
 }
+
+
 
 static int
 kload_add_page(struct kload_items *items, unsigned long item_m)
@@ -314,7 +309,7 @@ kload_init(void)
 	//int size = 20 * 1024 * 1024;
 	int size = 0;
 	//kload_image_va = kload_kmem_alloc(kernel_map, size);
-	printf("%s:%d 0x%x size %d\n",__FUNCTION__,__LINE__,kload_image_va,size);
+	printf("%s 0x%lx size %d\n",__FUNCTION__,(unsigned long)kload_image_va,size);
 }
 
 int
@@ -326,15 +321,12 @@ kload_copyin_segment(struct kload_segment *khdr, int seg) {
 	vm_offset_t va = kload_image_va;
 
 	num_pages = roundup2(khdr->k_memsz,PAGE_SIZE) >> PAGE_SHIFT;
-	printf("%s:%d num_pages %d k_memsz %d\n",__FUNCTION__,__LINE__,num_pages,khdr->k_memsz);
 
 	if (!va)
 		va = kload_kmem_alloc(kernel_map, num_pages * PAGE_SIZE);
-	printf("%s:%d 0x%x\n",__FUNCTION__,__LINE__,va);
 	update_max_min(va,num_pages);
-	printf("%s:%d 0x%x\n",__FUNCTION__,__LINE__,va);
 	if(!va || ((num_pages * PAGE_SIZE) > 20 * (1024 * 1024))) {
-		printf("%s:%d  no mem 0x%x or size over 20Meg %d\n",__FUNCTION__,__LINE__,va,num_pages * PAGE_SIZE);
+		printf("%s no mem 0x%lx or size over 20Meg %d\n",__FUNCTION__,(unsigned long)va,num_pages * PAGE_SIZE);
 		return ENOMEM;
 	}
 
@@ -416,7 +408,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	k_cpage->kcp_gdt = (unsigned long)vtophys(mygdt) + KLOADBASE;
 
 	gdt_desc = (char *)mygdt + sizeof(struct gdt_desc_ptr);
-	setup_freebsd_gdti386(gdt_desc);
+	setup_freebsd_gdt(gdt_desc);
 	mygdt->size    = GUEST_GDTR_LIMIT;
 	mygdt->address = (unsigned long)(vtophys(gdt_desc) + KLOADBASE);
 
@@ -441,11 +433,10 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	 * build a page table entry based on min max addresses
 	 */
 	/* returns new page table phys addr */
-#if 1
-	pgtbl = kload_build_page_tablei386();
+	pgtbl = kload_build_page_table();
 	kload_pgtbl = (unsigned long)pgtbl;
 	k_cpage->kcp_pgtbl = (unsigned long)pgtbl;
-#endif
+
 #if defined(__i386__)
 	k_cpage->kcp_boothowto = kld.k_boothowto;
 	k_cpage->kcp_bootinfop = vtophys(k_cpage) + offsetof(struct kload_cpage, kcp_bootinfo) + KERNBASE;
