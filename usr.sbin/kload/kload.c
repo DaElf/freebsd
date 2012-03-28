@@ -1,8 +1,8 @@
-/* Russell Cattelan Digital Elves Inc 2011 */
+/* Russell Cattelan Digital Elves Inc 2011 - 2012 */
 
 /*
- * Heavily borrowed from userboot/test/test.c 
- * process kill code borrowed from halt.c 
+ * Heavily borrowed from userboot/test/test.c
+ * process kill code borrowed from halt.c
  */
 
 #include <sys/ioctl.h>
@@ -30,9 +30,6 @@
 #include <sys/kload.h>
 
 #include <userboot.h>
-
-#define ENTER() printf("%s:%d Enter\n",__FUNCTION__,__LINE__);
-#define EXIT() printf("%s:%d Exit\n",__FUNCTION__,__LINE__);
 
 char *host_base = "/";
 /* how can we get rid of these? I don't think we need them */
@@ -67,13 +64,11 @@ struct load_file {
 	} l_u;
 };
 
-
 struct smap {
-        uint64_t       base;
-        uint64_t       length;
-        uint32_t       type;
+	uint64_t       base;
+	uint64_t       length;
+	uint32_t       type;
 } __packed;
-
 
 static int
 name2oid(char *name, int *oidp)
@@ -121,8 +116,7 @@ k_open(void *arg, const char *filename, void **lf_ret) {
 	struct load_file *lf;
 	int error = -1;
 	char path[PATH_MAX];
-		
-	//printf("%s:%d filename %s\n",__FUNCTION__,__LINE__,filename);
+
 	if (!host_base) {
 		printf("Host base not set\n");
 		return ENOENT;
@@ -146,7 +140,7 @@ k_open(void *arg, const char *filename, void **lf_ret) {
 			error = EINVAL;
 			goto out;
 		}
-                *lf_ret = lf;
+		*lf_ret = lf;
 		return 0;
 	}
 	if (S_ISREG(lf->l_stat.st_mode)) {
@@ -156,13 +150,12 @@ k_open(void *arg, const char *filename, void **lf_ret) {
 			error = EINVAL;
 			goto out;
 		}
-                *lf_ret = lf;
+		*lf_ret = lf;
 		return 0;
 	}
 
 out:
 	free(lf);
-	//printf("%s error %d\n",__FUNCTION__,error);
 	return error;
 }
 
@@ -170,8 +163,6 @@ static int
 k_close(void *arg, void *h)
 {
 	struct load_file *lf = (struct load_file *)h;
-	
-	//printf("%s:%d\n",__FUNCTION__,__LINE__);
 
 	if (lf->l_isdir)
 		closedir(lf->l_u.dir);
@@ -182,10 +173,8 @@ k_close(void *arg, void *h)
 	return 0;
 }
 
-
 static int
 k_isdir(void *arg, void *h) {
-	ENTER();
 	return (((struct load_file *)h)->l_isdir);
 }
 
@@ -194,7 +183,6 @@ k_read(void *arg, void *h, void *dst, size_t size, size_t *resid_return) {
 	struct load_file *lf = (struct load_file *)h;
 	ssize_t sz;
 
-//	printf("%s:%d fd %d dest addr %p size %d\n",__FUNCTION__,__LINE__,lf->l_u.fd,dst,size);
 	if (lf->l_isdir)
 		return EINVAL;
 
@@ -234,7 +222,6 @@ k_readdir(void *arg, void *h, uint32_t *fileno_return, uint8_t *type_return,
 static int
 k_seek(void *arg, void *h, uint64_t offset, int whence) {
 	struct load_file *lf = (struct load_file *)h;
-	//printf("%s offset %lld\n",__FUNCTION__, offset);
 
 	if (lf->l_isdir)
 		return EINVAL;
@@ -252,7 +239,6 @@ k_stat(void *arg, void *h,
 
 	struct load_file *lf = (struct load_file *)h;
 
-	//printf("%s:%d\n",__FUNCTION__,__LINE__);
 	*mode_return = lf->l_stat.st_mode;
 	*uid_return = lf->l_stat.st_uid;
 	*gid_return = lf->l_stat.st_gid;
@@ -264,7 +250,6 @@ static int
 k_diskread(void *arg, int unit, uint64_t offset, void *dst, size_t size,
     size_t *resid_return) {
 	ssize_t n;
-	ENTER();
 
 	if (unit != 0 || disk_fd == -1)
 		return EIO;
@@ -281,9 +266,8 @@ k_diskread(void *arg, int unit, uint64_t offset, void *dst, size_t size,
  * this should be called copy_to_image
  */
 static int
-k_copyin(void *arg, const void *from, uint64_t to, size_t size) {
+k_copy_to_image(void *arg, const void *from, uint64_t to, size_t size) {
 
-  //  	printf("%s:%d from %p to 0x%jx size %d\n",__FUNCTION__,__LINE__,from,to,size);
 	to &= 0x7fffffff;
 	if (to > image_size)
 		return (EFAULT);
@@ -293,52 +277,44 @@ k_copyin(void *arg, const void *from, uint64_t to, size_t size) {
 	}
 	memcpy(&image[to], from, size);
 
-	if (to + size > image_max_used) 
+	if (to + size > image_max_used)
 		image_max_used = to + size;
 
 	return 0;
 }
 
 /*
- * copyout is copying FROM the image at "from" offset to memory pointed to by to ptr 
+ * copyout is copying FROM the image at "from" offset to memory pointed to by to ptr
  * this should be copy_from_image
  */
 static int
-k_copyout(void *arg, uint64_t from, void *to, size_t size) {
+k_copy_from_image(void *arg, uint64_t from, void *to, size_t size) {
 
-	//printf("%s:%d from %p to 0x%jx size %d caller 0x%x\t",__FUNCTION__,__LINE__,from,to,size,__builtin_return_address(0));
 	from &= 0x7fffffff;
 	if (from > image_size)
 		return (EFAULT);
 	if (from + size > image_size)
 		size = image_size - from;
 	memcpy(to, &image[from], size);
-	
+
 	return 0;
 }
 
 static void
 k_setreg(void *arg, int r, uint64_t v) {
-	//printf("%s:%d r 0x%x v 0x%jx\n",__FUNCTION__,__LINE__,r,v);
 	if (r < 0 || r >= 16)
 		return;
 	regs[r] = v;
 }
 
 static void
-k_setmsr(void *arg, int r, uint64_t v) {
-	//printf("%s:%d r 0x%x v 0x%jx\n",__FUNCTION__,__LINE__,r,v);
-}
+k_setmsr(void *arg, int r, uint64_t v) { }
 
 static void
-k_setcr(void *arg, int r, uint64_t v) {
-	//printf("%s:%d r 0x%x v 0x%jx\n",__FUNCTION__,__LINE__,r,v);
-}
+k_setcr(void *arg, int r, uint64_t v) { }
 
 static void
-k_setgdt(void *arg, uint64_t v, size_t sz) {
-	//printf("%s:%d v 0x%jx size 0x%x\n",__FUNCTION__,__LINE__,v,sz);
-}
+k_setgdt(void *arg, uint64_t v, size_t sz) { }
 
 static void
 k_exec(void *arg, uint64_t entry_pt) {
@@ -367,14 +343,14 @@ k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem) {
 	int mib[2];
 	unsigned long long physmem;
 	size_t len;
-	
+
 	mib[0] = CTL_HW;
 	mib[1] = HW_PHYSMEM;
 	len = sizeof(physmem);
 	sysctl(mib, 2, &physmem, &len, NULL, 0);
 
-        *lowmem = physmem;
-        *highmem = 0;
+	*lowmem = physmem;
+	*highmem = 0;
 
 	printf("%s:%d lowmem %ju highmem %ju\n",__FUNCTION__,__LINE__,
 	       *lowmem,
@@ -397,17 +373,17 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen) {
 	i = sysctl(mib, 2, 0, &j, 0, 0);
 	len = j;
 
-	/* this is a nasty hack to allocate memory here
-	 * and free it in useboot.so bios_addsmapdata
-	 * need to use Malloc from libstand since
-	 * userboot functions will use Free from libstand
+	/*
+	 * Use the malloc function from libstand/userboot.so since
+	 * bios_addsmapdata will free the memory using the libstand Free
+	 * so be careful to use not use standard malloc here
 	 */
 	smapbase = Malloc_func(j,__FILE__,__LINE__);
 	if (!smapbase) {
 		printf("kload failed to allocate space for smap\n");
 		return 1;
 	}
-	
+
 	i = sysctl(mib, 2, smapbase, &j, NULL, 0);
 
 	*outlen = len;
@@ -439,18 +415,18 @@ struct loader_callbacks_v1 cb = {
 
 	.diskread = k_diskread,
 
-	.copyin = k_copyin,
-	.copyout = k_copyout,
+	.copyin = k_copy_to_image,
+	.copyout = k_copy_from_image,
 	.setreg = k_setreg,
 	.setmsr = k_setmsr,
 	.setcr = k_setcr,
-        .setgdt = k_setgdt,
+	.setgdt = k_setgdt,
 	.exec = k_exec,
 
 	.delay = k_delay,
 	.exit = k_exit,
-        .getmem = k_getmem,
-	
+	.getmem = k_getmem,
+
 	.putc = k_putc,
 	.getc = k_getc,
 	.poll = k_poll,
@@ -488,13 +464,15 @@ main(int argc, char** argv) {
 		printf("%s\n", dlerror());
 		return 1;
 	}
-	/* this is a hack for now */
 	Malloc_func = dlsym(dl_lib, "Malloc");
 	if (!Malloc_func) {
 		printf("%s\n", dlerror());
 		return 1;
 	}
-	/* this is a hack II for now */
+	/*
+	 * pull in the libstand setenv for setting name value pairs
+	 * in the kernel env page
+	 */
 	setenv = dlsym(dl_lib, "setenv");
 	if (!setenv) {
 		printf("%s\n", dlerror());
@@ -531,14 +509,12 @@ main(int argc, char** argv) {
 			} else {
 				fprintf(stderr,"-k failure %s\n",optarg);
 			}
-			break;	
+			break;
 
 		case '?':
 			usage();
 		}
 	}
-	
-
 
 	image_size = 128*1024*1024;
 	image = malloc(image_size);
@@ -561,20 +537,28 @@ main(int argc, char** argv) {
 
 int
 kload_load_image(void *image,unsigned long entry_pt) {
-  
+
 	struct kload kld;
 	int syscall_num = 532;
 	int flags = KLOAD_LOAD;
 	char *stack = (char *)image + 0x1000; /* PAGESIZE */
-	unsigned long  kernphys = 0x200000; /* This must the same value sys/conf/ldscript.xxx */
-	
+	/*
+	 * This must the same value sys/conf/ldscript.xxx
+	 * This value was changed at one point when a new version
+	 * of binutils was imported. The value is aligned to
+	 * max page size supported by given processor
+	 */
+	unsigned long  kernphys = 0x200000;
+
 	kld.khdr[0].k_buf = &((char *)image)[kernphys];
 	kld.khdr[0].k_memsz = roundup2(image_max_used,PAGE_SIZE) - kernphys;
 	kld.k_entry_pt = entry_pt;
 	kld.num_hdrs=1;
 
-	/* hack for now ... pull from the stack page 
-	 * fix the interface to pass as parameters
+	/*
+	 * pull paramaters from the stack page
+	 * a better interface should be developed for kload
+	 * in the future
 	 */
 	kld.k_modulep  =  ((unsigned int *)stack)[1];
 	kld.k_physfree =  ((unsigned int *)stack)[2];
@@ -602,11 +586,9 @@ kload_load_image(void *image,unsigned long entry_pt) {
 	return 1;
 }
 
-
-
 static int
 shutdown_processes(void) {
-	
+
 	int i;
 	u_int pageins;
 	int nflag = 0;
