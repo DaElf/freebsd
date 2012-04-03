@@ -90,12 +90,14 @@ name2oid(char *name, int *oidp)
 }
 
 static void
-k_putc(void *arg, int chr) {
-	write(1, &chr,1);
+k_putc(void *arg, int chr) 
+{
+	write(1, &chr, 1);
 }
 
 static int
-k_getc(void *arg) {
+k_getc(void *arg)
+{
 	char chr;
 	if(read(0,&chr,1) == 1)
 		return chr;
@@ -103,7 +105,8 @@ k_getc(void *arg) {
 }
 
 static int
-k_poll(void *arg) {
+k_poll(void *arg) 
+{
 	int n;
 	if (ioctl(0, FIONREAD, &n) >= 0)
 		return (n > 0);
@@ -111,7 +114,8 @@ k_poll(void *arg) {
 }
 
 static int
-k_open(void *arg, const char *filename, void **lf_ret) {
+k_open(void *arg, const char *filename, void **lf_ret)
+{
 	struct stat st;
 	struct load_file *lf;
 	int error = -1;
@@ -174,12 +178,14 @@ k_close(void *arg, void *h)
 }
 
 static int
-k_isdir(void *arg, void *h) {
+k_isdir(void *arg, void *h) 
+{
 	return (((struct load_file *)h)->l_isdir);
 }
 
 static int
-k_read(void *arg, void *h, void *dst, size_t size, size_t *resid_return) {
+k_read(void *arg, void *h, void *dst, size_t size, size_t *resid_return)
+{
 	struct load_file *lf = (struct load_file *)h;
 	ssize_t sz;
 
@@ -194,7 +200,8 @@ k_read(void *arg, void *h, void *dst, size_t size, size_t *resid_return) {
 
 static int
 k_readdir(void *arg, void *h, uint32_t *fileno_return, uint8_t *type_return,
-    size_t *namelen_return, char *name) {
+	  size_t *namelen_return, char *name)
+ {
 	struct load_file *lf = (struct load_file *)h;
 	struct dirent *dp;
 
@@ -220,7 +227,8 @@ k_readdir(void *arg, void *h, uint32_t *fileno_return, uint8_t *type_return,
 }
 
 static int
-k_seek(void *arg, void *h, uint64_t offset, int whence) {
+k_seek(void *arg, void *h, uint64_t offset, int whence)
+{
 	struct load_file *lf = (struct load_file *)h;
 
 	if (lf->l_isdir)
@@ -235,7 +243,8 @@ k_seek(void *arg, void *h, uint64_t offset, int whence) {
 static int
 k_stat(void *arg, void *h,
        int *mode_return, int *uid_return,
-       int *gid_return, uint64_t *size_return) {
+       int *gid_return, uint64_t *size_return)
+{
 
 	struct load_file *lf = (struct load_file *)h;
 
@@ -248,7 +257,8 @@ k_stat(void *arg, void *h,
 
 static int
 k_diskread(void *arg, int unit, uint64_t offset, void *dst, size_t size,
-    size_t *resid_return) {
+	   size_t *resid_return) 
+{
 	ssize_t n;
 
 	if (unit != 0 || disk_fd == -1)
@@ -266,8 +276,8 @@ k_diskread(void *arg, int unit, uint64_t offset, void *dst, size_t size,
  * this should be called copy_to_image
  */
 static int
-k_copy_to_image(void *arg, const void *from, uint64_t to, size_t size) {
-
+k_copy_to_image(void *arg, const void *from, uint64_t to, size_t size)
+{
 	to &= 0x7fffffff;
 	if (to > image_size)
 		return (EFAULT);
@@ -284,12 +294,12 @@ k_copy_to_image(void *arg, const void *from, uint64_t to, size_t size) {
 }
 
 /*
- * copyout is copying FROM the image at "from" offset to memory pointed to by to ptr
- * this should be copy_from_image
+ * copyout is copying FROM the image at "from" offset to memory 
+ * pointed to by to ptr this should be copy_from_image
  */
 static int
-k_copy_from_image(void *arg, uint64_t from, void *to, size_t size) {
-
+k_copy_from_image(void *arg, uint64_t from, void *to, size_t size)
+{
 	from &= 0x7fffffff;
 	if (from > image_size)
 		return (EFAULT);
@@ -301,44 +311,56 @@ k_copy_from_image(void *arg, uint64_t from, void *to, size_t size) {
 }
 
 static void
-k_setreg(void *arg, int r, uint64_t v) {
+k_setreg(void *arg, int r, uint64_t v)
+{
 	if (r < 0 || r >= 16)
 		return;
 	regs[r] = v;
 }
 
 static void
-k_setmsr(void *arg, int r, uint64_t v) { }
+k_setmsr(void *arg, int r, uint64_t v)
+{
+}
 
 static void
-k_setcr(void *arg, int r, uint64_t v) { }
+k_setcr(void *arg, int r, uint64_t v) 
+{ 
+}
 
 static void
-k_setgdt(void *arg, uint64_t v, size_t sz) { }
+k_setgdt(void *arg, uint64_t v, size_t sz) 
+{ 
+}
 
 static void
-k_exec(void *arg, uint64_t entry_pt) {
+k_exec(void *arg, uint64_t entry_pt) 
+{
 #ifdef DEBUG
 	printf("Execute at 0x%jx\n", entry_pt);
-	printf("image size max used %jd endof page %jd\n",image_max_used,roundup2(image_max_used,PAGE_SIZE));
+	printf("image size max used %jd endof page %jd\n",image_max_used,
+	       roundup2(image_max_used,PAGE_SIZE));
 #endif
 	kload_load_image(image,entry_pt);
 	k_exit(arg, 0);
 }
 
 static void
-k_delay(void *arg, int usec) {
+k_delay(void *arg, int usec) 
+{
 	usleep(usec);
 }
 
 static void
-k_exit(void *arg, int v) {
+k_exit(void *arg, int v) 
+{
 	tcsetattr(0, TCSAFLUSH, &oldterm);
 	exit(v);
 }
 
 static void
-k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem) {
+k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem)
+{
 
 	int mib[2];
 	unsigned long long physmem;
@@ -352,14 +374,13 @@ k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem) {
 	*lowmem = physmem;
 	*highmem = 0;
 
-	printf("%s:%d lowmem %ju highmem %ju\n",__FUNCTION__,__LINE__,
-	       *lowmem,
-	       *highmem
-		);
+	printf("%s:%d lowmem %ju highmem %ju\n", __FUNCTION__, __LINE__,
+	       *lowmem, *highmem);
 }
 
 static int
-k_buildsmap(void *arg, void **smap_void, size_t *outlen) {
+k_buildsmap(void *arg, void **smap_void, size_t *outlen) 
+{
 
 	size_t i,j;
 	size_t len;
@@ -404,7 +425,6 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen) {
 }
 
 struct loader_callbacks_v1 cb = {
-
 	.open = k_open,
 	.close = k_close,
 	.isdir = k_isdir,
@@ -434,13 +454,15 @@ struct loader_callbacks_v1 cb = {
 };
 
 static void
-usage(void) {
+usage(void)
+{
 	printf("usage: kload [-d <disk image path>] [-h <host filesystem path>] [-e | -r]\n");
 	exit(1);
 }
 
 int
-main(int argc, char** argv) {
+main(int argc, char** argv)
+{
 	void (*func)(struct loader_callbacks_v1 *, void *, int, int);
 	int (*setenv)(const char *, const char *, int);
 	int (*loader_init)(void);
@@ -536,7 +558,8 @@ main(int argc, char** argv) {
 }
 
 int
-kload_load_image(void *image,unsigned long entry_pt) {
+kload_load_image(void *image,unsigned long entry_pt)
+{
 
 	struct kload kld;
 	int syscall_num = 532;
@@ -587,7 +610,8 @@ kload_load_image(void *image,unsigned long entry_pt) {
 }
 
 static int
-shutdown_processes(void) {
+shutdown_processes(void) 
+{
 
 	int i;
 	u_int pageins;
@@ -658,7 +682,8 @@ shutdown_processes(void) {
 	return 1;
 restart:
 	sverrno = errno;
-	errx(1, "%s%s", kill(1, SIGHUP) == -1 ? "(can't restart init): " : "", strerror(sverrno));
+	errx(1, "%s%s", kill(1, SIGHUP) == -1 ? "(can't restart init): " : "",
+	     strerror(sverrno));
 	/* NOTREACHED */
 	return 0;
 }
