@@ -94,7 +94,9 @@ acpi_wakedata.h			optional	acpi			\
 	no-obj no-implicit-rule	before-depend				\
 	clean		"acpi_wakedata.h"
 #
-amd64/amd64/kload_exec.S	standard
+amd64/amd64/kload_exec.S	optional	kload
+amd64/amd64/kload.c		optional	kload
+
 #
 amd64/acpica/acpi_wakeup.c	optional	acpi
 amd64/amd64/amd64_mem.c		optional	mem

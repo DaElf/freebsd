@@ -900,3 +900,5 @@ RCTL		opt_global.h
 # defined, this option will suffice in overriding what Redboot says.
 AR71XX_REALMEM    opt_global.h
 
+KLOAD		  opt_global.h
+
