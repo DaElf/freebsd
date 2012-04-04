@@ -3648,8 +3648,11 @@ re_shutdown(device_t dev)
 
 	sc = device_get_softc(dev);
 
+	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	RL_LOCK(sc);
 	re_stop(sc);
+	/* put into known state */
+	re_reset(sc);
 	/*
 	 * Mark interface as down since otherwise we will panic if
 	 * interrupt comes in later on, which can happen in some
