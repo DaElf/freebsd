@@ -177,7 +177,8 @@ static device_method_t nexus_methods[] = {
 DEFINE_CLASS_0(nexus, nexus_driver, nexus_methods, 1);
 static devclass_t nexus_devclass;
 
-DRIVER_MODULE(nexus, root, nexus_driver, nexus_devclass, 0, 0);
+EARLY_DRIVER_MODULE(nexus, root, nexus_driver, nexus_devclass, 0, 0,
+    BUS_PASS_BUS);
 
 static int
 nexus_probe(device_t dev)
@@ -279,7 +280,7 @@ nexus_attach(device_t dev)
 	 * types (such as ACPI), use their own nexus(4) subclass
 	 * driver to override this routine and add their own root bus.
 	 */
-	if (BUS_ADD_CHILD(dev, 10, "legacy", 0) == NULL)
+	if (BUS_ADD_CHILD(dev, 0, "legacy", 0) == NULL)
 		panic("legacy: could not attach");
 	bus_generic_attach(dev);
 	return 0;
@@ -772,7 +773,8 @@ static driver_t ram_driver = {
 
 static devclass_t ram_devclass;
 
-DRIVER_MODULE(ram, nexus, ram_driver, ram_devclass, 0, 0);
+EARLY_DRIVER_MODULE(ram, nexus, ram_driver, ram_devclass, 0, 0,
+    BUS_PASS_RESOURCE);
 
 #ifdef DEV_ISA
 /*
@@ -821,5 +823,6 @@ static driver_t sysresource_driver = {
 
 static devclass_t sysresource_devclass;
 
-DRIVER_MODULE(sysresource, isa, sysresource_driver, sysresource_devclass, 0, 0);
+EARLY_DRIVER_MODULE(sysresource, isa, sysresource_driver, sysresource_devclass,
+    0, 0, BUS_PASS_RESOURCE - 1);
 #endif /* DEV_ISA */

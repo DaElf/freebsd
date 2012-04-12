@@ -263,7 +263,8 @@ static driver_t acpi_ec_driver = {
 };
 
 static devclass_t acpi_ec_devclass;
-DRIVER_MODULE(acpi_ec, acpi, acpi_ec_driver, acpi_ec_devclass, 0, 0);
+EARLY_DRIVER_MODULE(acpi_ec, acpi, acpi_ec_driver, acpi_ec_devclass, 0, 0,
+    BUS_PASS_SCHEDULER);
 MODULE_DEPEND(acpi_ec, acpi, 1, 1, 1);
 
 /*

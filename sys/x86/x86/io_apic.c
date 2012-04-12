@@ -856,12 +856,8 @@ static void
 apic_identify(driver_t *driver, device_t parent)
 {
 
-	/*
-	 * Add at order 12.  acpi0 is probed at order 10 and legacy0
-	 * is probed at order 11.
-	 */
 	if (lapic_paddr != 0)
-		BUS_ADD_CHILD(parent, 12, "apic", 0);
+		BUS_ADD_CHILD(parent, 0, "apic", 0);
 }
 
 static int
@@ -921,4 +917,5 @@ static device_method_t apic_methods[] = {
 DEFINE_CLASS_0(apic, apic_driver, apic_methods, 0);
 
 static devclass_t apic_devclass;
-DRIVER_MODULE(apic, nexus, apic_driver, apic_devclass, 0, 0);
+EARLY_DRIVER_MODULE(apic, nexus, apic_driver, apic_devclass, 0, 0,
+    BUS_PASS_RESOURCE);

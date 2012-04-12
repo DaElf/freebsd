@@ -73,7 +73,8 @@ static driver_t eisab_driver = {
 
 static devclass_t eisab_devclass;
 
-DRIVER_MODULE(eisab, pci, eisab_driver, eisab_devclass, 0, 0);
+EARLY_DRIVER_MODULE(eisab, pci, eisab_driver, eisab_devclass, 0, 0,
+    BUS_PASS_BUS);
 
 static int
 eisab_probe(device_t dev)

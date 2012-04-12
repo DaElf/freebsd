@@ -375,7 +375,7 @@ nexus_acpi_attach(device_t dev)
 
 	nexus_init_resources();
 	bus_generic_probe(dev);
-	if (BUS_ADD_CHILD(dev, 10, "acpi", 0) == NULL)
+	if (BUS_ADD_CHILD(dev, 0, "acpi", 0) == NULL)
 		panic("failed to add acpi0 device");
 
 	return (bus_generic_attach(dev));
@@ -392,4 +392,5 @@ static device_method_t nexus_acpi_methods[] = {
 DEFINE_CLASS_1(nexus, nexus_acpi_driver, nexus_acpi_methods, 1, nexus_driver);
 static devclass_t nexus_devclass;
 
-DRIVER_MODULE(nexus_acpi, root, nexus_acpi_driver, nexus_devclass, 0, 0);
+EARLY_DRIVER_MODULE(nexus_acpi, root, nexus_acpi_driver, nexus_devclass, 0, 0,
+    BUS_PASS_BUS);

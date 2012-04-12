@@ -227,7 +227,8 @@ static driver_t acpi_driver = {
 };
 
 static devclass_t acpi_devclass;
-DRIVER_MODULE(acpi, nexus, acpi_driver, acpi_devclass, acpi_modevent, 0);
+EARLY_DRIVER_MODULE(acpi, nexus, acpi_driver, acpi_devclass, acpi_modevent, 0,
+    BUS_PASS_BUS);
 MODULE_VERSION(acpi, 1);
 
 ACPI_SERIAL_DECL(acpi, "ACPI root bus");

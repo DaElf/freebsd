@@ -339,7 +339,7 @@ hpet_identify(driver_t *driver, device_t parent)
 		if (found)
 			continue;
 		/* If not - create it from table info. */
-		child = BUS_ADD_CHILD(parent, 2, "hpet", 0);
+		child = BUS_ADD_CHILD(parent, 0, "hpet", 0);
 		if (child == NULL) {
 			printf("%s: can't add child\n", __func__);
 			continue;
@@ -851,5 +851,6 @@ static driver_t	hpet_driver = {
 	sizeof(struct hpet_softc),
 };
 
-DRIVER_MODULE(hpet, acpi, hpet_driver, hpet_devclass, 0, 0);
+EARLY_DRIVER_MODULE(hpet, acpi, hpet_driver, hpet_devclass, 0, 0,
+    BUS_PASS_TIMER);
 MODULE_DEPEND(hpet, acpi, 1, 1, 1);

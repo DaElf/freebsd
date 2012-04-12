@@ -208,7 +208,8 @@ static driver_t acpi_cpu_driver = {
 };
 
 static devclass_t acpi_cpu_devclass;
-DRIVER_MODULE(cpu, acpi, acpi_cpu_driver, acpi_cpu_devclass, 0, 0);
+EARLY_DRIVER_MODULE(cpu, acpi, acpi_cpu_driver, acpi_cpu_devclass, 0, 0,
+    BUS_PASS_CPU);
 MODULE_DEPEND(cpu, acpi, 1, 1, 1);
 
 static int

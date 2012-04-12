@@ -85,7 +85,8 @@ static driver_t acpi_isab_driver = {
 	sizeof(struct acpi_isab_softc),
 };
 
-DRIVER_MODULE(acpi_isab, acpi, acpi_isab_driver, isab_devclass, 0, 0);
+EARLY_DRIVER_MODULE(acpi_isab, acpi, acpi_isab_driver, isab_devclass, 0, 0,
+    BUS_PASS_BUS);
 MODULE_DEPEND(acpi_isab, acpi, 1, 1, 1);
 
 static int

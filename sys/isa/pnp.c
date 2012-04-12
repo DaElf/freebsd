@@ -824,4 +824,4 @@ static driver_t pnp_driver = {
 
 static devclass_t pnp_devclass;
 
-DRIVER_MODULE(pnp, isa, pnp_driver, pnp_devclass, 0, 0);
+EARLY_DRIVER_MODULE(pnp, isa, pnp_driver, pnp_devclass, 0, 0, BUS_PASS_BUS);

@@ -108,7 +108,8 @@ static driver_t legacy_driver = {
 };
 static devclass_t legacy_devclass;
 
-DRIVER_MODULE(legacy, nexus, legacy_driver, legacy_devclass, 0, 0);
+EARLY_DRIVER_MODULE(legacy, nexus, legacy_driver, legacy_devclass, 0, 0,
+    BUS_PASS_BUS);
 
 static int
 legacy_probe(device_t dev)
@@ -296,7 +297,7 @@ static driver_t cpu_driver = {
 	1,		/* no softc */
 };
 static devclass_t cpu_devclass;
-DRIVER_MODULE(cpu, legacy, cpu_driver, cpu_devclass, 0, 0);
+EARLY_DRIVER_MODULE(cpu, legacy, cpu_driver, cpu_devclass, 0, 0, BUS_PASS_CPU);
 
 static void
 cpu_identify(driver_t *driver, device_t parent)
@@ -304,13 +305,8 @@ cpu_identify(driver_t *driver, device_t parent)
 	device_t child;
 	int i;
 
-	/*
-	 * Attach a cpuX device for each CPU.  We use an order of 150
-	 * so that these devices are attached after the Host-PCI
-	 * bridges (which are added at order 100).
-	 */
 	CPU_FOREACH(i) {
-		child = BUS_ADD_CHILD(parent, 150, "cpu", i);
+		child = BUS_ADD_CHILD(parent, 0, "cpu", i);
 		if (child == NULL)
 			panic("legacy_attach cpu");
 	}

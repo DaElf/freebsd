@@ -458,12 +458,7 @@ legacy_pcib_identify(driver_t *driver, device_t parent)
 
 			if (s == NULL)
 				continue;
-			/*
-			 * Add at priority 100 to make sure we
-			 * go after any motherboard resources
-			 */
-			child = BUS_ADD_CHILD(parent, 100,
-					      "pcib", busnum);
+			child = BUS_ADD_CHILD(parent, 0, "pcib", busnum);
 			device_set_desc(child, s);
 			legacy_set_pcibus(child, busnum);
 			legacy_set_pcislot(child, slot);
@@ -490,7 +485,7 @@ legacy_pcib_identify(driver_t *driver, device_t parent)
 		if (bootverbose)
 			printf(
 	"legacy_pcib_identify: no bridge found, adding pcib0 anyway\n");
-		child = BUS_ADD_CHILD(parent, 100, "pcib", 0);
+		child = BUS_ADD_CHILD(parent, 0, "pcib", 0);
 		legacy_set_pcibus(child, 0);
 	}
 }
@@ -639,7 +634,8 @@ static device_method_t legacy_pcib_methods[] = {
 static devclass_t hostb_devclass;
 
 DEFINE_CLASS_0(pcib, legacy_pcib_driver, legacy_pcib_methods, 1);
-DRIVER_MODULE(pcib, legacy, legacy_pcib_driver, hostb_devclass, 0, 0);
+EARLY_DRIVER_MODULE(pcib, legacy, legacy_pcib_driver, hostb_devclass, 0, 0,
+    BUS_PASS_BUS);
 
 
 /*
@@ -712,7 +708,8 @@ static devclass_t pcib_devclass;
 
 DEFINE_CLASS_1(pcib, pcibios_pcib_driver, pcibios_pcib_pci_methods,
     sizeof(struct pcib_softc), pcib_driver);
-DRIVER_MODULE(pcibios_pcib, pci, pcibios_pcib_driver, pcib_devclass, 0, 0);
+EARLY_DRIVER_MODULE(pcibios_pcib, pci, pcibios_pcib_driver, pcib_devclass, 0, 0,
+    BUS_PASS_BUS);
 
 static int
 pcibios_pcib_probe(device_t dev)

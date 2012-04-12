@@ -478,4 +478,5 @@ static driver_t vga_pci_driver = {
 
 static devclass_t vga_devclass;
 
-DRIVER_MODULE(vgapci, pci, vga_pci_driver, vga_devclass, 0, 0);
+EARLY_DRIVER_MODULE(vgapci, pci, vga_pci_driver, vga_devclass, 0, 0,
+    BUS_PASS_BUS);

@@ -100,7 +100,7 @@ static device_method_t pcib_methods[] = {
 static devclass_t pcib_devclass;
 
 DEFINE_CLASS_0(pcib, pcib_driver, pcib_methods, sizeof(struct pcib_softc));
-DRIVER_MODULE(pcib, pci, pcib_driver, pcib_devclass, 0, 0);
+EARLY_DRIVER_MODULE(pcib, pci, pcib_driver, pcib_devclass, 0, 0, BUS_PASS_BUS);
 
 #ifdef NEW_PCIB
 /*
