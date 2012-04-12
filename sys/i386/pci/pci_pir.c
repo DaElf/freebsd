@@ -752,4 +752,10 @@ static driver_t pir_driver = {
 
 static devclass_t pir_devclass;
 
-DRIVER_MODULE(pir, legacy, pir_driver, pir_devclass, 0, 0);
+/*
+ * XXX: This has to be BUS_PASS_BUS for now.  It should really be
+ * BUS_PASS_INTERRUPT, but we can't do that until we rework PCI to
+ * not route interrupts until after BUS_PASS_INTERRUPT.
+ */
+EARLY_DRIVER_MODULE(pir, legacy, pir_driver, pir_devclass, 0, 0,
+    BUS_PASS_BUS);

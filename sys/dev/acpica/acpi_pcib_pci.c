@@ -90,7 +90,8 @@ static devclass_t pcib_devclass;
 
 DEFINE_CLASS_1(pcib, acpi_pcib_pci_driver, acpi_pcib_pci_methods,
     sizeof(struct acpi_pcib_softc), pcib_driver);
-DRIVER_MODULE(acpi_pcib, pci, acpi_pcib_pci_driver, pcib_devclass, 0, 0);
+EARLY_DRIVER_MODULE(acpi_pcib, pci, acpi_pcib_pci_driver, pcib_devclass, 0, 0,
+    BUS_PASS_BUS);
 MODULE_DEPEND(acpi_pcib, acpi, 1, 1, 1);
 
 static int
