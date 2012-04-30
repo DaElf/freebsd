@@ -606,7 +606,6 @@ kload_load_image(void *image,unsigned long entry_pt)
 	}
 
 	return syscall (syscall_num,&kld,sizeof(struct kload),flags);
-	return 1;
 }
 
 static int
@@ -614,20 +613,14 @@ shutdown_processes(void)
 {
 
 	int i;
-	u_int pageins;
 	int nflag = 0;
 	int sverrno;
-	/*
-	 * Do a sync early on, so disks start transfers while we're off
-	 * killing processes.  Don't worry about writes done before the
-	 * processes die, the reboot system call syncs the disks.
-	 */
-	if (!nflag)
-		sync();
+	
+	sync();
 
 	/*
 	 * Ignore signals that we can get as a result of killing
-	 * parents, group leaders, etc.
+	 * parents, group leaders, etc.:1
 	 */
 	(void)signal(SIGHUP,  SIG_IGN);
 	(void)signal(SIGINT,  SIG_IGN);

@@ -1,7 +1,10 @@
-	/* Must be relocatable PIC code callable as a C function, that once
-	 * it starts can not use the previous processes stack.
-	 *
-	 */
+/*
+ * Russell Cattelan
+ *	Digital Elves Inc 2011 - 2012
+ * Copyright (c) 2011 - 2012
+ *	Isilon Systems, Inc.  All rights reserved.
+ */
+
 #include "assym.s"
 
 #define	CR0_PG		0x80000000 /* PaGing enable */
@@ -21,12 +24,11 @@
 #define X86_CR4_PSE	0x00000010 /* enable page size extensions */
 #define X86_CR4_PAE	0x00000020 /* enable physical address extensions */
 
-
-	.globl relocate_kernel
+	.globl	relocate_kernel
 relocate_kernel:
-	// first install the new page table
-	movq	32(%rcx), %rax // page table
-	movq 	40(%rcx), %r9  // address of control_page with new PT
+	/* first install the new page table */
+	movq	32(%rcx), %rax /* page table */
+	movq	40(%rcx), %r9  /* address of control_page with new PT */
 	movq	%rax, %cr3
 
 	/*
@@ -37,38 +39,40 @@ relocate_kernel:
 	movq	$(X86_CR4_PSE | X86_CR4_PAE), %rax
 	movq	%rax, %cr4
 
+	/* then move the stack to the end of control page */
+	lea	4096(%r9), %rsp
 
-	// then move the stack to the end of control page
-	lea 4096(%r9), %rsp
-
-	// now save stuff onto the new stack
-	pushq %rcx	// arg 4 control page
-	pushq %rdx	// arg 3 code page
-	pushq %rsi	// arg 2 kern base
-	pushq %rdi	// arg 1 va_list
+	/* now save stuff onto the new stack */
+	pushq	%rcx	/* arg 4 control page */
+	pushq	%rdx	/* arg 3 code page */
+	pushq	%rsi	/* arg 2 kern base */
+	pushq	%rdi	/* arg 1 va_list */
 
 	/* zero out flags, and disable interrupts */
-	pushq $0
+	pushq	$0
 	popfq
 	cli
 
 	/* install simple gdt */
-	movq	24(%r9), %rax	// gdt
+	movq	24(%r9), %rax	/* gdt */
 	lgdt	(%rax)
 	movq	56(%r9), %rax
-	lidt	(%rax) 	// null idt
-	// now move to the code page
-	// should have been passed code_page based on new PT
-	movq %rdx, %r8
+	lidt	(%rax)		/* null idt */
+	/*
+	 * now move to the code page
+	 * should have been passed code_page based
+	 * on new page table
+	 */
+	movq	%rdx, %r8
 	addq	$(identity_mapped - relocate_kernel), %r8
 	/* offset of code segment in new gdt */
-	pushq $0x08
-	pushq %r8
-	// jump to this spot in the new page
+	pushq	$0x08
+	pushq	%r8
+	/* jump to this spot in the new page */
 	lretq
 identity_mapped:
 
-	movq $0x10,%rax
+	movq	$0x10,%rax
 	movq %rax,%ds
 	movq %rax,%es
 	movq %rax,%fs
@@ -92,45 +96,46 @@ identity_mapped:
 	/* Do the copies */
 	cld
 	/* saved list of source pages */
-	movq 0(%rsp), %rbx
-	/* the initial dest page
-	* this is KERNBASE + 0x200000
-	* kernel is contigious in memory
+	movq	0(%rsp), %rbx
+	/*
+	 * the initial dest page
+	 * this is KERNBASE + 0x200000
+	 * kernel is contigious in memory
 	*/
-	movq 8(%rsp), %rdi
+	movq	8(%rsp), %rdi
 0:	/* top, read another word for the indirection page */
 	movq	(%rbx), %rcx
 
 	addq	$8, %rbx
-	testq	$0x1,   %rcx  /* is it a destination page */
+	testq	$0x1,   %rcx	/* is it a destination page */
 	jz	1f
 	movq	%rcx,	%rdi
 	andq	$0xFFFFFFFFfffff000, %rdi
 	jmp     0b
 1:
-	testq	$0x2,	%rcx  /* is it an indirection page */
+	testq	$0x2,	%rcx	/* is it an indirection page */
 	jz	1f
 	movq	%rcx,	%rbx
 	andq	$0xFFFFFFFFfffff000, %rbx
 	jmp     0b
 1:
-	testq   $0x4,   %rcx /* is it the done indicator */
+	testq   $0x4,   %rcx	/* is it the done indicator */
 	jz      1f
 	jmp     2f
 1:
-	testq   $0x8,   %rcx /* is it the source indicator */
-	jz      0b	     /* Ignore it otherwise */
-	movq    %rcx,   %rsi /* For every source page do a copy */
+	testq   $0x8,   %rcx	/* is it the source indicator */
+	jz      0b		/* Ignore it otherwise */
+	movq    %rcx,   %rsi	/* For every source page do a copy */
 	andq    $0xfffffffffffff000, %rsi
 	movq    $512, %rcx
 	rep
 	movsq
-
 	jmp     0b
-
 2:
-	/* set all of the registers to known values */
-	/* leave %rsp alone */
+	/*
+	 * set all of the registers to known values
+	 * leave %rsp alone
+	 */
 	xorq	%rax, %rax
 	xorq	%rbx, %rbx
 	xorq    %rcx, %rcx
@@ -139,17 +144,15 @@ identity_mapped:
 	xorq    %rdi, %rdi
 	xorq    %rbp, %rbp
 
-	pushq	16(%r9)		// physfree
-	movq	8(%r9), %rax	//modulep
+	pushq	16(%r9)		/* physfree */
+	movq	8(%r9), %rax	/* modulep */
 	salq	$32, %rax
 	pushq	%rax
 
-	pushq $0x8
-	pushq 48(%r9) 	// entry # kernel entry pt
+	pushq	$0x8
+	pushq	48(%r9)		/* entry # kernel entry pt */
 	lretq
-
 relocate_kernel_end:
-
 	.globl relocate_kernel_size
 relocate_kernel_size:
 	.long relocate_kernel_end - relocate_kernel
