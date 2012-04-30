@@ -29,6 +29,8 @@
 __FBSDID("$FreeBSD$");
 
 #include "opt_compat.h"
+#include "opt_umtx_profiling.h"
+
 #include <sys/param.h>
 #include <sys/kernel.h>
 #include <sys/limits.h>
@@ -154,6 +156,10 @@ struct umtxq_chain {
 	/* All PI in the list */
 	TAILQ_HEAD(,umtx_pi)	uc_pi_list;
 
+#ifdef UMTX_PROFILING
+	int 			length;
+	int			max_length;
+#endif
 };
 
 #define	UMTXQ_LOCKED_ASSERT(uc)		mtx_assert(&(uc)->uc_lock, MA_OWNED)
@@ -190,6 +196,12 @@ SYSCTL_NODE(_debug, OID_AUTO, umtx, CTLFLAG_RW, 0, "umtx debug");
 SYSCTL_INT(_debug_umtx, OID_AUTO, umtx_pi_allocated, CTLFLAG_RD,
     &umtx_pi_allocated, 0, "Allocated umtx_pi");
 
+#ifdef UMTX_PROFILING
+static long max_length;
+SYSCTL_LONG(_debug_umtx, OID_AUTO, max_length, CTLFLAG_RD, &max_length, 0, "max_length");
+static SYSCTL_NODE(_debug_umtx, OID_AUTO, chains, CTLFLAG_RD, 0, "umtx chain stats");
+#endif
+
 static void umtxq_sysinit(void *);
 static void umtxq_hash(struct umtx_key *key);
 static struct umtxq_chain *umtxq_getchain(struct umtx_key *key);
@@ -215,6 +227,27 @@ SYSINIT(umtx, SI_SUB_EVENTHANDLER+1, SI_ORDER_MIDDLE, umtxq_sysinit, NULL);
 
 static struct mtx umtx_lock;
 
+#ifdef UMTX_PROFILING
+static void
+umtx_init_profiling(void) 
+{
+	struct sysctl_oid *chain_oid;
+	char chain_name[10];
+	int i;
+
+	for (i = 0; i < UMTX_CHAINS; ++i) {
+		snprintf(chain_name, sizeof(chain_name), "%d", i);
+		chain_oid = SYSCTL_ADD_NODE(NULL, 
+		    SYSCTL_STATIC_CHILDREN(_debug_umtx_chains), OID_AUTO, 
+		    chain_name, CTLFLAG_RD, NULL, "umtx hash stats");
+		SYSCTL_ADD_INT(NULL, SYSCTL_CHILDREN(chain_oid), OID_AUTO,
+		    "max_length0", CTLFLAG_RD, &umtxq_chains[0][i].max_length, 0, NULL);
+		SYSCTL_ADD_INT(NULL, SYSCTL_CHILDREN(chain_oid), OID_AUTO,
+		    "max_length1", CTLFLAG_RD, &umtxq_chains[1][i].max_length, 0, NULL);
+	}
+}
+#endif
+
 static void
 umtxq_sysinit(void *arg __unused)
 {
@@ -232,8 +265,15 @@ umtxq_sysinit(void *arg __unused)
 			TAILQ_INIT(&umtxq_chains[i][j].uc_pi_list);
 			umtxq_chains[i][j].uc_busy = 0;
 			umtxq_chains[i][j].uc_waiters = 0;
+#ifdef UMTX_PROFILING
+			umtxq_chains[i][j].length = 0;
+			umtxq_chains[i][j].max_length = 0;	
+#endif
 		}
 	}
+#ifdef UMTX_PROFILING
+	umtx_init_profiling();
+#endif
 	mtx_init(&umtx_lock, "umtx lock", NULL, MTX_SPIN);
 	EVENTHANDLER_REGISTER(process_exec, umtx_exec_hook, NULL,
 	    EVENTHANDLER_PRI_ANY);
@@ -384,6 +424,14 @@ umtxq_insert_queue(struct umtx_q *uq, int q)
 
 	TAILQ_INSERT_TAIL(&uh->head, uq, uq_link);
 	uh->length++;
+#ifdef UMTX_PROFILING
+	uc->length++;
+	if (uc->length > uc->max_length) {
+		uc->max_length = uc->length;
+		if (uc->max_length > max_length)
+			max_length = uc->max_length;	
+	}
+#endif
 	uq->uq_flags |= UQF_UMTXQ;
 	uq->uq_cur_queue = uh;
 	return;
@@ -401,6 +449,9 @@ umtxq_remove_queue(struct umtx_q *uq, int q)
 		uh = uq->uq_cur_queue;
 		TAILQ_REMOVE(&uh->head, uq, uq_link);
 		uh->length--;
+#ifdef UMTX_PROFILING
+		uc->length--;
+#endif
 		uq->uq_flags &= ~UQF_UMTXQ;
 		if (TAILQ_EMPTY(&uh->head)) {
 			KASSERT(uh->length == 0,
@@ -1274,6 +1325,78 @@ do_wake_umutex(struct thread *td, struct umutex *m)
 	umtxq_unlock(&key);
 	umtx_key_release(&key);
 	return (0);
+}
+
+/*
+ * Check if the mutex has waiters and tries to fix contention bit.
+ */
+static int
+do_wake2_umutex(struct thread *td, struct umutex *m, uint32_t flags)
+{
+	struct umtx_key key;
+	uint32_t owner, old;
+	int type;
+	int error;
+	int count;
+
+	switch(flags & (UMUTEX_PRIO_INHERIT | UMUTEX_PRIO_PROTECT)) {
+	case 0:
+		type = TYPE_NORMAL_UMUTEX;
+		break;
+	case UMUTEX_PRIO_INHERIT:
+		type = TYPE_PI_UMUTEX;
+		break;
+	case UMUTEX_PRIO_PROTECT:
+		type = TYPE_PP_UMUTEX;
+		break;
+	default:
+		return (EINVAL);
+	}
+	if ((error = umtx_key_get(m, type, GET_SHARE(flags),
+	    &key)) != 0)
+		return (error);
+
+	owner = 0;
+	umtxq_lock(&key);
+	umtxq_busy(&key);
+	count = umtxq_count(&key);
+	umtxq_unlock(&key);
+	/*
+	 * Only repair contention bit if there is a waiter, this means the mutex
+	 * is still being referenced by userland code, otherwise don't update
+	 * any memory.
+	 */
+	if (count > 1) {
+		owner = fuword32(__DEVOLATILE(uint32_t *, &m->m_owner));
+		while ((owner & UMUTEX_CONTESTED) ==0) {
+			old = casuword32(&m->m_owner, owner,
+			    owner|UMUTEX_CONTESTED);
+			if (old == owner)
+				break;
+			owner = old;
+		}
+	} else if (count == 1) {
+		owner = fuword32(__DEVOLATILE(uint32_t *, &m->m_owner));
+		while ((owner & ~UMUTEX_CONTESTED) != 0 &&
+		       (owner & UMUTEX_CONTESTED) == 0) {
+			old = casuword32(&m->m_owner, owner,
+			    owner|UMUTEX_CONTESTED);
+			if (old == owner)
+				break;
+			owner = old;
+		}
+	}
+	umtxq_lock(&key);
+	if (owner == -1) {
+		error = EFAULT;
+		umtxq_signal(&key, INT_MAX);
+	}
+	else if (count != 0 && (owner & ~UMUTEX_CONTESTED) == 0)
+		umtxq_signal(&key, 1);
+	umtxq_unbusy(&key);
+	umtxq_unlock(&key);
+	umtx_key_release(&key);
+	return (error);
 }
 
 static inline struct umtx_pi *
@@ -3183,6 +3306,12 @@ __umtx_op_sem_wake(struct thread *td, struct _umtx_op_args *uap)
 	return do_sem_wake(td, uap->obj);
 }
 
+static int
+__umtx_op_wake2_umutex(struct thread *td, struct _umtx_op_args *uap)
+{
+	return do_wake2_umutex(td, uap->obj, uap->val);
+}
+
 typedef int (*_umtx_op_func)(struct thread *td, struct _umtx_op_args *uap);
 
 static _umtx_op_func op_table[] = {
@@ -3207,7 +3336,8 @@ static _umtx_op_func op_table[] = {
 	__umtx_op_wake_umutex,		/* UMTX_OP_UMUTEX_WAKE */
 	__umtx_op_sem_wait,		/* UMTX_OP_SEM_WAIT */
 	__umtx_op_sem_wake,		/* UMTX_OP_SEM_WAKE */
-	__umtx_op_nwake_private		/* UMTX_OP_NWAKE_PRIVATE */
+	__umtx_op_nwake_private,	/* UMTX_OP_NWAKE_PRIVATE */
+	__umtx_op_wake2_umutex		/* UMTX_OP_UMUTEX_WAKE2 */
 };
 
 int
@@ -3473,7 +3603,8 @@ static _umtx_op_func op_table_compat32[] = {
 	__umtx_op_wake_umutex,		/* UMTX_OP_UMUTEX_WAKE */
 	__umtx_op_sem_wait_compat32,	/* UMTX_OP_SEM_WAIT */
 	__umtx_op_sem_wake,		/* UMTX_OP_SEM_WAKE */
-	__umtx_op_nwake_private32	/* UMTX_OP_NWAKE_PRIVATE */
+	__umtx_op_nwake_private32,	/* UMTX_OP_NWAKE_PRIVATE */
+	__umtx_op_wake2_umutex		/* UMTX_OP_UMUTEX_WAKE2 */
 };
 
 int

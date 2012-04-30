@@ -1425,6 +1425,7 @@ cpususpend_handler(void)
 	} else {
 		pmap_init_pat();
 		load_cr3(susppcbs[cpu]->pcb_cr3);
+		initializecpu();
 		PCPU_SET(switchtime, 0);
 		PCPU_SET(switchticks, ticks);
 	}
@@ -1474,6 +1475,8 @@ mp_ipi_intrcnt(void *dummy)
 		intrcnt_add(buf, &ipi_invlrng_counts[i]);
 		snprintf(buf, sizeof(buf), "cpu%d:invlpg", i);
 		intrcnt_add(buf, &ipi_invlpg_counts[i]);
+		snprintf(buf, sizeof(buf), "cpu%d:invlcache", i);
+		intrcnt_add(buf, &ipi_invlcache_counts[i]);
 		snprintf(buf, sizeof(buf), "cpu%d:preempt", i);
 		intrcnt_add(buf, &ipi_preempt_counts[i]);
 		snprintf(buf, sizeof(buf), "cpu%d:ast", i);

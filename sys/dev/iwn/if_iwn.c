@@ -118,9 +118,9 @@ static int	iwn5000_attach(struct iwn_softc *, uint16_t);
 static void	iwn_radiotap_attach(struct iwn_softc *);
 static void	iwn_sysctlattach(struct iwn_softc *);
 static struct ieee80211vap *iwn_vap_create(struct ieee80211com *,
-		    const char name[IFNAMSIZ], int unit, int opmode,
-		    int flags, const uint8_t bssid[IEEE80211_ADDR_LEN],
-		    const uint8_t mac[IEEE80211_ADDR_LEN]);
+		    const char [IFNAMSIZ], int, enum ieee80211_opmode, int,
+		    const uint8_t [IEEE80211_ADDR_LEN],
+		    const uint8_t [IEEE80211_ADDR_LEN]);
 static void	iwn_vap_delete(struct ieee80211vap *);
 static int	iwn_detach(device_t);
 static int	iwn_shutdown(device_t);
@@ -847,8 +847,8 @@ iwn_sysctlattach(struct iwn_softc *sc)
 }
 
 static struct ieee80211vap *
-iwn_vap_create(struct ieee80211com *ic,
-    const char name[IFNAMSIZ], int unit, int opmode, int flags,
+iwn_vap_create(struct ieee80211com *ic, const char name[IFNAMSIZ], int unit,
+    enum ieee80211_opmode opmode, int flags,
     const uint8_t bssid[IEEE80211_ADDR_LEN],
     const uint8_t mac[IEEE80211_ADDR_LEN])
 {
@@ -947,13 +947,9 @@ static int
 iwn_suspend(device_t dev)
 {
 	struct iwn_softc *sc = device_get_softc(dev);
-	struct ifnet *ifp = sc->sc_ifp;
-	struct ieee80211com *ic = ifp->if_l2com;
-	struct ieee80211vap *vap = TAILQ_FIRST(&ic->ic_vaps);
+	struct ieee80211com *ic = sc->sc_ifp->if_l2com;
 
-	iwn_stop(sc);
-	if (vap != NULL)
-		ieee80211_stop(vap);
+	ieee80211_suspend_all(ic);
 	return 0;
 }
 
@@ -961,20 +957,12 @@ static int
 iwn_resume(device_t dev)
 {
 	struct iwn_softc *sc = device_get_softc(dev);
-	struct ifnet *ifp = sc->sc_ifp;
-	struct ieee80211com *ic = ifp->if_l2com;
-	struct ieee80211vap *vap = TAILQ_FIRST(&ic->ic_vaps);
+	struct ieee80211com *ic = sc->sc_ifp->if_l2com;
 
 	/* Clear device-specific "PCI retry timeout" register (41h). */
 	pci_write_config(dev, 0x41, 0, 1);
 
-	if (ifp->if_flags & IFF_UP) {
-		iwn_init(sc);
-		if (vap != NULL)
-			ieee80211_init(vap);
-		if (ifp->if_drv_flags & IFF_DRV_RUNNING)
-			iwn_start(ifp);
-	}
+	ieee80211_resume_all(ic);
 	return 0;
 }
 
