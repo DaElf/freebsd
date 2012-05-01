@@ -179,7 +179,8 @@ static driver_t mpt_driver = {
 	"mpt", mpt_methods, sizeof(struct mpt_softc)
 };
 static devclass_t mpt_devclass;
-DRIVER_MODULE(mpt, pci, mpt_driver, mpt_devclass, NULL, NULL);
+EARLY_DRIVER_MODULE(mpt, pci, mpt_driver, mpt_devclass, NULL, NULL,
+		    BUS_PASS_DISK);
 MODULE_DEPEND(mpt, pci, 1, 1, 1);
 MODULE_VERSION(mpt, 1);
 

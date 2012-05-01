@@ -866,7 +866,7 @@ static driver_t ahci_driver = {
         ahci_methods,
         sizeof(struct ahci_controller)
 };
-DRIVER_MODULE(ahci, pci, ahci_driver, ahci_devclass, 0, 0);
+EARLY_DRIVER_MODULE(ahci, pci, ahci_driver, ahci_devclass, 0, 0, BUS_PASS_DISK);
 static device_method_t ahci_ata_methods[] = {
 	DEVMETHOD(device_probe,     ahci_ata_probe),
 	DEVMETHOD(device_attach,    ahci_attach),
@@ -1179,7 +1179,7 @@ static driver_t ahcich_driver = {
         ahcich_methods,
         sizeof(struct ahci_channel)
 };
-DRIVER_MODULE(ahcich, ahci, ahcich_driver, ahcich_devclass, 0, 0);
+EARLY_DRIVER_MODULE(ahcich, ahci, ahcich_driver, ahcich_devclass, 0, 0, BUS_PASS_DISK);
 
 static void
 ahci_ch_setleds(device_t dev)

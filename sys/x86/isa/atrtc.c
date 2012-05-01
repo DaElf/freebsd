@@ -386,8 +386,8 @@ static driver_t atrtc_driver = {
 
 static devclass_t atrtc_devclass;
 
-DRIVER_MODULE(atrtc, isa, atrtc_driver, atrtc_devclass, 0, 0);
-DRIVER_MODULE(atrtc, acpi, atrtc_driver, atrtc_devclass, 0, 0);
+EARLY_DRIVER_MODULE(atrtc,  isa, atrtc_driver, atrtc_devclass, 0, 0, BUS_PASS_TIMER);
+EARLY_DRIVER_MODULE(atrtc, acpi, atrtc_driver, atrtc_devclass, 0, 0, BUS_PASS_TIMER);
 
 #include "opt_ddb.h"
 #ifdef DDB

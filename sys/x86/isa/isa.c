@@ -240,4 +240,5 @@ isa_release_resource(device_t bus, device_t child, int type, int rid,
 /*
  * On this platform, isa can also attach to the legacy bus.
  */
-DRIVER_MODULE(isa, legacy, isa_driver, isa_devclass, 0, 0);
+EARLY_DRIVER_MODULE(isa, legacy, isa_driver, isa_devclass, 0, 0,
+		    BUS_PASS_RESOURCE);

@@ -564,7 +564,10 @@ void	bus_data_generation_update(void);
 #define	BUS_PASS_INTERRUPT	40	/* Interrupt controllers. */
 #define	BUS_PASS_TIMER		50	/* Timers and clocks. */
 #define	BUS_PASS_SCHEDULER	60	/* Start scheduler. */
-#define	BUS_PASS_DEFAULT	__INT_MAX /* Everything else. */
+#define	BUS_PASS_DISK		70	/* Start Disk controllers . */
+#define	BUS_PASS_NET		80	/* Start network. */
+//#define	BUS_PASS_DEFAULT	__INT_MAX /* Everything else. */
+#define	BUS_PASS_DEFAULT	999	/* Everything else. */
 
 extern int bus_current_pass;
 
@@ -598,23 +601,24 @@ struct driver_module_data {
 	int		dmd_pass;
 };
 
-#define	EARLY_DRIVER_MODULE_ORDERED(name, busname, driver, devclass,	\
+#define	EARLY_DRIVER_MODULE_ORDERED(dname, busname, driver, devclass,	\
     evh, arg, order, pass)						\
 									\
-static struct driver_module_data name##_##busname##_driver_mod = {	\
-	evh, arg,							\
-	#busname,							\
-	(kobj_class_t) &driver,						\
-	&devclass,							\
-	pass								\
+static struct driver_module_data dname##_##busname##_driver_mod = {	\
+	.dmd_chainevh = evh,						\
+	.dmd_chainarg = arg,						\
+	.dmd_busname = #busname,					\
+	.dmd_driver = (kobj_class_t) &driver,				\
+	.dmd_devclass = &devclass,					\
+	.dmd_pass = pass						\
 };									\
 									\
-static moduledata_t name##_##busname##_mod = {				\
-	#busname "/" #name,						\
-	driver_module_handler,						\
-	&name##_##busname##_driver_mod					\
+ static moduledata_t dname##_##busname##_mod = {			\
+	.name = #busname "/" #dname,					\
+	.evhand = driver_module_handler,				\
+	.priv = &dname##_##busname##_driver_mod				\
 };									\
-DECLARE_MODULE(name##_##busname, name##_##busname##_mod,		\
+DECLARE_MODULE(dname##_##busname, dname##_##busname##_mod,		\
 	       SI_SUB_DRIVERS, order)
 
 #define	EARLY_DRIVER_MODULE(name, busname, driver, devclass, evh, arg, pass) \

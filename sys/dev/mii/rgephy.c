@@ -79,7 +79,8 @@ static driver_t rgephy_driver = {
 	sizeof(struct mii_softc)
 };
 
-DRIVER_MODULE(rgephy, miibus, rgephy_driver, rgephy_devclass, 0, 0);
+EARLY_DRIVER_MODULE(rgephy, miibus, rgephy_driver, rgephy_devclass, 0, 0,
+		    BUS_PASS_NET);
 
 static int	rgephy_service(struct mii_softc *, struct mii_data *, int);
 static void	rgephy_status(struct mii_softc *);

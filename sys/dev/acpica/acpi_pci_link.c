@@ -612,6 +612,8 @@ acpi_pci_link_lookup(device_t dev, int source_index)
 
 	ACPI_SERIAL_ASSERT(pci_link);
 	sc = device_get_softc(dev);
+	if (!sc)
+		return (NULL);
 	for (i = 0; i < sc->pl_num_links; i++)
 		if (sc->pl_links[i].l_res_index == source_index)
 			return (&sc->pl_links[i]);
