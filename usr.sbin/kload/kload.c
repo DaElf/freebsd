@@ -1,4 +1,6 @@
-/* Russell Cattelan Digital Elves Inc 2011 */
+/*
+ * Russell Cattelan Digital Elves Inc 2011 - 2012
+ */
 
 /*
  * Heavily borrowed from userboot/test/test.c
@@ -276,6 +278,13 @@ k_diskread(void *arg, int unit, uint64_t offset, void *dst, size_t size,
 	return 0;
 }
 
+static int
+k_diskioctl(void *arg, int unit, u_long cmd, void *data)
+{
+	/* not supported on by kload */
+	return (ENOTTY);
+}
+
 /*
  * This is really confusing since this is not really like doing copyin / copyout in kernel land
  * this will copy the data pointed to by the "from" ptr  and copy "to" the offset into the load image
@@ -425,10 +434,7 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen) {
 	return 0;
 }
 
-
-
-
-struct loader_callbacks_v1 cb = {
+struct loader_callbacks cb = {
 
 	.open = k_open,
 	.close = k_close,
@@ -439,6 +445,7 @@ struct loader_callbacks_v1 cb = {
 	.stat = k_stat,
 
 	.diskread = k_diskread,
+	.diskioctl = k_diskioctl,
 
 	.copyin = k_copyin,
 	.copyout = k_copyout,
@@ -465,8 +472,9 @@ usage(void) {
 }
 
 int
-main(int argc, char** argv) {
-	void (*func)(struct loader_callbacks_v1 *, void *, int, int);
+main(int argc, char** argv) 
+{
+	void (*func)(struct loader_callbacks *, void *, int, int);
 	int opt;
 	char *disk_image = NULL;
 
@@ -497,7 +505,6 @@ main(int argc, char** argv) {
 	}
 
 	dl_lib = dlopen("/boot/userboot.so", RTLD_LOCAL);
-//	dl_lib = dlopen("userboot.so", RTLD_LOCAL);
 	if (!dl_lib) {
 		printf("%s\n", dlerror());
 		return (1);
@@ -529,7 +536,7 @@ main(int argc, char** argv) {
 	term.c_lflag &= ~(ICANON|ECHO);
 	tcsetattr(0, TCSAFLUSH, &term);
 
-	func(&cb, NULL, USERBOOT_VERSION_1, disk_fd >= 0);
+	func(&cb, NULL, USERBOOT_VERSION_2, disk_fd >= 0);
 
 }
 
