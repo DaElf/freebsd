@@ -298,6 +298,13 @@ k_diskioctl(void *arg, int unit, u_long cmd, void *data)
 	return (ENOTTY);
 }
 
+static int
+k_diskioctl(void *arg, int unit, u_long cmd, void *data)
+{
+	/* not supported on by kload */
+	return (ENOTTY);
+}
+
 /*
  * This is really confusing since this is not really like doing copyin / copyout
  * in kernel land this will copy the data pointed to by the "from" ptr and copy
