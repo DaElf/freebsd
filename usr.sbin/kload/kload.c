@@ -1,6 +1,8 @@
 /*
- * Copyright (c) Russell Cattelan Digital Elves Inc 2011 - 2012
- * Copyright (c) EMC/Isilon systems 2012
+ * Copyright (c) 2011 - 2012
+ *	Russell Cattelan Digital Elves Inc
+ * Copyright (c) 2011 - 2012
+ *	Isilon Systems, LLC.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -289,6 +291,13 @@ k_diskread(void *arg, int unit, uint64_t offset, void *dst, size_t size,
 	return (0);
 }
 
+static int
+k_diskioctl(void *arg, int unit, u_long cmd, void *data)
+{
+	/* not supported on by kload */
+	return (ENOTTY);
+}
+
 /*
  * This is really confusing since this is not really like doing copyin / copyout
  * in kernel land this will copy the data pointed to by the "from" ptr and copy
@@ -401,7 +410,7 @@ k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem)
 		);
 }
 
-static char *
+static const char *
 k_getenv(void *arg, int idx)
 {
 	static const char *vars[] = {
@@ -501,7 +510,7 @@ usage(void)
 int
 main(int argc, char** argv) 
 {
-	void (*func)(struct loader_callbacks_v1 *, void *, int, int);
+	void (*func)(struct loader_callbacks *, void *, int, int);
 	int (*setenv)(const char *, const char *, int);
 	int (*loader_init)(void);
 	int opt;
