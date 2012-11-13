@@ -1,7 +1,32 @@
-	/* Must be relocatable PIC code callable as a C function, that once
-	 * it starts can not use the previous processes stack.
-	 *
-	 */
+/*
+ * Copyright (c) 2011 - 2012
+ *	Russell Cattelan Digital Elves Inc
+ * Copyright (c) 2011 - 2012
+ *	Isilon Systems, LLC.  All rights reserved.
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
+ */
+
 #include "assym.s"
 
 #define	CR0_PG	0x80000000	/* PaGing enable */
@@ -21,28 +46,11 @@
 #define X86_CR4_PSE	0x00000010 /* enable page size extensions */
 #define X86_CR4_PAE	0x00000020 /* enable physical address extensions */
 
-.macro dumphex val
-	pushq %rsi
-	movq \val, %rsi
-	movl $0, %eax
-	call print_hex
-	movq $nlrt, %rsi
-	movl $0, %eax
-	call print_string
-	popq %rsi
-.endm
-
-
-.p2align 4,0x90;
-	.globl kernel_jump;
-	.type kernel_jump,@function;
-kernel_jump:
-
 	.globl relocate_kernel
 relocate_kernel:
-	// first install the new page table
-	movq	32(%rcx), %rax // page table
-	movq 	40(%rcx), %r9  // address of control_page with new PT
+	/* first install the new page table */
+	movq	32(%rcx), %rax /* page table */
+	movq	40(%rcx), %r9  /* address of control_page with new PT */
 	movq	%rax, %cr3
 
 	/*
@@ -53,15 +61,14 @@ relocate_kernel:
 	movq	$(X86_CR4_PSE | X86_CR4_PAE), %rax
 	movq	%rax, %cr4
 
-
-	// then move the stack to the end of control page
+	/* then move the stack to the end of control page */
 	lea 4096(%r9), %rsp
 
-	// now save stuff onto the new stack
-	pushq %rcx	// arg 4 control page
-	pushq %rdx	// arg 3 code page
-	pushq %rsi	// arg 2 kern base
-	pushq %rdi	// arg 1 va_list
+	/* now save stuff onto the new stack */
+	pushq	%rcx	/* arg 4 control page */
+	pushq	%rdx	/* arg 3 code page */
+	pushq	%rsi	/* arg 2 kern base */
+	pushq	%rdi	/* arg 1 va_list */
 
 	/* zero out flags, and disable interrupts */
 	pushq $0
@@ -69,18 +76,21 @@ relocate_kernel:
 	cli
 
 	/* install simple gdt */
-	movq	24(%r9), %rax	// gdt
+	movq	24(%r9), %rax	/* gdt */
 	lgdt	(%rax)
 	movq	56(%r9), %rax
-	lidt	(%rax) 	// null idt
-	// now move to the code page
-	// should have been passed code_page based on new PT
+	lidt	(%rax)		/* null idt */
+	/*
+	 * now move to the code page
+	 * should have been passed code_page based
+	 * on new page table
+	 */
 	movq %rdx, %r8
 	addq	$(identity_mapped - relocate_kernel), %r8
 	/* offset of code segment in new gdt */
 	pushq $0x08
 	pushq %r8
-	// jump to this spot in the new page
+	/* jump to this spot in the new page */
 	lretq
 identity_mapped:
 
@@ -90,12 +100,7 @@ identity_mapped:
 	movq %rax,%fs
 	movq %rax,%gs
 	movq %rax,%ss
-//	# Display a message to say everything is working so far
-//	pushq %rdi
-//	movq $s_hello2, %rdi
-//	call printf
-//	popq %rdi
-
+	
 	/*
 	 * Set cr0 to a known state:
 	 *  - Paging enabled
@@ -114,7 +119,8 @@ identity_mapped:
 	cld
 	/* saved list of source pages */
 	movq 0(%rsp), %rbx
-	/* the initial dest page
+	/*
+	 * the initial dest page
 	* this is KERNBASE + 0x200000
 	* kernel is contigious in memory
 	*/
@@ -146,12 +152,12 @@ identity_mapped:
 	movq    $512, %rcx
 	rep
 	movsq
-
 	jmp     0b
-
 2:
-	/* set all of the registers to known values */
-	/* leave %rsp alone */
+	/*
+	 * set all of the registers to known values
+	 * leave %rsp alone
+	 */
 	xorq	%rax, %rax
 	xorq	%rbx, %rbx
 	xorq    %rcx, %rcx
@@ -160,139 +166,15 @@ identity_mapped:
 	xorq    %rdi, %rdi
 	xorq    %rbp, %rbp
 
-	pushq	16(%r9)		// physfree
-	movq	8(%r9), %rax	//modulep
+	pushq	16(%r9)	/* physfree */
+	movq	8(%r9), %rax	/* modulep */
 	salq	$32, %rax
 	pushq	%rax
 
 	pushq $0x8
-	pushq 48(%r9) 	// entry # kernel entry pt
+	pushq	48(%r9)	/* entry # kernel entry pt */
 	lretq
-
-/* print to serial port */
-/* borrowed from kexec-tools */
-print_string:
-	.code64
-//	pushq	%rbp
-//	movq	%rsp, %rbp
-//	pushq	%rsi
-//	movq	8(%rbp), %rsi
-	xorq	%rax, %rax
-print_string.1:
-	lodsb %ds:(%rsi), %al
-	testb	$0xff, %al
-	jz	print_string.2
-	call	print_char
-	jmp	print_string.1
-print_string.2:
-//	popq	%rsi
-//	popq	%rbp
-	ret
-
-
-print_hex:
-	.code64
-//	pushq	%rbp
-//	movq	%rsp, %rbp
-	pushq	%rcx
-	movb	$64, %cl
-print_hex.1:
-//	movl	8(%ebp), %eax
-	movq	%rsi, %rax
-	subb	$4, %cl
-	shrq	%cl, %rax
-	andb	$0x0f, %al
-	cmpb	$9, %al
-	ja	print_hex.2
-	addb	$'0', %al
-	jmp	print_hex.3
-print_hex.2:
-	addb	$'A' - 10, %al
-print_hex.3:
-	call	print_char
-	testb	%cl, %cl
-	jnz	print_hex.1
-
-	//popl	%ebp
-	popq	%rcx
-	ret
-
-print_char:
-.code64
-	# The character to print is in al
-	call serial_print_char
-	retq
-
-
-#define TTYS0_BASE	0x3f8
-#define TTYS0_RBR	(TTYS0_BASE + 0x00)
-#define TTYS0_TBR	(TTYS0_BASE + 0x00)
-#define TTYS0_LSR	(TTYS0_BASE + 0x05)
-serial_print_char:
-	.code64
-	# The character to print is in al
-	pushq	%rax
-	pushq	%rdx
-
-	# Wait until the serial port is ready to receive characters
-serial_print_char.1:
-	movq	$TTYS0_LSR, %rdx
-	inb	%dx, %al
-	testb	$0x20, %al
-	jz	serial_print_char.1
-
-	# Output the character
-	movq	$TTYS0_TBR, %rdx
-	movb	0(%rsp), %al
-	outb	%al, %dx
-
-	# Wait until the serial port has transmitted the character
-serial_print_char.2:
-	movq	$TTYS0_LSR, %rdx
-	inb	%dx, %al
-	testb	$0x40, %al
-	jz	serial_print_char.2
-
-	popq	%rdx
-	# Restore %rax
-	popq	%rax
-	# Return to caller
-	ret
-
-
-s_hello:
-	.ascii	"Hello from kernel kexec string1 \r\n"
-
-
-s_hello2:
-	.string "Hello from kernel kexec string2 \r\n"
-	.text
-	.p2align 4,,15
-nlrt:
-	.string "\r\n"
-	.text
-	.p2align 4,,15
-
-s_src:
-	.string "Source Page\r\n"
-	.text
-	.p2align 4,,15
-s_ind:
-	.string "Indirect Page\r\n"
-	.text
-	.p2align 4,,15
-s_done:
-	.string "Done Page\r\n"
-	.text
-	.p2align 4,,15
-
-hello_hex:
-	.string "Hello world 0x%lx\n"
-	.text
-	.p2align 4,,15
-
 relocate_kernel_end:
-
 	.globl relocate_kernel_size
 relocate_kernel_size:
 	.long relocate_kernel_end - relocate_kernel
