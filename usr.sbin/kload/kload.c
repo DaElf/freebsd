@@ -1,13 +1,6 @@
 /*
-<<<<<<< HEAD
- * Copyright (c) 2011 - 2012
- *	Russell Cattelan Digital Elves Inc
- * Copyright (c) 2011 - 2012
- *	Isilon Systems, LLC.  All rights reserved.
-=======
  * Copyright (c) Russell Cattelan Digital Elves Inc 2011 - 2012
- * Copyright (c) EMC/Isilon 2012
->>>>>>> Add the getenv function from the callback table to kload.c
+ * Copyright (c) EMC/Isilon systems 2012
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -303,13 +296,6 @@ k_diskioctl(void *arg, int unit, u_long cmd, void *data)
 	return (ENOTTY);
 }
 
-static int
-k_diskioctl(void *arg, int unit, u_long cmd, void *data)
-{
-	/* not supported on by kload */
-	return (ENOTTY);
-}
-
 /*
  * This is really confusing since this is not really like doing copyin / copyout
  * in kernel land this will copy the data pointed to by the "from" ptr and copy
@@ -422,11 +408,7 @@ k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem)
 		);
 }
 
-<<<<<<< HEAD
 static const char *
-=======
-static char *
->>>>>>> Add the getenv function from the callback table to kload.c
 k_getenv(void *arg, int idx)
 {
 	static const char *vars[] = {
@@ -437,13 +419,6 @@ k_getenv(void *arg, int idx)
 
 	return (vars[idx]);
 }
-<<<<<<< HEAD
-=======
-
-static int
-k_buildsmap(void *arg, void **smap_void, size_t *outlen) 
-{
->>>>>>> Add the getenv function from the callback table to kload.c
 
 static int
 k_buildsmap(void *arg, void **smap_void, size_t *outlen) 
@@ -603,7 +578,6 @@ main(int argc, char** argv)
 				fprintf(stderr,"-k failure %s\n",optarg);
 			}
 			break;
-
 		case '?':
 			usage();
 		}
@@ -631,10 +605,6 @@ kload_load_image(void *image, unsigned long entry_pt)
 {
 	char *stack = (char *)image + 0x1000; /* PAGESIZE */
 	struct kload kld;
-<<<<<<< HEAD
-=======
-	int syscall_num = 533;
->>>>>>> Add the getenv function from the callback table to kload.c
 	int flags = KLOAD_LOAD;
 	/*
 	 * This must the same value sys/conf/ldscript.xxx
@@ -654,8 +624,8 @@ kload_load_image(void *image, unsigned long entry_pt)
 	 * a better interface should be developed for kload
 	 * in the future
 	 */
-	kld.k_modulep = ((unsigned int *)stack)[1];
-	kld.k_physfree = ((unsigned int *)stack)[2];
+	kld.k_modulep  =  ((unsigned int *)stack)[1];
+	kld.k_physfree =  ((unsigned int *)stack)[2];
 
 	/*
 	 * Make sure there is 4 pages of kenv pages between the end of the
