@@ -90,6 +90,7 @@ acpi_wakedata.h			optional	acpi			\
 	clean		"acpi_wakedata.h"
 #
 amd64/amd64/kload_exec.S	standard
+amd64/amd64/kload.c             standard
 #
 amd64/amd64/amd64_mem.c		optional	mem
 #amd64/amd64/apic_vector.S	standard
