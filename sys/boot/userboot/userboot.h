@@ -32,6 +32,7 @@
 #define	USERBOOT_VERSION_1      1
 #define	USERBOOT_VERSION_2      2
 #define	USERBOOT_VERSION_3      3
+#define	USERBOOT_VERSION_4      4
 
 /*
  * Exit codes from the loader

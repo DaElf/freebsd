@@ -1,9 +1,31 @@
 /*
- * Russell Cattelan Digital Elves Inc 2011 - 2012
+ * Copyright (c) Russell Cattelan Digital Elves Inc 2011 - 2012
+ * Copyright (c) EMC/Isilon 2012
+ *
+ * Redistribution and use in source and binary forms, with or without
+ * modification, are permitted provided that the following conditions
+ * are met:
+ * 1. Redistributions of source code must retain the above copyright
+ *    notice, this list of conditions and the following disclaimer.
+ * 2. Redistributions in binary form must reproduce the above copyright
+ *    notice, this list of conditions and the following disclaimer in the
+ *    documentation and/or other materials provided with the distribution.
+ *
+ * THIS SOFTWARE IS PROVIDED BY THE AUTHOR AND CONTRIBUTORS ``AS IS'' AND
+ * ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE
+ * IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE
+ * ARE DISCLAIMED.  IN NO EVENT SHALL THE AUTHOR OR CONTRIBUTORS BE LIABLE
+ * FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL
+ * DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS
+ * OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION)
+ * HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT
+ * LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY
+ * OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF
+ * SUCH DAMAGE.
+ *
  */
 
 /*
- * Heavily borrowed from userboot/test/test.c
  * process kill code borrowed from halt.c
  */
 
@@ -390,8 +412,21 @@ k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem) {
 		);
 }
 
+static char *
+k_getenv(void *arg, int idx)
+{
+	static const char *vars[] = {
+		"foo=bar",
+		"bar=barbar",
+		NULL
+	};
+
+	return (vars[idx]);
+}
+
 static int
-k_buildsmap(void *arg, void **smap_void, size_t *outlen) {
+k_buildsmap(void *arg, void **smap_void, size_t *outlen) 
+{
 
 	size_t i,j;
 	size_t len;
@@ -462,6 +497,7 @@ struct loader_callbacks cb = {
 	.putc = k_putc,
 	.getc = k_getc,
 	.poll = k_poll,
+	.getenv = k_getenv,
 	.buildsmap = k_buildsmap,
 };
 
@@ -544,7 +580,7 @@ int
 kload_load_image(void *image,unsigned long entry_pt) {
 
 	struct kload kld;
-	int syscall_num = 532;
+	int syscall_num = 533;
 	int flags = KLOAD_LOAD;
 	char *stack = (char *)image + 0x1000;
 
