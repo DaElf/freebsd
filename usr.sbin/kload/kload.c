@@ -1,6 +1,6 @@
 /*
  * Copyright (c) Russell Cattelan Digital Elves Inc 2011 - 2012
- * Copyright (c) EMC/Isilon 2012
+ * Copyright (c) EMC/Isilon systems 2012
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -29,10 +29,16 @@
  * process kill code borrowed from halt.c
  */
 
+#include <sys/param.h>
+#include <sys/kload.h>
 #include <sys/ioctl.h>
+#include <sys/module.h>
 #include <sys/stat.h>
+#include <sys/syscall.h>
 #include <sys/sysctl.h>
-#include <signal.h>
+#include <sys/types.h>
+#include <sys/param.h>
+
 #include <dirent.h>
 #include <dlfcn.h>
 #include <err.h>
@@ -40,23 +46,13 @@
 #include <fcntl.h>
 #include <getopt.h>
 #include <limits.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <termios.h>
-#include <unistd.h>
-
-#include <sys/types.h>
-#include <sys/module.h>
-#include <sys/param.h>
-#include <sys/syscall.h>
-#include <sys/sysctl.h>
-#include <sys/kload.h>
-
 #include <userboot.h>
-
-#define ENTER() printf("%s:%d Enter\n",__FUNCTION__,__LINE__);
-#define EXIT() printf("%s:%d Exit\n",__FUNCTION__,__LINE__);
+#include <unistd.h>
 
 char *host_base = "/";
 /* how can we get rid of these? I don't think we need them */
@@ -71,15 +67,12 @@ uint64_t pc;
 static int k_execute = 0;
 static int k_reboot = 0;
 static void *dl_lib;
-
 typedef void *(*M_func)(size_t bytes, const char *file, int line);
-
 M_func Malloc_func;
-
 static void k_exit(void *, int);
 static int shutdown_processes(void);
 static u_int get_pageins(void);
-int kload_load_image(void *image,unsigned long entry_pt);
+static int kload_load_image(void *image,unsigned long entry_pt);
 
 struct load_file {
 	int l_isdir;
@@ -91,13 +84,11 @@ struct load_file {
 	} l_u;
 };
 
-
 struct smap {
 	uint64_t       base;
 	uint64_t       length;
 	uint32_t       type;
 } __packed;
-
 
 static int
 name2oid(char *name, int *oidp)
@@ -115,25 +106,27 @@ name2oid(char *name, int *oidp)
 		return (i);
 	j /= sizeof(int);
 
-	printf("%s: oid %d %d\n",__FUNCTION__,oidp[0],oidp[1]);
-	return j;
+	return (j);
 }
 
 static void
-k_putc(void *arg, int chr) {
+k_putc(void *arg, int chr)
+{
 	write(1, &chr,1);
 }
 
 static int
-k_getc(void *arg) {
+k_getc(void *arg)
+{
 	char chr;
 	if(read(0,&chr,1) == 1)
-		return chr;
-	return -1;
+		return (chr);
+	return (-1);
 }
 
 static int
-k_poll(void *arg) {
+k_poll(void *arg)
+{
 	int n;
 	if (ioctl(0, FIONREAD, &n) >= 0)
 		return (n > 0);
@@ -141,16 +134,16 @@ k_poll(void *arg) {
 }
 
 static int
-k_open(void *arg, const char *filename, void **lf_ret) {
+k_open(void *arg, const char *filename, void **lf_ret)
+{
 	struct stat st;
 	struct load_file *lf;
 	int error = -1;
 	char path[PATH_MAX];
 
-	//printf("%s:%d filename %s\n",__FUNCTION__,__LINE__,filename);
 	if (!host_base) {
 		printf("Host base not set\n");
-		return ENOENT;
+		return (ENOENT);
 	}
 
 	strlcpy(path, host_base, PATH_MAX);
@@ -172,7 +165,7 @@ k_open(void *arg, const char *filename, void **lf_ret) {
 			goto out;
 		}
 		*lf_ret = lf;
-		return 0;
+		return (0);
 	}
 	if (S_ISREG(lf->l_stat.st_mode)) {
 		lf->l_isdir = 0;
@@ -182,13 +175,12 @@ k_open(void *arg, const char *filename, void **lf_ret) {
 			goto out;
 		}
 		*lf_ret = lf;
-		return 0;
+		return (0);
 	}
 
 out:
 	free(lf);
-	//printf("%s error %d\n",__FUNCTION__,error);
-	return error;
+	return (error);
 }
 
 static int
@@ -196,52 +188,49 @@ k_close(void *arg, void *h)
 {
 	struct load_file *lf = (struct load_file *)h;
 
-	//printf("%s:%d\n",__FUNCTION__,__LINE__);
-
 	if (lf->l_isdir)
 		closedir(lf->l_u.dir);
 	else
 		close(lf->l_u.fd);
 	free(lf);
 
-	return 0;
+	return (0);
 }
 
-
 static int
-k_isdir(void *arg, void *h) {
-	ENTER();
+k_isdir(void *arg, void *h)
+{
 	return (((struct load_file *)h)->l_isdir);
 }
 
 static int
-k_read(void *arg, void *h, void *dst, size_t size, size_t *resid_return) {
+k_read(void *arg, void *h, void *dst, size_t size, size_t *resid_return)
+{
 	struct load_file *lf = (struct load_file *)h;
 	ssize_t sz;
 
-//	printf("%s:%d fd %d dest addr %p size %d\n",__FUNCTION__,__LINE__,lf->l_u.fd,dst,size);
 	if (lf->l_isdir)
-		return EINVAL;
+		return (EINVAL);
 
 	if((sz = read(lf->l_u.fd, dst, size)) < 0)
-		return EINVAL;
+		return (EINVAL);
 	*resid_return = size - sz;
-	return 0;
+	return (0);
 }
 
 static int
 k_readdir(void *arg, void *h, uint32_t *fileno_return, uint8_t *type_return,
-    size_t *namelen_return, char *name) {
+    size_t *namelen_return, char *name)
+{
 	struct load_file *lf = (struct load_file *)h;
 	struct dirent *dp;
 
-	printf("%s:%d\n",__FUNCTION__,__LINE__);
 	if (!lf->l_isdir)
-		return EINVAL;
+		return (EINVAL);
 
 	dp = readdir(lf->l_u.dir);
 	if (!dp)
-		return ENOENT;
+		return (ENOENT);
 
 	/*
 	 * Note: d_namlen is in the range 0..255 and therefore less
@@ -253,69 +242,61 @@ k_readdir(void *arg, void *h, uint32_t *fileno_return, uint8_t *type_return,
 	memcpy(name, dp->d_name, dp->d_namlen);
 	name[dp->d_namlen] = 0;
 
-	return 0;
+	return (0);
 }
 
 static int
-k_seek(void *arg, void *h, uint64_t offset, int whence) {
+k_seek(void *arg, void *h, uint64_t offset, int whence)
+{
 	struct load_file *lf = (struct load_file *)h;
-	//printf("%s offset %lld\n",__FUNCTION__, offset);
 
 	if (lf->l_isdir)
-		return EINVAL;
+		return (EINVAL);
 
 	if (lseek(lf->l_u.fd, offset, whence) < 0)
-		return errno;
+		return (errno);
 
-	return 0;
+	return (0);
 }
 
 static int
 k_stat(void *arg, void *h,
        int *mode_return, int *uid_return,
-       int *gid_return, uint64_t *size_return) {
+       int *gid_return, uint64_t *size_return)
+{
 
 	struct load_file *lf = (struct load_file *)h;
 
-	//printf("%s:%d\n",__FUNCTION__,__LINE__);
 	*mode_return = lf->l_stat.st_mode;
 	*uid_return = lf->l_stat.st_uid;
 	*gid_return = lf->l_stat.st_gid;
 	*size_return = lf->l_stat.st_size;
-	return 0;
+	return (0);
 }
 
 static int
 k_diskread(void *arg, int unit, uint64_t offset, void *dst, size_t size,
-    size_t *resid_return) {
+    size_t *resid_return)
+{
 	ssize_t n;
-	ENTER();
 
 	if (unit != 0 || disk_fd == -1)
-		return EIO;
+		return (EIO);
 	n = pread(disk_fd, dst, size, offset);
 	if (n < 0)
-		return errno;
+		return (errno);
 	*resid_return = size - n;
-	return 0;
-}
-
-static int
-k_diskioctl(void *arg, int unit, u_long cmd, void *data)
-{
-	/* not supported on by kload */
-	return (ENOTTY);
+	return (0);
 }
 
 /*
- * This is really confusing since this is not really like doing copyin / copyout in kernel land
- * this will copy the data pointed to by the "from" ptr  and copy "to" the offset into the load image
- * this should be called copy_to_image
+ * This is really confusing since this is not really like doing copyin / copyout
+ * in kernel land this will copy the data pointed to by the "from" ptr and copy
+ * "to" the offset into the load image
  */
 static int
-k_copyin(void *arg, const void *from, uint64_t to, size_t size) {
-
-  //  	printf("%s:%d from %p to 0x%jx size %d\n",__FUNCTION__,__LINE__,from,to,size);
+k_copy_to_image(void *arg, const void *from, uint64_t to, size_t size)
+{
 	to &= 0x7fffffff;
 	if (to > image_size)
 		return (EFAULT);
@@ -328,17 +309,16 @@ k_copyin(void *arg, const void *from, uint64_t to, size_t size) {
 	if (to + size > image_max_used)
 		image_max_used = to + size;
 
-	return 0;
+	return (0);
 }
 
 /*
- * copyout is copying FROM the image at "from" offset to memory pointed to by to ptr
- * this should be copy_from_image
+ * copyout is copying FROM the image at "from" offset to memory pointed to by to
+ * ptr
  */
 static int
-k_copyout(void *arg, uint64_t from, void *to, size_t size) {
-
-	//printf("%s:%d from %p to 0x%jx size %d caller 0x%x\t",__FUNCTION__,__LINE__,from,to,size,__builtin_return_address(0));
+k_copy_from_image(void *arg, uint64_t from, void *to, size_t size)
+{
 	from &= 0x7fffffff;
 	if (from > image_size)
 		return (EFAULT);
@@ -346,54 +326,63 @@ k_copyout(void *arg, uint64_t from, void *to, size_t size) {
 		size = image_size - from;
 	memcpy(to, &image[from], size);
 
-	return 0;
+	return (0);
 }
 
 static void
-k_setreg(void *arg, int r, uint64_t v) {
-	//printf("%s:%d r 0x%x v 0x%jx\n",__FUNCTION__,__LINE__,r,v);
+k_setreg(void *arg, int r, uint64_t v)
+{
 	if (r < 0 || r >= 16)
 		return;
 	regs[r] = v;
 }
 
 static void
-k_setmsr(void *arg, int r, uint64_t v) {
-	//printf("%s:%d r 0x%x v 0x%jx\n",__FUNCTION__,__LINE__,r,v);
+k_setmsr(void *arg, int r, uint64_t v)
+{
+	/* Unneeded */
 }
 
 static void
-k_setcr(void *arg, int r, uint64_t v) {
-	//printf("%s:%d r 0x%x v 0x%jx\n",__FUNCTION__,__LINE__,r,v);
+k_setcr(void *arg, int r, uint64_t v)
+{
+	/* Unneeded */
 }
 
 static void
-k_setgdt(void *arg, uint64_t v, size_t sz) {
-	//printf("%s:%d v 0x%jx size 0x%x\n",__FUNCTION__,__LINE__,v,sz);
+k_setgdt(void *arg, uint64_t v, size_t sz)
+{
+	/* Unneeded */
 }
 
 static void
-k_exec(void *arg, uint64_t entry_pt) {
+k_exec(void *arg, uint64_t entry_pt)
+{
+#ifdef DEBUG
 	printf("Execute at 0x%jx\n", entry_pt);
-	printf("image size max used %jd endof page %jd\n",image_max_used,roundup2(image_max_used,PAGE_SIZE));
+	printf("image size max used %jd endof page %jd\n", image_max_used,
+	    roundup2(image_max_used, PAGE_SIZE));
+#endif
 	kload_load_image(image,entry_pt);
 	k_exit(arg, 0);
 }
 
 static void
-k_delay(void *arg, int usec) {
+k_delay(void *arg, int usec)
+{
 	usleep(usec);
 }
 
 static void
-k_exit(void *arg, int v) {
+k_exit(void *arg, int v)
+{
 	tcsetattr(0, TCSAFLUSH, &oldterm);
 	exit(v);
 }
 
 static void
-k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem) {
-
+k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem)
+{
 	int mib[2];
 	unsigned long long physmem;
 	size_t len;
@@ -427,24 +416,22 @@ k_getenv(void *arg, int idx)
 static int
 k_buildsmap(void *arg, void **smap_void, size_t *outlen) 
 {
-
+	struct smap *smapbase;
 	size_t i,j;
 	size_t len;
 	char name[] = "hw.smap";
 	int mib[CTL_MAXNAME];
-	struct smap *smapbase;
 
 	len = name2oid(name, mib);
 
-	/* get the size	 */
+	/* get the current smap from the running system */
 	i = sysctl(mib, 2, 0, &j, 0, 0);
-	printf("Size %jd\n",j);
 	len = j;
 
-	/* this is a nasty hack to allocate memory here
-	 * and free it in useboot.so bios_addsmapdata
-	 * need to use Malloc from libstand since
-	 * userboot functions will use Free from libstand
+	/*
+	 * Use the malloc function from libstand/userboot.so since
+	 * bios_addsmapdata will free the memory using the libstand Free
+	 * so be careful to use not use standard malloc here
 	 */
 	smapbase = Malloc_func(j,__FILE__,__LINE__);
 	if (!smapbase) {
@@ -457,6 +444,7 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen)
 	*outlen = len;
 	*smap_void = smapbase;
 
+#ifdef DEBUG
 	{
 		struct smap *smap, *smapend;
 		smapend = (struct smap *)((uintptr_t)smapbase + len);
@@ -465,6 +453,7 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen)
 			       smap->type,smap->base, smap->length);
 		}
 	}
+#endif
 
 	return 0;
 }
@@ -482,8 +471,8 @@ struct loader_callbacks cb = {
 	.diskread = k_diskread,
 	.diskioctl = k_diskioctl,
 
-	.copyin = k_copyin,
-	.copyout = k_copyout,
+	.copyin = k_copy_to_image,
+	.copyout = k_copy_from_image,
 	.setreg = k_setreg,
 	.setmsr = k_setmsr,
 	.setcr = k_setcr,
@@ -502,38 +491,23 @@ struct loader_callbacks cb = {
 };
 
 static void
-usage(void) {
-	printf("usage: kload [-d <disk image path>] [-h <host filesystem path>] [-e | -r]\n");
+usage(void)
+{
+	printf("usage: kload [-d <disk image path>] "
+	    "[-h <host filesystem path>] [-e | -r]\n");
 	exit(1);
 }
 
 int
 main(int argc, char** argv) 
 {
-	void (*func)(struct loader_callbacks *, void *, int, int);
+	void (*func)(struct loader_callbacks_v1 *, void *, int, int);
+	int (*setenv)(const char *, const char *, int);
+	int (*loader_init)(void);
 	int opt;
 	char *disk_image = NULL;
-
-	while ((opt = getopt(argc, argv, "d:h:er")) != -1) {
-		switch (opt) {
-		case 'd':
-			disk_image = optarg;
-			break;
-
-		case 'h':
-			host_base = optarg;
-			break;
-		case 'e':
-			k_execute = 1;
-			break;
-		case 'r':
-			k_reboot = 1;
-			break;
-
-		case '?':
-			usage();
-		}
-	}
+	char karg[20];
+	char kval[128];
 
 	if (geteuid()) {
 		errno = EPERM;
@@ -550,13 +524,57 @@ main(int argc, char** argv)
 		printf("%s\n", dlerror());
 		return (1);
 	}
-	/* this is a hack for now */
 	Malloc_func = dlsym(dl_lib, "Malloc");
 	if (!Malloc_func) {
 		printf("%s\n", dlerror());
 		return (1);
 	}
+	/*
+	 * pull in the libstand setenv for setting name value pairs
+	 * in the kernel env page
+	 */
+	setenv = dlsym(dl_lib, "setenv");
+	if (!setenv) {
+		printf("%s\n", dlerror());
+		return (1);
+	}
+	loader_init = dlsym(dl_lib, "loader_init");
+	if (!loader_init) {
+		printf("%s\n", dlerror());
+		return (1);
+	}
+	loader_init();
 
+	while ((opt = getopt(argc, argv, "d:h:erk:")) != -1) {
+		switch (opt) {
+		case 'd':
+			disk_image = optarg;
+			break;
+
+		case 'h':
+			host_base = optarg;
+			break;
+		case 'e':
+			k_execute = 1;
+			break;
+		case 'r':
+			k_reboot = 1;
+			break;
+		case 'k':
+			memset(karg,0,sizeof(karg));
+			memset(kval,0,sizeof(kval));
+			if(sscanf(optarg,"%[a-zA-Z_-]=%s",karg,kval) == 2) {
+				printf("got value %s %s\n",karg,kval);
+				setenv(karg, kval, 1);
+			} else {
+				fprintf(stderr,"-k failure %s\n",optarg);
+			}
+			break;
+
+		case '?':
+			usage();
+		}
+	}
 
 	image_size = 128*1024*1024;
 	image = malloc(image_size);
@@ -572,39 +590,51 @@ main(int argc, char** argv)
 	term.c_lflag &= ~(ICANON|ECHO);
 	tcsetattr(0, TCSAFLUSH, &term);
 
-	func(&cb, NULL, USERBOOT_VERSION_2, disk_fd >= 0);
-
+	func(&cb, NULL, USERBOOT_VERSION_4, disk_fd >= 0);
+	return (0);
 }
 
-int
-kload_load_image(void *image,unsigned long entry_pt) {
-
+static int
+kload_load_image(void *image, unsigned long entry_pt)
+{
+	char *stack = (char *)image + 0x1000; /* PAGESIZE */
 	struct kload kld;
-	int syscall_num = 533;
 	int flags = KLOAD_LOAD;
-	char *stack = (char *)image + 0x1000;
+	/*
+	 * This must the same value sys/conf/ldscript.xxx
+	 * This value was changed at one point when a new version
+	 * of binutils was imported. The value is aligned to
+	 * max page size supported by given processor
+	 */
+	unsigned long kernphys = 0x200000;
 
-	kld.khdr[0].k_buf = &((char *)image)[0x200000];
-	kld.khdr[0].k_memsz = roundup2(image_max_used,PAGE_SIZE) - 0x200000;
+	kld.khdr[0].k_buf = &((char *)image)[kernphys];
+	kld.khdr[0].k_memsz = roundup2(image_max_used,PAGE_SIZE) - kernphys;
 	kld.k_entry_pt = entry_pt;
 	kld.num_hdrs=1;
 
-
-	printf("modulep 0x%x kernend 0x%x\n",
-	       ((unsigned int *)stack)[1],
-	       ((unsigned int *)stack)[2]);
-
-	/* hack for now ... pull from the stack page
-	 * fix the interface to pass as parameters
+	/*
+	 * pull paramaters from the stack page
+	 * a better interface should be developed for kload
+	 * in the future
 	 */
 	kld.k_modulep  =  ((unsigned int *)stack)[1];
 	kld.k_physfree =  ((unsigned int *)stack)[2];
 
-	printf("loading k_buf %p with size %jd to kernel image addr %p entry_pt 0x%jx\n",
-	       kld.khdr[0].k_buf,
-	       kld.khdr[0].k_memsz,
-	       image,
-	       kld.k_entry_pt);
+	/*
+	 * Make sure there is 4 pages of kenv pages between the end of the
+	 * kernel and start of free memory.
+	 * Why you ask? Well that is a question without a good answer as of yet
+	 * for some strange reason some ata chips will not respond correctly
+	 * unless free memory starts at greater than 2 pages out.
+	 * The obvoius assumption is that something is getting stommped on but
+	 * that has yet to be determined. Adding this workaround.
+	 */ 
+	kld.k_physfree = MAX(kld.k_modulep + (4 * PAGE_SIZE), kld.k_physfree);
+
+	printf("WARNING kernphys set to 0x%lx make sure this matches kernphys "
+	    "from sys/config/ldscript\n", kernphys);
+
 	if (k_execute) {
 		flags &= ~KLOAD_REBOOT;
 		flags |= KLOAD_EXEC;
@@ -615,25 +645,20 @@ kload_load_image(void *image,unsigned long entry_pt) {
 		shutdown_processes();
 	}
 
-	return syscall (syscall_num,&kld,sizeof(struct kload),flags);
-	return 1;
+	return (syscall(SYS_kload, &kld, sizeof(struct kload), flags));
 }
 
-
-
 static int
-shutdown_processes(void) {
-
+shutdown_processes(void)
+{
 	int i;
 	u_int pageins;
-	int nflag = 0;
 	int sverrno;
 	/*
 	 * Do a sync early on, so disks start transfers while we're off
 	 * killing processes.  Don't worry about writes done before the
 	 * processes die, the reboot system call syncs the disks.
 	 */
-	if (!nflag)
 		sync();
 
 	/*
@@ -670,7 +695,6 @@ shutdown_processes(void) {
 	sleep(2);
 	for (i = 0; i < 20; i++) {
 		pageins = get_pageins();
-		if (!nflag)
 			sync();
 		sleep(3);
 		if (get_pageins() == pageins)
@@ -693,7 +717,8 @@ shutdown_processes(void) {
 	return 1;
 restart:
 	sverrno = errno;
-	errx(1, "%s%s", kill(1, SIGHUP) == -1 ? "(can't restart init): " : "", strerror(sverrno));
+	errx(1, "%s%s", kill(1, SIGHUP) == -1 ?
+	    "(can't restart init): " : "", strerror(sverrno));
 	/* NOTREACHED */
 	return 0;
 }
@@ -710,5 +735,5 @@ get_pageins(void)
 		warnx("v_swappgsin");
 		return (0);
 	}
-	return pageins;
+	return (pageins);
 }
