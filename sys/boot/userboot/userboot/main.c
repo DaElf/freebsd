@@ -43,9 +43,10 @@ static void userboot_zfs_probe(void);
 static int userboot_zfs_found;
 #endif
 
-#define	USERBOOT_VERSION	USERBOOT_VERSION_3
+#define	USERBOOT_VERSION	USERBOOT_VERSION_4
 
 #define	MALLOCSZ		(10*1024*1024)
+static char malloc_buf[512*1024];
 
 struct loader_callbacks *callbacks;
 void *callbacks_arg;
@@ -76,29 +77,47 @@ exit(int v)
 }
 
 void
+loader_init(void)
+{
+	/*
+	 * It does not hurt to re-call this as it just sets global
+	 * ptrs that never change 
+	 */
+	//setheap((void *)malloc_buf, (void *)(malloc_buf + 512*1024));
+	setheap((void *)mallocbuf, (void *)(mallocbuf + sizeof(mallocbuf)));
+}
+
+int
 loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 {
 	static char mallocbuf[MALLOCSZ];
 	const char *var;
 	int i;
-
-        if (version != USERBOOT_VERSION)
-                abort();
-
-	callbacks = cb;
-        callbacks_arg = arg;
-	userboot_disk_maxunit = ndisks;
-
+	
 	/*
 	 * initialise the heap as early as possible.  Once this is done,
 	 * alloc() is usable.
 	 */
-	setheap((void *)mallocbuf, (void *)(mallocbuf + sizeof(mallocbuf)));
+	loader_init();
+  
+	if (cb != NULL) {
+		callbacks = cb;
+		callbacks_arg = arg;
+		userboot_disk_maxunit = ndisks;
+	} else {
+		return (EFAULT);
+	}
 
         /*
          * Hook up the console
          */
 	cons_probe();
+
+        if (version != USERBOOT_VERSION) {
+		printf("%s: version expected %d got %d\n", __func__,
+		      USERBOOT_VERSION, version);
+		return(EOPNOTSUPP);
+	}
 
 	/*
 	 * March through the device switch probing for things.
@@ -147,11 +166,11 @@ loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 	extract_currdev();
 
 	if (setjmp(jb))
-		return;
+		return (0);
 
 	interact();			/* doesn't return */
 
-	exit(0);
+	return(0);
 }
 
 /*
