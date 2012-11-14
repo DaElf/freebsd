@@ -626,8 +626,8 @@ kload_load_image(void *image, unsigned long entry_pt)
 	 * a better interface should be developed for kload
 	 * in the future
 	 */
-	kld.k_modulep  =  ((unsigned int *)stack)[1];
-	kld.k_physfree =  ((unsigned int *)stack)[2];
+	kld.k_modulep = ((unsigned int *)stack)[1];
+	kld.k_physfree = ((unsigned int *)stack)[2];
 
 	/*
 	 * Make sure there is 4 pages of kenv pages between the end of the
