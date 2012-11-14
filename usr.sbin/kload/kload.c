@@ -87,9 +87,9 @@ struct load_file {
 };
 
 struct smap {
-	uint64_t       base;
-	uint64_t       length;
-	uint32_t       type;
+	uint64_t	base;
+	uint64_t	length;
+	uint32_t	type;
 } __packed;
 
 static int
@@ -114,14 +114,14 @@ name2oid(char *name, int *oidp)
 static void
 k_putc(void *arg, int chr)
 {
-	write(1, &chr,1);
+	write(1, &chr, 1);
 }
 
 static int
 k_getc(void *arg)
 {
 	char chr;
-	if(read(0,&chr,1) == 1)
+	if(read(0, &chr, 1) == 1)
 		return (chr);
 	return (-1);
 }
@@ -372,7 +372,7 @@ k_exec(void *arg, uint64_t entry_pt)
 	printf("image size max used %jd endof page %jd\n", image_max_used,
 	    roundup2(image_max_used, PAGE_SIZE));
 #endif
-	kload_load_image(image,entry_pt);
+	kload_load_image(image, entry_pt);
 	k_exit(arg, 0);
 }
 
@@ -442,7 +442,7 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen)
 	 * bios_addsmapdata will free the memory using the libstand Free
 	 * so be careful to use not use standard malloc here
 	 */
-	smapbase = Malloc_func(j,__FILE__,__LINE__);
+	smapbase = Malloc_func(j, __FILE__, __LINE__);
 	if (!smapbase) {
 		printf("kload failed to allocate space for smap\n");
 		return 1;
@@ -459,7 +459,7 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen)
 		smapend = (struct smap *)((uintptr_t)smapbase + len);
 		for (smap = smapbase; smap < smapend; smap++) {
 			printf("\ttype %d base 0x%016lx length 0x%016lx\n",
-			       smap->type,smap->base, smap->length);
+			       smap->type, smap->base, smap->length);
 		}
 	}
 #endif
@@ -508,11 +508,11 @@ usage(void)
 }
 
 int
-main(int argc, char** argv) 
+main(int argc, char** argv)
 {
-	void (*func)(struct loader_callbacks *, void *, int, int);
+	int (*loader_main)(struct loader_callbacks *, void *, int, int);
+	void (*loader_init)(void);
 	int (*setenv)(const char *, const char *, int);
-	int (*loader_init)(void);
 	int opt;
 	char *disk_image = NULL;
 	char karg[20];
@@ -528,8 +528,8 @@ main(int argc, char** argv)
 		printf("%s\n", dlerror());
 		return (1);
 	}
-	func = dlsym(dl_lib, "loader_main");
-	if (!func) {
+	loader_main = dlsym(dl_lib, "loader_main");
+	if (!loader_main) {
 		printf("%s\n", dlerror());
 		return (1);
 	}
@@ -552,6 +552,7 @@ main(int argc, char** argv)
 		printf("%s\n", dlerror());
 		return (1);
 	}
+	/* call libstand setheap to init memory allocations */
 	loader_init();
 
 	while ((opt = getopt(argc, argv, "d:h:erk:")) != -1) {
@@ -599,8 +600,7 @@ main(int argc, char** argv)
 	term.c_lflag &= ~(ICANON|ECHO);
 	tcsetattr(0, TCSAFLUSH, &term);
 
-	func(&cb, NULL, USERBOOT_VERSION_4, disk_fd >= 0);
-	return (0);
+	return(loader_main(&cb, NULL, USERBOOT_VERSION_4, disk_fd >= 0));
 }
 
 static int
@@ -620,15 +620,15 @@ kload_load_image(void *image, unsigned long entry_pt)
 	kld.khdr[0].k_buf = &((char *)image)[kernphys];
 	kld.khdr[0].k_memsz = roundup2(image_max_used,PAGE_SIZE) - kernphys;
 	kld.k_entry_pt = entry_pt;
-	kld.num_hdrs=1;
+	kld.num_hdrs = 1;
 
 	/*
 	 * pull paramaters from the stack page
 	 * a better interface should be developed for kload
 	 * in the future
 	 */
-	kld.k_modulep  =  ((unsigned int *)stack)[1];
-	kld.k_physfree =  ((unsigned int *)stack)[2];
+	kld.k_modulep = ((unsigned int *)stack)[1];
+	kld.k_physfree = ((unsigned int *)stack)[2];
 
 	/*
 	 * Make sure there is 4 pages of kenv pages between the end of the
@@ -668,7 +668,7 @@ shutdown_processes(void)
 	 * killing processes.  Don't worry about writes done before the
 	 * processes die, the reboot system call syncs the disks.
 	 */
-		sync();
+	sync();
 
 	/*
 	 * Ignore signals that we can get as a result of killing
@@ -704,7 +704,7 @@ shutdown_processes(void)
 	sleep(2);
 	for (i = 0; i < 20; i++) {
 		pageins = get_pageins();
-			sync();
+		sync();
 		sleep(3);
 		if (get_pageins() == pageins)
 			break;
