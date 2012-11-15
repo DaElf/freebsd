@@ -380,10 +380,6 @@ kload_shutdown_final(void *arg, int howto)
 	int ret;
 	cpuset_t map;
 
-	if ((howto & RB_KLOAD) == 0) {
-		printf("%s not a kload reboot\n", __func__);
-		return;
-	}
 	/* Just to make sure we are on cpu 0 */
 	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
 	if (kload_ready) {
