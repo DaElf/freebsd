@@ -310,36 +310,36 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	kload_ready = 1;
 
 	if (bootverbose)
-	printf("%s:\n\t"
-		    "head_va         0x%lx (phys 0x%lx)\n\t"
-		    "kernbase        0x%lx\n\t"
-		    "code_page       0x%lx (phys 0x%lx)\n\t"
-		    "control_page    0x%lx (phys 0x%lx)\n\t"
-		    "gdt             0x%lx (phys 0x%lx)\n\t"
-		    "idt             0x%lx (phys 0x%lx)\n\t"
-		    "k_entry_pt      0x%lx\n\t"
-		    "pgtbl                              (phys 0x%lx)\n\t"
-		    "max_addr                           (phys 0x%lx)\n\t"
-		    "min_addr                           (phys 0x%lx)\n\t"
-		    "modulep                            (phys 0x%lx)\n\t"
-	       "physfree                            (phys 0x%lx)\n",
-		    __func__,
-		    (unsigned long)k_items->head_va,
-		    (unsigned long)vtophys(k_items->head_va),
-		    (unsigned long)(KERNBASE + (vm_paddr_t)kernphys),
-		    (unsigned long)(control_page + PAGE_SIZE),
-		    (unsigned long)vtophys(control_page + PAGE_SIZE),
-		    (unsigned long)control_page,
-		    (unsigned long)vtophys(control_page),
-		    (unsigned long)mygdt,(unsigned long)vtophys(mygdt),
-		    (unsigned long)null_idt,(unsigned long)vtophys(null_idt),
-	       (unsigned long)kld.k_entry_pt,
-		    (unsigned long)pgtbl,
-		    (unsigned long)max_addr,
-		    (unsigned long)min_addr,
-		    (unsigned long)kld.k_modulep,
-		    (unsigned long)kld.k_physfree);
-
+		printf("%s:\n\t"
+		       "head_va         0x%lx (phys 0x%lx)\n\t"
+		       "kernbase        0x%lx\n\t"
+		       "code_page       0x%lx (phys 0x%lx)\n\t"
+		       "control_page    0x%lx (phys 0x%lx)\n\t"
+		       "gdt             0x%lx (phys 0x%lx)\n\t"
+		       "idt             0x%lx (phys 0x%lx)\n\t"
+		       "k_entry_pt      0x%lx\n\t"
+		       "pgtbl                              (phys 0x%lx)\n\t"
+		       "max_addr                           (phys 0x%lx)\n\t"
+		       "min_addr                           (phys 0x%lx)\n\t"
+		       "modulep                            (phys 0x%lx)\n\t"
+		       "physfree                            (phys 0x%lx)\n",
+		       __func__,
+		       (unsigned long)k_items->head_va,
+		       (unsigned long)vtophys(k_items->head_va),
+		       (unsigned long)(KERNBASE + (vm_paddr_t)kernphys),
+		       (unsigned long)(control_page + PAGE_SIZE),
+		       (unsigned long)vtophys(control_page + PAGE_SIZE),
+		       (unsigned long)control_page,
+		       (unsigned long)vtophys(control_page),
+		       (unsigned long)mygdt,(unsigned long)vtophys(mygdt),
+		       (unsigned long)null_idt,(unsigned long)vtophys(null_idt),
+		       (unsigned long)kld.k_entry_pt,
+		       (unsigned long)pgtbl,
+		       (unsigned long)max_addr,
+		       (unsigned long)min_addr,
+		       (unsigned long)kld.k_modulep,
+		       (unsigned long)kld.k_physfree);
+	
 	if(!(uap->flags & (KLOAD_EXEC | KLOAD_REBOOT)))
 		goto just_load;
 #if defined(SMP)
@@ -380,19 +380,12 @@ kload_shutdown_final(void *arg, int howto)
 	int ret;
 	cpuset_t map;
 
-	printf("%s arg %p howto 0x%x\n",__FUNCTION__, arg, howto);
-
-	if ((howto & RB_KLOAD) == 0) {
-		printf("%s not a kload reboot\n", __func__);
-		return;
-	}
 	/* Just to make sure we are on cpu 0 */
 	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
 	if (kload_ready) {
-
 		printf("%s: suspend APs\n",__FUNCTION__);
 		map = all_cpus;
-		// we should be bound to cpu 0 at this point
+		/* we should be bound to cpu 0 at this point */
 		printf("%s  cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
 		CPU_CLR(PCPU_GET(cpuid), &map);
 		CPU_NAND(&map, &stopped_cpus);
@@ -400,8 +393,6 @@ kload_shutdown_final(void *arg, int howto)
 			printf("cpu_reset: Stopping other CPUs\n");
 			suspend_cpus(map);
 		}
-
-		//DELAY(5000000);
 
 		if (bootverbose)
 			printf("%s: clear all handlers\n", __func__);
