@@ -41,6 +41,20 @@
 #define	GUEST_CODE_SEL		1
 #define	GUEST_DATA_SEL		2
 
+/*  Set up the GDT the same as what the boot loader
+    one noteable change is turn on write access to 
+    the data segment so we can write to it during 
+    final relocate_kernel phase 
+ sys/boot/i386/libi386/amd64_tramp.S 
+   gdt:
+	.long	0			# null descriptor
+	.long	0
+	.long	0x00000000		# %cs
+	.long	0x00209800
+	.long	0x00000000		# %ds
+	.long	0x00008000
+*/
+
 void
 setup_freebsd_gdt(uint64_t *gdtr)
 {
@@ -56,9 +70,9 @@ kload_build_page_table(void)
 	pt_entry_t *PT3;
 	pt_entry_t *PT2;
 	int i;
-	unsigned long va;
+	pt_entry_t va;
 
-	va = (unsigned long)kmem_alloc(kernel_map,PAGE_SIZE * 3);
+	va = (pt_entry_t)kmem_alloc(kernel_map, PAGE_SIZE * 3);
 	PT4 = (pt_entry_t *)va;
 	PT3 = (pt_entry_t *)(PT4 + (PAGE_SIZE / sizeof(unsigned long)));
 	PT2 = (pt_entry_t *)(PT3 + (PAGE_SIZE / sizeof(unsigned long)));

@@ -48,7 +48,7 @@
 
 	.globl relocate_kernel
 relocate_kernel:
-	/* first install the new page table */
+	/* Install the new page table. */
 	movq	32(%rcx), %rax /* page table */
 	movq	40(%rcx), %r9  /* address of control_page with new PT */
 	movq	%rax, %cr3
@@ -61,7 +61,7 @@ relocate_kernel:
 	movq	$(X86_CR4_PSE | X86_CR4_PAE), %rax
 	movq	%rax, %cr4
 
-	/* then move the stack to the end of control page */
+	/* Move the stack to the end of control page. */
 	lea 4096(%r9), %rsp
 
 	/* now save stuff onto the new stack */
@@ -70,27 +70,26 @@ relocate_kernel:
 	pushq	%rsi	/* arg 2 kern base */
 	pushq	%rdi	/* arg 1 va_list */
 
-	/* zero out flags, and disable interrupts */
+	/* Zero out flags, and disable interrupts. */
 	pushq $0
 	popfq
 	cli
 
-	/* install simple gdt */
+	/* Install simple gdt. */
 	movq	24(%r9), %rax	/* gdt */
 	lgdt	(%rax)
 	movq	56(%r9), %rax
 	lidt	(%rax)		/* null idt */
 	/*
-	 * now move to the code page
-	 * should have been passed code_page based
-	 * on new page table
+	 * Move to the code page.
+	 * code_page is based on new page table.
 	 */
 	movq %rdx, %r8
 	addq	$(identity_mapped - relocate_kernel), %r8
-	/* offset of code segment in new gdt */
+	/* Offset of code segment in new gdt. */
 	pushq $0x08
 	pushq %r8
-	/* jump to this spot in the new page */
+	/* Jump to this spot in the new page. */
 	lretq
 identity_mapped:
 
@@ -111,43 +110,47 @@ identity_mapped:
 	 *  - Proctected mode enabled
 	 */
 	movq	%cr0, %rax
-	andq	$~(X86_CR0_AM | X86_CR0_WP | X86_CR0_TS | X86_CR0_EM |  X86_CR0_MP | X86_CR0_NE), %rax
+	andq	$~(X86_CR0_AM | X86_CR0_WP | X86_CR0_TS
+		| X86_CR0_EM |  X86_CR0_MP | X86_CR0_NE), %rax
 	orl	$(X86_CR0_PG | X86_CR0_PE), %eax
 	movq	%rax, %cr0
 
-	/* Do the copies */
+	/*
+	 * The main loop that copies the kernel from the
+	 * temporary pages to the final kernel destnation.
+	 */
 	cld
-	/* saved list of source pages */
+	/* Saved list of source pages. */
 	movq 0(%rsp), %rbx
 	/*
-	 * the initial dest page
-	* this is KERNBASE + 0x200000
-	* kernel is contigious in memory
-	*/
+	 * This is the initial dest page.
+	 * @ KERNBASE + 0x200000
+	 * Kernel is contigious in memory.
+	 */
 	movq 8(%rsp), %rdi
-0:	/* top, read another word for the indirection page */
+0:	/* Top -- read another word for the indirection page. */
 	movq	(%rbx), %rcx
 
 	addq	$8, %rbx
-	testq	$0x1,   %rcx  /* is it a destination page */
+	testq	$0x1,   %rcx  /* Is it a destination page? */
 	jz	1f
 	movq	%rcx,	%rdi
 	andq	$0xFFFFFFFFfffff000, %rdi
 	jmp     0b
 1:
-	testq	$0x2,	%rcx  /* is it an indirection page */
+	testq	$0x2,	%rcx  /* Is it an indirection page? */
 	jz	1f
 	movq	%rcx,	%rbx
 	andq	$0xFFFFFFFFfffff000, %rbx
 	jmp     0b
 1:
-	testq   $0x4,   %rcx /* is it the done indicator */
+	testq   $0x4,   %rcx /* Is it the done indicator? */
 	jz      1f
 	jmp     2f
 1:
-	testq   $0x8,   %rcx /* is it the source indicator */
-	jz      0b	     /* Ignore it otherwise */
-	movq    %rcx,   %rsi /* For every source page do a copy */
+	testq   $0x8,   %rcx /* Is it the source indicator? */
+	jz      0b	     /* Ignore it otherwise. */
+	movq    %rcx,   %rsi /* For every source page do a copy. */
 	andq    $0xfffffffffffff000, %rsi
 	movq    $512, %rcx
 	rep
@@ -155,8 +158,8 @@ identity_mapped:
 	jmp     0b
 2:
 	/*
-	 * set all of the registers to known values
-	 * leave %rsp alone
+	 * Set all of the registers to known values.
+	 * Leave %rsp alone.
 	 */
 	xorq	%rax, %rax
 	xorq	%rbx, %rbx
