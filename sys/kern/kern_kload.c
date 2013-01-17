@@ -1,8 +1,8 @@
 /*
- * Copyright (c) 2011 - 2012
- *	Russell Cattelan Digital Elves Inc
- * Copyright (c) 2011 - 2012
- *	Isilon Systems, LLC.  All rights reserved.
+ * Copyright (c) 2011 - 2013
+ *	Russell Cattelan -- Digital Elves Inc
+ * Copyright (c) 2011 - 2013
+ *	EMC / Isilon Systems, LLC.  All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
  * modification, are permitted provided that the following conditions
@@ -71,15 +71,14 @@ static vm_offset_t kload_image_va = 0;
 static void kload_init(void);
 SYSINIT(kload_mem, SI_SUB_DRIVERS, SI_ORDER_ANY, kload_init, NULL);
 
-static int kload_copyin_segment(struct kload_segment *,int);
+static int kload_copyin_segment(struct kload_segment *, int);
 static int kload_add_page(struct kload_items *, unsigned long);
 static void kload_shutdown_final(void *, int);
 static struct region_descriptor *mygdt;
 static	vm_offset_t control_page;
 static	vm_offset_t code_page;
 static 	void *gdt_desc;
-static pt_entry_t *pgtbl;
-unsigned long kload_pgtbl;
+pt_entry_t *kload_pgtbl = NULL; /* used as a test */
 static unsigned long max_addr = 0 , min_addr = 0;
 
 #define GIGMASK			(~((1<<30)-1))
@@ -137,11 +136,10 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 	unsigned long va;
 
 	if (*items->item != 0) {
-		printf(" item != 0 0x%lx\n",*items->item);
+		printf(" item != 0 0x%lx\n", *items->item);
 		items->item++;
 		items->i_count--;
 	}
-
 
 	if ((items->item == items->last_item) || (items->i_count == 0)) {
 		/* out of space in current page grab a new one */
@@ -229,8 +227,8 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		return (error);
 
 	/*
-	 * hook into the shutdown/reboot path so
-	 * we end up here before cpu reset
+	 * Hook into the shutdown/reboot path so
+	 * we end up here before cpu reset.
 	 */
 	EVENTHANDLER_REGISTER(shutdown_final, kload_shutdown_final,
 	    NULL, SHUTDOWN_PRI_KLOAD);
@@ -243,7 +241,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		    (uintmax_t)sizeof(struct kload));
 		return (error);
 	}
-	if ((error = copyin(uap->buf, &kld, bufsize)) != 0)
+	if ((error = copyin(uap->kld, &kld, bufsize)) != 0)
 		return (error);
 
 	if (k_items == NULL) {
@@ -288,10 +286,10 @@ sys_kload(struct thread *td, struct kload_args *uap)
 
 	/* 10 segments should be more than enough */
 	for (i = 0 ; (i < kld.num_hdrs && i <= 10); i++)
-		kload_copyin_segment(&kld.khdr[i],i);
+		kload_copyin_segment(&kld.khdr[i], i);
 
 	null_idt = (struct region_descriptor*)
-	    kload_kmem_alloc(kernel_map,PAGE_SIZE);
+	    kload_kmem_alloc(kernel_map, PAGE_SIZE);
 	k_cpage->kcp_idt = (unsigned long)vtophys(null_idt) + KLOADBASE;
 	/* Wipe the IDT. */
 	null_idt->rd_limit = 0;
@@ -301,11 +299,10 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	 * build a page table entry based on min max addresses
 	 */
 	/* returns new page table phys addr */
-	pgtbl = kload_build_page_table();
-	if (pgtbl == NULL)
+	kload_pgtbl = kload_build_page_table();
+	if (kload_pgtbl == NULL)
 		return (ENOMEM);
-	kload_pgtbl = (unsigned long)pgtbl;
-	k_cpage->kcp_pgtbl = (unsigned long)pgtbl;
+	k_cpage->kcp_pgtbl = (unsigned long)kload_pgtbl;
 
 	kload_ready = 1;
 
@@ -322,7 +319,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		       "max_addr                           (phys 0x%lx)\n\t"
 		       "min_addr                           (phys 0x%lx)\n\t"
 		       "modulep                            (phys 0x%lx)\n\t"
-		       "physfree                            (phys 0x%lx)\n",
+		       "physfree                           (phys 0x%lx)\n",
 		       __func__,
 		       (unsigned long)k_items->head_va,
 		       (unsigned long)vtophys(k_items->head_va),
@@ -383,10 +380,10 @@ kload_shutdown_final(void *arg, int howto)
 	/* Just to make sure we are on cpu 0 */
 	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
 	if (kload_ready) {
-		printf("%s: suspend APs\n",__FUNCTION__);
+		printf("%s: suspend APs\n", __func__);
 		map = all_cpus;
 		/* we should be bound to cpu 0 at this point */
-		printf("%s  cpuid %d\n",__FUNCTION__,PCPU_GET(cpuid));
+		printf("%s  cpuid %d\n", __func__, PCPU_GET(cpuid));
 		CPU_CLR(PCPU_GET(cpuid), &map);
 		CPU_NAND(&map, &stopped_cpus);
 		if (!CPU_EMPTY(&map)) {

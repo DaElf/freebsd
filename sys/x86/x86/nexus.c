@@ -678,13 +678,13 @@ ram_probe(device_t dev)
 }
 
 static int
-smap_hdlr(SYSCTL_HANDLER_ARGS) {
-
-  /* SYSCTL_HANDLER_ARGS
-     struct sysctl_oid *oidp, void *arg1,
-     intptr_t arg2, struct sysctl_req *req
-  */
-
+smap_hdlr(SYSCTL_HANDLER_ARGS) 
+{
+	/*
+	  SYSCTL_HANDLER_ARGS
+	  struct sysctl_oid *oidp, void *arg1,
+	  intptr_t arg2, struct sysctl_req *req
+	*/
 	struct bios_smap *smapbase;
 	caddr_t kmdp;
 	uint32_t smapsize = 0;
@@ -694,28 +694,14 @@ smap_hdlr(SYSCTL_HANDLER_ARGS) {
 	if (kmdp == NULL)
 		kmdp = preload_search_by_type(ELF_KERN_STR);
 	if (kmdp != NULL) {
-		smapbase = (struct bios_smap *)preload_search_info(kmdp,
-								   MODINFO_METADATA | MODINFOMD_SMAP);
+		smapbase = (struct bios_smap *)preload_search_info(mdp,
+						MODINFO_METADATA | MODINFOMD_SMAP);
 	} else {
 		smapbase = NULL;
 		goto out;
 	}
 
-
-	printf("%s smapbase %p\n",__FUNCTION__,smapbase);
 	smapsize = *((u_int32_t *)smapbase - 1);
-
-#if 0
-	{
-		struct bios_smap *smap, *smapend;
-		smapend = (struct bios_smap *)((uintptr_t)smapbase + smapsize);
-		for (smap = smapbase; smap < smapend; smap++) {
-			printf("\ttype %d base 0x%lx length 0x%lx\n",
-			       smap->type,smap->base, smap->length);
-		}
-	}
-#endif
-
 out:
 	return (sysctl_handle_opaque(oidp, smapbase, smapsize, req));
 }

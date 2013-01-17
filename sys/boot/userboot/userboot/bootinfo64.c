@@ -190,8 +190,6 @@ bios_addsmapdata(struct preloaded_file *kfp)
 	struct smap *smap = NULL, *sm = NULL;
 	int error = 1;
 
-	printf("%s\n",__FUNCTION__);
-
 	if (callbacks->buildsmap)
 		error = callbacks->buildsmap(NULL, (void **)&smap, &len);
 
