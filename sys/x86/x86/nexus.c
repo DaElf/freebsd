@@ -694,7 +694,7 @@ smap_hdlr(SYSCTL_HANDLER_ARGS)
 	if (kmdp == NULL)
 		kmdp = preload_search_by_type(ELF_KERN_STR);
 	if (kmdp != NULL) {
-		smapbase = (struct bios_smap *)preload_search_info(mdp,
+		smapbase = (struct bios_smap *)preload_search_info(kmdp,
 						MODINFO_METADATA | MODINFOMD_SMAP);
 	} else {
 		smapbase = NULL;
