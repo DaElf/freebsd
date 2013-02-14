@@ -331,7 +331,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		       (unsigned long)mygdt,(unsigned long)vtophys(mygdt),
 		       (unsigned long)null_idt,(unsigned long)vtophys(null_idt),
 		       (unsigned long)kld.k_entry_pt,
-		       (unsigned long)pgtbl,
+		       (unsigned long)kload_pgtbl,
 		       (unsigned long)max_addr,
 		       (unsigned long)min_addr,
 		       (unsigned long)kld.k_modulep,
