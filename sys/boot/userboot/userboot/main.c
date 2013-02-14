@@ -46,8 +46,7 @@ static int userboot_zfs_found;
 #define	USERBOOT_VERSION	USERBOOT_VERSION_4
 
 #define	MALLOCSZ		(10*1024*1024)
-static char malloc_buf[512*1024];
-
+static char malloc_buf[1024*1024];
 struct loader_callbacks *callbacks;
 void *callbacks_arg;
 
