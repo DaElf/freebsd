@@ -64,7 +64,7 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 	}
 	/* wait4 */
 	case 7: {
-		struct wait4_args *p = params;
+		struct wait_args *p = params;
 		iarg[0] = p->pid; /* int */
 		uarg[1] = (intptr_t) p->status; /* int * */
 		iarg[2] = p->options; /* int */
