@@ -395,7 +395,8 @@ lapic_clear_lapic(u_int disable) {
 	lapic->lvt_lint1 = APIC_LVT_M; /* masked */
 
 	if (disable) {
-		printf("\tlapic disable\n");
+		if (bootverbose)
+			printf("lapic disable\n");
 		lapic_disable();
 	}
 }
