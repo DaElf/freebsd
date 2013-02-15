@@ -199,30 +199,22 @@ intr_clear_all_handlers(void)
 	int i;
 	struct intsrc *isrc;
 
+	printf("%s\n", __func__);
 	mtx_lock(&intr_table_lock);
 	for (i = 0; i < NUM_IO_INTS; i++) {
 		isrc = interrupt_sources[i];
 		if (isrc != NULL && isrc->is_handlers > 0) {
-			printf("%s:%d isrc[%d] %p is_handlers %d\n",
-			       __FUNCTION__,__LINE__,i,isrc,
-			       isrc->is_handlers);
 			       isrc->is_handlers--;
 			if (isrc->is_handlers == 0) {
-				printf("\t dis_source %p dis_intr %p\n",
-				       isrc->is_pic->pic_disable_source,
-				       isrc->is_pic->pic_disable_intr);
 				isrc->is_pic->pic_disable_source(isrc, PIC_NO_EOI);
 				isrc->is_pic->pic_disable_intr(isrc);
 			}
 			intrcnt_updatename(isrc);
-
 		}
 	}
 	mtx_unlock(&intr_table_lock);
 	return 0;
 }
-
-
 
 int
 intr_remove_handler(void *cookie)
