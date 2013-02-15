@@ -361,7 +361,7 @@ __elfN(loadimage)(struct preloaded_file *fp, elf_file_t ef, u_int64_t off)
 	if (phdr[i].p_filesz < phdr[i].p_memsz) {
 #ifdef ELF_VERBOSE
 	    printf(" (bss: 0x%lx-0x%lx)",
-		   (long)(phdr[i].p_vaddr + off + phdr[i].p_filesz),
+		(long)(phdr[i].p_vaddr + off + phdr[i].p_filesz),
 		(long)(phdr[i].p_vaddr + off + phdr[i].p_memsz - 1));
 #endif
 
