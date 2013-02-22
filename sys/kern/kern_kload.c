@@ -169,7 +169,7 @@ kload_init(void)
 {
 	int size = IMAGE_PREALLOC;
 	kload_image_va = kload_kmem_alloc(kernel_map, size);
-	printf("%s 0x%lx preallocated size %d\n", __func__,
+	printf("%s 0x%jx preallocated size %d\n", __func__,
 	    kload_image_va, size);
 }
 
