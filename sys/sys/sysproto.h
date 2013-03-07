@@ -61,7 +61,7 @@ struct open_args {
 struct close_args {
 	char fd_l_[PADL_(int)]; int fd; char fd_r_[PADR_(int)];
 };
-struct wait_args {
+struct wait4_args {
 	char pid_l_[PADL_(int)]; int pid; char pid_r_[PADR_(int)];
 	char status_l_[PADL_(int *)]; int * status; char status_r_[PADR_(int *)];
 	char options_l_[PADL_(int)]; int options; char options_r_[PADR_(int)];
@@ -1820,7 +1820,7 @@ int	sys_read(struct thread *, struct read_args *);
 int	sys_write(struct thread *, struct write_args *);
 int	sys_open(struct thread *, struct open_args *);
 int	sys_close(struct thread *, struct close_args *);
-int	sys_wait4(struct thread *, struct wait_args *);
+int	sys_wait4(struct thread *, struct wait4_args *);
 int	sys_link(struct thread *, struct link_args *);
 int	sys_unlink(struct thread *, struct unlink_args *);
 int	sys_chdir(struct thread *, struct chdir_args *);
