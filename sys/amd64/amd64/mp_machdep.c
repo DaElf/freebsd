@@ -32,6 +32,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_kstack_pages.h"
 #include "opt_sched.h"
 #include "opt_smp.h"
+#include "opt_kload.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -82,8 +83,13 @@ __FBSDID("$FreeBSD$");
 #define BIOS_WARM		(0x0a)
 
 
-/* page table setup by kload so we can set the APs to a known pgtbl */
+#ifdef KLOAD
+/* page table setup by kload so we can set the APs to a known page table */
 extern pt_entry_t kload_pgtbl;
+#else
+static pt_entry_t kload_pgtbl = 0;
+#endif
+
 /* lock region used by kernel profiling */
 int	mcount_lock;
 

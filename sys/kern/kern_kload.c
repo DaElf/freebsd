@@ -41,6 +41,9 @@
 #include <sys/smp.h>
 #include <sys/sysproto.h>
 #include <sys/systm.h>
+#include <sys/module.h>
+#include <sys/sysent.h>
+#include <sys/syscall.h>
 
 #include <machine/intr_machdep.h>
 #include <machine/apicvar.h>
@@ -419,3 +422,46 @@ kload_shutdown_final(void *arg, int howto)
 		    "a new kernel loaded\n");
 	}
 }
+
+
+
+
+static struct syscall_helper_data kload_syscalls[] = {
+        SYSCALL_INIT_HELPER(kload),
+        SYSCALL_INIT_LAST
+};
+
+static int
+kload_modload(struct module *module, int cmd, void *arg)
+{
+        int error = 0;
+
+        switch (cmd) {
+        case MOD_LOAD:
+		error = syscall_helper_register(kload_syscalls);
+		printf("%s registered syscalls\n", __func__);
+		if (error)
+			return (error);
+                break;
+
+        case MOD_UNLOAD:
+		syscall_helper_unregister(kload_syscalls);
+                break;
+
+        case MOD_SHUTDOWN:
+                break;
+        default:
+                error = EINVAL;
+                break;
+        }
+        return (error);
+}
+
+static moduledata_t kload_mod = {
+        "kload",
+        &kload_modload,
+        NULL
+};
+
+DECLARE_MODULE(kload, kload_mod, SI_SUB_KLD, SI_ORDER_FIRST);
+MODULE_VERSION(kload, 1);
