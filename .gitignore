@@ -7,3 +7,4 @@ cscope.*
 *.a
 .pc
 qpatches
+obj
