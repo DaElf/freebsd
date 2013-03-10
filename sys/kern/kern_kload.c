@@ -463,5 +463,5 @@ static moduledata_t kload_mod = {
         NULL
 };
 
-DECLARE_MODULE(kload, kload_mod, SI_SUB_KLD, SI_ORDER_FIRST);
+DECLARE_MODULE(kload, kload_mod, SI_SUB_SYSV_SEM, SI_ORDER_FIRST);
 MODULE_VERSION(kload, 1);
