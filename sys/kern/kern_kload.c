@@ -61,7 +61,9 @@
 
 static struct kload_items *k_items = NULL;
 static MALLOC_DEFINE(M_KLOAD, "kload_items", "kload items");
-int kload_ready = 0;
+static int kload_ready = 0;
+static int kload_prealloc = 0;
+TUNABLE_INT("kern.kload_prealloc", &kload_prealloc);
 
 static vm_offset_t kload_image_va = 0;
 /*
@@ -69,7 +71,7 @@ static vm_offset_t kload_image_va = 0;
  * away once the allocate delays in kmem_alloc_attr are
  * fixed.
  */
-#define	IMAGE_PREALLOC	(24 * 1024 * 1024)
+#define	IMAGE_PREALLOC_MAX	(48 * 1024 * 1024)
 
 static void kload_init(void);
 SYSINIT(kload_mem, SI_SUB_DRIVERS, SI_ORDER_ANY, kload_init, NULL);
@@ -115,8 +117,10 @@ kload_kmem_alloc(vm_map_t map, vm_size_t size)
 	    0, (1 << 30) /* 1Gig limit */,
 	    VM_MEMATTR_WRITE_COMBINING);
 
+	if (va) {
 	num_pages = roundup2(size,PAGE_SIZE) >> PAGE_SHIFT;
 	update_max_min(va, num_pages);
+	}
 
 	return (va);
 	}
@@ -170,10 +174,17 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 static void
 kload_init(void)
 {
-	int size = IMAGE_PREALLOC;
+	int size;
+
+	if (kload_prealloc > 0) {
+		size = min((kload_prealloc * 1024 * 1024), IMAGE_PREALLOC_MAX);
 	kload_image_va = kload_kmem_alloc(kernel_map, size);
-	printf("%s 0x%jx preallocated size %d\n", __func__,
-	    kload_image_va, size);
+		printf("%s: preallocated %dMB\n", __func__, kload_prealloc);
+		kload_prealloc = size; /* re-use for copy in check */
+	} else {
+		printf("%s: has not preallocated temporary space\n", __func__);
+	}
+
 }
 
 int
@@ -187,10 +198,10 @@ kload_copyin_segment(struct kload_segment *khdr, int seg)
 	num_pages = roundup2(khdr->k_memsz,PAGE_SIZE) >> PAGE_SHIFT;
 
 	/* check to make sure the preallocate space is beg enough */
-	if (va && ((num_pages * PAGE_SIZE) > IMAGE_PREALLOC)) {
-		printf("%s size over 24Meg %d\n", __func__,
-			 num_pages * PAGE_SIZE);
-		kmem_free(kernel_map, va, IMAGE_PREALLOC);
+	if (va && ((num_pages * PAGE_SIZE) > kload_prealloc)) {
+		printf("%s size over prealloc size %d need %d\n", __func__,
+		       kload_prealloc, num_pages * PAGE_SIZE);
+		kmem_free(kernel_map, va, kload_prealloc);
 		va = 0;
 	}
 
@@ -259,6 +270,8 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	}
 
 	control_page = kload_kmem_alloc(kernel_map, PAGE_SIZE * 2);
+	if (control_page == 0)
+		return (ENOMEM);
 	k_cpage = (struct kload_cpage *)control_page;
 	code_page = control_page + PAGE_SIZE;
 
@@ -273,6 +286,8 @@ sys_kload(struct thread *td, struct kload_args *uap)
 
 	mygdt = (struct region_descriptor *)kload_kmem_alloc(kernel_map,
 	    PAGE_SIZE);
+	if (mygdt == NULL)
+		return (ENOMEM);
 	k_cpage->kcp_gdt = (unsigned long)vtophys(mygdt) + KLOADBASE;
 
 	gdt_desc = (char *)mygdt + sizeof(struct region_descriptor);
@@ -288,11 +303,16 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	k_cpage->kcp_entry_pt = kld.k_entry_pt;
 
 	/* 10 segments should be more than enough */
-	for (i = 0 ; (i < kld.num_hdrs && i <= 10); i++)
-		kload_copyin_segment(&kld.khdr[i], i);
+	for (i = 0 ; (i < kld.num_hdrs && i <= 10); i++) {
+		error = kload_copyin_segment(&kld.khdr[i], i);
+		if (error != 0)
+			return (error);
+	}
 
 	null_idt = (struct region_descriptor*)
 	    kload_kmem_alloc(kernel_map, PAGE_SIZE);
+	if (null_idt == NULL)
+		return (ENOMEM);
 	k_cpage->kcp_idt = (unsigned long)vtophys(null_idt) + KLOADBASE;
 	/* Wipe the IDT. */
 	null_idt->rd_limit = 0;
@@ -307,6 +327,12 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		return (ENOMEM);
 	k_cpage->kcp_pgtbl = (unsigned long)kload_pgtbl;
 
+	/*
+	 * We could simply not install the handler and never
+	 * hit kload_shutdown_final. But this way we can log
+	 * the fact that we had a failed kload so allow the
+	 * function to be called, but flagged not ready.
+	 */
 	kload_ready = 1;
 
 	if (bootverbose)
@@ -380,6 +406,13 @@ kload_shutdown_final(void *arg, int howto)
 	int ret;
 	cpuset_t map;
 
+	if (bootverbose)
+		printf("%s arg %p howto 0x%x\n", __func__, arg, howto);
+
+	if ((howto & RB_KLOAD) == 0) {
+		printf("%s not a kload reboot\n", __func__);
+		return;
+	}
 	/* Just to make sure we are on cpu 0 */
 	KASSERT(PCPU_GET(cpuid) == 0, ("%s: not running on cpu 0", __func__));
 	if (kload_ready) {

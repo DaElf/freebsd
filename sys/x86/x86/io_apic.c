@@ -119,6 +119,8 @@ static int	ioapic_config_intr(struct intsrc *isrc, enum intr_trigger trig,
 static void	ioapic_resume(struct pic *pic, bool suspend_cancelled);
 static int	ioapic_assign_cpu(struct intsrc *isrc, u_int apic_id);
 static void	ioapic_program_intpin(struct ioapic_intsrc *intpin);
+/* kload debug */
+static void	ioapic_print_lowreg(void *);
 
 static STAILQ_HEAD(,ioapic) ioapic_list = STAILQ_HEAD_INITIALIZER(ioapic_list);
 struct pic ioapic_template = { ioapic_enable_source, ioapic_disable_source,
@@ -135,6 +137,43 @@ static int enable_extint;
 SYSCTL_INT(_hw_apic, OID_AUTO, enable_extint, CTLFLAG_RDTUN, &enable_extint, 0,
     "Enable the ExtINT pin in the first I/O APIC");
 TUNABLE_INT("hw.apic.enable_extint", &enable_extint);
+
+
+/* kload debugging
+ * print out the state of the io apic at system boot time
+ * so the sate of each interrupt can be inspected 
+ */
+struct ioapic_route_entry {
+	uint32_t	vector		:  8,
+		delivery_mode	:  3,	/* 000: FIXED
+					 * 001: lowest prio
+					 * 111: ExtINT
+					 */
+		dest_mode	:  1,	/* 0: physical, 1: logical */
+		delivery_status	:  1,
+		polarity	:  1,
+		irr		:  1,
+		trigger		:  1,	/* 0: edge, 1: level */
+		mask		:  1,	/* 0: enabled, 1: disabled */
+		__reserved_2	: 15;
+} __attribute__ ((packed));
+
+static void
+ioapic_print_lowreg(void *value)
+{
+	struct ioapic_route_entry *lowreg= 
+		(struct ioapic_route_entry *)value;
+	printf("Mask %1d Trig %1d IRR %1d Pol %1d "
+	       "Stat %1d dstm %1d delm %d 0x%02X\n",
+	       lowreg->mask,
+	       lowreg->trigger,
+	       lowreg->irr,
+	       lowreg->polarity,
+	       lowreg->delivery_status,
+	       lowreg->dest_mode,
+	       lowreg->delivery_mode,
+	       lowreg->vector);	
+}
 
 static __inline void
 _ioapic_eoi_source(struct intsrc *isrc)
@@ -584,6 +623,13 @@ ioapic_create(vm_paddr_t addr, int32_t apic_id, int intbase)
 		 */
 		intpin->io_cpu = PCPU_GET(apic_id);
 		value = ioapic_read(apic, IOAPIC_REDTBL_LO(i));
+		/* Begin Isilon kload debug */
+		if (bootverbose) {
+			printf("%s: intpin %p %d value 0x%x\n", __func__,
+			       intpin, intpin->io_intpin, value);
+			ioapic_print_lowreg(&value);
+		}
+		/* End Isilon */
 		ioapic_write(apic, IOAPIC_REDTBL_LO(i), value | IOART_INTMSET);
 	}
 	mtx_unlock_spin(&icu_lock);
