@@ -196,21 +196,17 @@ intr_add_handler(const char *name, int vector, driver_filter_t filter,
 int
 intr_clear_all_handlers(void)
 {
-	int i;
 	struct intsrc *isrc;
+	int i;
 
 	printf("%s\n", __func__);
 	mtx_lock(&intr_table_lock);
 	for (i = 0; i < NUM_IO_INTS; i++) {
 		isrc = interrupt_sources[i];
-		if (isrc != NULL && isrc->is_handlers > 0) {
-			       isrc->is_handlers--;
-			if (isrc->is_handlers == 0) {
-				isrc->is_pic->pic_disable_source(isrc, PIC_NO_EOI);
+		if (isrc != NULL) {
+			isrc->is_pic->pic_disable_source(isrc, PIC_EOI);
 				isrc->is_pic->pic_disable_intr(isrc);
 			}
-			intrcnt_updatename(isrc);
-		}
 	}
 	mtx_unlock(&intr_table_lock);
 	return 0;
