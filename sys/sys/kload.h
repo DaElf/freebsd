@@ -33,7 +33,11 @@
 #include <sys/param.h>
 #include <sys/types.h>
 
+#include <machine/atomic.h>
+
 #include <vm/vm.h>
+#include <vm/vm_param.h>
+#include <vm/vm_object.h>
 #include <vm/vm_page.h>
 
 #define KLOAD_LOAD		 0
@@ -69,6 +73,14 @@ struct kload_items {
 	int i_count;
 	unsigned long flags;  /* not used yet */
 };
+
+#if 0
+struct kload_args {
+        char kld_l_[PADL_(const struct kload *)]; const struct kload * kld; char kld_r_[PADR_(const struct kload *)];
+        char buflen_l_[PADL_(size_t)]; size_t buflen; char buflen_r_[PADR_(size_t)];
+        char flags_l_[PADL_(int)]; int flags; char flags_r_[PADR_(int)];
+};
+#endif
 
 /*
  * defined in <arch>/kload.c

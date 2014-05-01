@@ -72,7 +72,7 @@ kload_build_page_table(void)
 	int i;
 	pt_entry_t va;
 
-	va = (pt_entry_t)kmem_alloc(kernel_map, PAGE_SIZE * 3);
+	va = kmem_malloc(kernel_arena,  PAGE_SIZE * 3, M_ZERO | M_WAITOK);
 	PT4 = (pt_entry_t *)va;
 	PT3 = (pt_entry_t *)(PT4 + (PAGE_SIZE / sizeof(unsigned long)));
 	PT2 = (pt_entry_t *)(PT3 + (PAGE_SIZE / sizeof(unsigned long)));

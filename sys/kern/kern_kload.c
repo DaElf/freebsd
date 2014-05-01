@@ -45,9 +45,10 @@
 #include <sys/sysent.h>
 #include <sys/syscall.h>
 
-#include <machine/intr_machdep.h>
-#include <machine/apicvar.h>
-#include <machine/segments.h>
+#include <machine/smp.h>
+//#include <machine/intr_machdep.h>
+//#include <machine/apicvar.h>
+//#include <machine/segments.h>
 
 #include <vm/vm_param.h>
 #include <vm/vm.h>
@@ -107,12 +108,12 @@ update_max_min(vm_offset_t addr, int count)
 }
 
 static vm_offset_t
-kload_kmem_alloc(vm_map_t map, vm_size_t size)
+kload_kmem_alloc(vm_size_t size)
 {
 	vm_offset_t va;
 	int num_pages;
 
-	va = kmem_alloc_attr(map, size,
+	va = kmem_alloc_attr(kernel_arena, size,
 	    M_WAITOK | M_ZERO,
 	    0, (1 << 30) /* 1Gig limit */,
 	    VM_MEMATTR_WRITE_COMBINING);
@@ -150,7 +151,7 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 
 	if ((items->item == items->last_item) || (items->i_count == 0)) {
 		/* out of space in current page grab a new one */
-		va = (unsigned long)kload_kmem_alloc(kernel_map,PAGE_SIZE);
+		va = (unsigned long)kload_kmem_alloc(PAGE_SIZE);
 		if (items->head_va == 0)
 			items->head_va = va;
 
@@ -178,7 +179,7 @@ kload_init(void)
 
 	if (kload_prealloc > 0) {
 		size = min((kload_prealloc * 1024 * 1024), IMAGE_PREALLOC_MAX);
-	kload_image_va = kload_kmem_alloc(kernel_map, size);
+	kload_image_va = kload_kmem_alloc(size);
 		printf("%s: preallocated %dMB\n", __func__, kload_prealloc);
 		kload_prealloc = size; /* re-use for copy in check */
 	} else {
@@ -201,12 +202,12 @@ kload_copyin_segment(struct kload_segment *khdr, int seg)
 	if (va && ((num_pages * PAGE_SIZE) > kload_prealloc)) {
 		printf("%s size over prealloc size %d need %d\n", __func__,
 		       kload_prealloc, num_pages * PAGE_SIZE);
-		kmem_free(kernel_map, va, kload_prealloc);
+		kmem_free(kernel_arena, va, kload_prealloc);
 		va = 0;
 	}
 
 	if (va == 0) {
-		va = kload_kmem_alloc(kernel_map, num_pages * PAGE_SIZE);
+		va = kload_kmem_alloc(num_pages * PAGE_SIZE);
 		if (va == 0)
 			return (ENOMEM);
 	}
@@ -269,7 +270,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		k_items->last_item = &k_items->head;
 	}
 
-	control_page = kload_kmem_alloc(kernel_map, PAGE_SIZE * 2);
+	control_page = kload_kmem_alloc(PAGE_SIZE * 2);
 	if (control_page == 0)
 		return (ENOMEM);
 	k_cpage = (struct kload_cpage *)control_page;
@@ -284,8 +285,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	k_cpage->kcp_modulep = kld.k_modulep;
 	k_cpage->kcp_physfree = kld.k_physfree;
 
-	mygdt = (struct region_descriptor *)kload_kmem_alloc(kernel_map,
-	    PAGE_SIZE);
+	mygdt = (struct region_descriptor *)kload_kmem_alloc(PAGE_SIZE);
 	if (mygdt == NULL)
 		return (ENOMEM);
 	k_cpage->kcp_gdt = (unsigned long)vtophys(mygdt) + KLOADBASE;
@@ -310,7 +310,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	}
 
 	null_idt = (struct region_descriptor*)
-	    kload_kmem_alloc(kernel_map, PAGE_SIZE);
+	    kload_kmem_alloc(PAGE_SIZE);
 	if (null_idt == NULL)
 		return (ENOMEM);
 	k_cpage->kcp_idt = (unsigned long)vtophys(null_idt) + KLOADBASE;
