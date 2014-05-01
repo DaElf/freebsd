@@ -3372,6 +3372,15 @@ systrace_args(int sysnum, void *params, uint64_t *uarg, int *n_args)
 		*n_args = 4;
 		break;
 	}
+	/* kload */
+	case 545: {
+		struct kload_args *p = params;
+		uarg[0] = (intptr_t) p->kld; /* const struct kload * */
+		uarg[1] = p->buflen; /* size_t */
+		iarg[2] = p->flags; /* int */
+		*n_args = 3;
+		break;
+	}
 	default:
 		*n_args = 0;
 		break;
@@ -8990,6 +8999,22 @@ systrace_entry_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 			break;
 		};
 		break;
+	/* kload */
+	case 545:
+		switch(ndx) {
+		case 0:
+			p = "const struct kload *";
+			break;
+		case 1:
+			p = "size_t";
+			break;
+		case 2:
+			p = "int";
+			break;
+		default:
+			break;
+		};
+		break;
 	default:
 		break;
 	};
@@ -10925,6 +10950,11 @@ systrace_return_setargdesc(int sysnum, int ndx, char *desc, size_t descsz)
 		break;
 	/* procctl */
 	case 544:
+		if (ndx == 0 || ndx == 1)
+			p = "int";
+		break;
+	/* kload */
+	case 545:
 		if (ndx == 0 || ndx == 1)
 			p = "int";
 		break;
