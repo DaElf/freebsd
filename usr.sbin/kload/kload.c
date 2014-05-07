@@ -41,6 +41,8 @@
 #include <sys/types.h>
 #include <sys/param.h>
 
+#include <machine/pc/bios.h>
+
 #include <dirent.h>
 #include <dlfcn.h>
 #include <err.h>
@@ -85,12 +87,6 @@ struct load_file {
 		DIR *dir;
 	} l_u;
 };
-
-struct smap {
-	uint64_t	base;
-	uint64_t	length;
-	uint32_t	type;
-} __packed;
 
 static int
 name2oid(char *name, int *oidp)
@@ -425,7 +421,7 @@ k_getenv(void *arg, int idx)
 static int
 k_buildsmap(void *arg, void **smap_void, size_t *outlen) 
 {
-	struct smap *smapbase;
+	struct bios_smap *smapbase;
 	size_t i,j;
 	size_t len;
 	char name[] = "hw.smap";
@@ -455,8 +451,8 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen)
 
 #ifdef DEBUG
 	{
-		struct smap *smap, *smapend;
-		smapend = (struct smap *)((uintptr_t)smapbase + len);
+		struct bios_smap *smap, *smapend;
+		smapend = (struct bios_smap *)((uintptr_t)smapbase + len);
 		for (smap = smapbase; smap < smapend; smap++) {
 			printf("\ttype %d base 0x%016lx length 0x%016lx\n",
 			       smap->type, smap->base, smap->length);

@@ -202,5 +202,5 @@ struct loader_callbacks {
 	 * this is for kload to build pass back in a copy of the running
 	 * systems smap returns
 	 */
-	int (*buildsmap)(void *arg, void **smap, size_t *len);
+	int (*buildsmap)(void *arg, void **bios_smap, size_t *len);
 };

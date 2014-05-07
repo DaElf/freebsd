@@ -46,7 +46,7 @@ static int userboot_zfs_found;
 #define	USERBOOT_VERSION	USERBOOT_VERSION_4
 
 #define	MALLOCSZ		(10*1024*1024)
-static char malloc_buf[1024*1024];
+static char mallocbuf[MALLOCSZ];
 struct loader_callbacks *callbacks;
 void *callbacks_arg;
 
@@ -82,14 +82,12 @@ loader_init(void)
 	 * It does not hurt to re-call this as it just sets global
 	 * ptrs that never change 
 	 */
-	//setheap((void *)malloc_buf, (void *)(malloc_buf + 512*1024));
 	setheap((void *)mallocbuf, (void *)(mallocbuf + sizeof(mallocbuf)));
 }
 
 int
 loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 {
-	static char mallocbuf[MALLOCSZ];
 	const char *var;
 	int i;
 	
