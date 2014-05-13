@@ -419,7 +419,7 @@ k_getenv(void *arg, int idx)
 }
 
 static int
-k_buildsmap(void *arg, void **smap_void, size_t *outlen) 
+k_buildsmap(void *arg, void **smap_void, size_t *outlen)
 {
 	struct bios_smap *smapbase;
 	size_t i,j;
@@ -637,7 +637,7 @@ kload_load_image(void *image, unsigned long entry_pt)
 	 * unless free memory starts at greater than 2 pages out.
 	 * The obvoius assumption is that something is getting stommped on but
 	 * that has yet to be determined. Adding this workaround.
-	 */ 
+	 */
 	kld.k_physfree = MAX(kld.k_modulep + (4 * PAGE_SIZE), kld.k_physfree);
 
 	printf("WARNING kernphys set to 0x%lx make sure this matches kernphys "
