@@ -87,7 +87,7 @@ static 	void *gdt_desc;
 pt_entry_t *kload_pgtbl = NULL; /* used as a test */
 static unsigned long max_addr = 0 , min_addr = 0;
 
-#define GIGMASK			(~((1<<30)-1))
+#define	GIGMASK		(~((1<<30)-1))
 #define	ONEGIG			(1<<30)
 #define	GUEST_GDTR_LIMIT	(3 * 8 - 1)
 
@@ -99,7 +99,7 @@ update_max_min(vm_offset_t addr, int count)
 {
 	int i;
 
-	for(i = 0; i < count; i++) {
+	for (i = 0; i < count; i++) {
 		if (vtophys(addr + (i * PAGE_SIZE)) < min_addr)
 			min_addr = vtophys(addr + (i * PAGE_SIZE));
 		if (vtophys(addr + (i * PAGE_SIZE)) > max_addr)
@@ -119,12 +119,12 @@ kload_kmem_alloc(vm_size_t size)
 	    VM_MEMATTR_WRITE_COMBINING);
 
 	if (va) {
-	num_pages = roundup2(size,PAGE_SIZE) >> PAGE_SHIFT;
-	update_max_min(va, num_pages);
+		num_pages = roundup2(size,PAGE_SIZE) >> PAGE_SHIFT;
+		update_max_min(va, num_pages);
 	}
 
 	return (va);
-	}
+}
 
 struct kload_cpage {
 	unsigned long kcp_magic;	/* 0 */
@@ -261,7 +261,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 
 	if (k_items == NULL) {
 		if((k_items = malloc(sizeof(struct kload_items),
-				     M_KLOAD, M_WAITOK|M_ZERO)) == NULL)
+			    M_KLOAD, M_WAITOK | M_ZERO)) == NULL)
 			return (ENOMEM);
 
 		k_items->head = 0;
@@ -387,9 +387,9 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		mtx_unlock(&Giant);
 	}
 	/*
-	 * the reboot code will do a module shutdown so it is not
-	 * part kload_shutdown_final but it needs to happen.
-	 * So in the case of exec run it here
+	 * The reboot code will do a module shutdown so it is not
+	 * part of kload_shutdown_final but it needs to happen.
+	 * So in the case of the exec flag being passed run it here.
 	 */
 	if (bootverbose)
 		printf("%s: module_shutdown\n", __func__);
