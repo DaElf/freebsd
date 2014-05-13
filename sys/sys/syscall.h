@@ -462,5 +462,4 @@
 #define	SYS_pipe2	542
 #define	SYS_aio_mlock	543
 #define	SYS_procctl	544
-#define	SYS_kload	545
-#define	SYS_MAXSYSCALL	546
+#define	SYS_MAXSYSCALL	545
