@@ -227,7 +227,7 @@ kload_copyin_segment(struct kload_segment *khdr, int seg)
 	return (error);
 }
 
-int
+static int
 sys_kload(struct thread *td, struct kload_args *uap)
 {
 	struct region_descriptor *null_idt;
@@ -456,14 +456,6 @@ kload_shutdown_final(void *arg, int howto)
 	}
 }
 
-
-
-
-static struct syscall_helper_data kload_syscalls[] = {
-        SYSCALL_INIT_HELPER(kload),
-        SYSCALL_INIT_LAST
-};
-
 static int
 kload_modload(struct module *module, int cmd, void *arg)
 {
@@ -471,30 +463,27 @@ kload_modload(struct module *module, int cmd, void *arg)
 
         switch (cmd) {
         case MOD_LOAD:
-		error = syscall_helper_register(kload_syscalls);
-		printf("%s registered syscalls\n", __func__);
-		if (error)
-			return (error);
+		printf("%s MOD_LOAD\n", __func__);
                 break;
-
         case MOD_UNLOAD:
-		syscall_helper_unregister(kload_syscalls);
+		printf("%s MOD_UNLOAD\n", __func__);
                 break;
-
         case MOD_SHUTDOWN:
                 break;
         default:
                 error = EINVAL;
                 break;
         }
-        return (error);
+        return error;
 }
 
-static moduledata_t kload_mod = {
-        "kload",
-        &kload_modload,
-        NULL
+static int offset = NO_SYSCALL;
+
+static struct sysent kload_sysent= {
+	3,			/* sy_narg */
+        (sy_call_t *)sys_kload	/* sy_call */
 };
 
-DECLARE_MODULE(kload, kload_mod, SI_SUB_SYSV_SEM, SI_ORDER_FIRST);
+SYSCALL_MODULE(kload, &offset, &kload_sysent, kload_modload, NULL);
+
 MODULE_VERSION(kload, 1);

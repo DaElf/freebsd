@@ -74,13 +74,11 @@ struct kload_items {
 	unsigned long flags;  /* not used yet */
 };
 
-#if 0
 struct kload_args {
-        char kld_l_[PADL_(const struct kload *)]; const struct kload * kld; char kld_r_[PADR_(const struct kload *)];
-        char buflen_l_[PADL_(size_t)]; size_t buflen; char buflen_r_[PADR_(size_t)];
-        char flags_l_[PADL_(int)]; int flags; char flags_r_[PADR_(int)];
+        const struct kload * kld;
+        size_t buflen;
+        u_int32_t flags;
 };
-#endif
 
 /*
  * defined in <arch>/kload.c
