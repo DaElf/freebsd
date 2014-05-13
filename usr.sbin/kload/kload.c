@@ -604,6 +604,10 @@ kload_load_image(void *image, unsigned long entry_pt)
 	char *stack = (char *)image + 0x1000; /* PAGESIZE */
 	struct kload kld;
 	int flags = KLOAD_LOAD;
+	int modid, syscall_num;
+	int ret;
+	struct module_stat stat;
+
 	/*
 	 * This must the same value sys/conf/ldscript.xxx
 	 * This value was changed at one point when a new version
@@ -649,7 +653,18 @@ kload_load_image(void *image, unsigned long entry_pt)
 		shutdown_processes();
 	}
 
-	return (syscall(SYS_kload, &kld, sizeof(struct kload), flags));
+	stat.version = sizeof(stat);
+	if ((modid = modfind("sys/kload")) == -1)
+		err(1, "modfind");
+	if (modstat(modid, &stat) != 0)
+		err(1, "modstat");
+	syscall_num = stat.data.intval;
+
+	ret = syscall(syscall_num, &kld, sizeof(struct kload), flags);
+
+	printf("kload syscall %d ret %d\n", syscall_num, ret);
+
+	return ret;
 }
 
 static int
