@@ -42,33 +42,46 @@ __FBSDID("$FreeBSD$");
 void
 bios_addsmapdata(struct preloaded_file *kfp)
 {
-	uint64_t lowmem, highmem;
-	int smapnum, len;
-	struct bios_smap smap[3], *sm;
+        uint64_t lowmem, highmem;
+        int smapnum;
+        size_t len;
+        struct bios_smap *smap = NULL, *sm = NULL;
+        int error = 1;
 
-	CALLBACK(getmem, &lowmem, &highmem);
+        if (callbacks->buildsmap)
+                error = callbacks->buildsmap(NULL, (void **)&smap, &len);
 
-	sm = &smap[0];
+	/*
+	 * Either there is no buildsmap callback or it failed.
+	 * Fall back to using getmem and a simple smap.
+	 */
 
-	sm->base = 0;				/* base memory */
-	sm->length = 640 * 1024;
-	sm->type = SMAP_TYPE_MEMORY;
-	sm++;
+        if (error) {
+                smap = sm = malloc(3 * sizeof(struct bios_smap));
+                CALLBACK(getmem, &lowmem, &highmem);
 
-	sm->base = 0x100000;			/* extended memory */
-	sm->length = lowmem - 0x100000;
-	sm->type = SMAP_TYPE_MEMORY;
-	sm++;
-
-	smapnum = 2;
-
-        if (highmem != 0) {
-                sm->base = 4 * GB;
-                sm->length = highmem;
+                sm->base = 0;                           /* base memory */
+                sm->length = 640 * 1024;
                 sm->type = SMAP_TYPE_MEMORY;
-		smapnum++;
+                sm++;
+
+                sm->base = 0x100000;                    /* extended memory */
+                sm->length = lowmem - 0x100000;
+                sm->type = SMAP_TYPE_MEMORY;
+                sm++;
+
+                smapnum = 2;
+
+                if (highmem != 0) {
+                        sm->base = 4 * GB;
+                        sm->length = highmem;
+                        sm->type = SMAP_TYPE_MEMORY;
+                        smapnum++;
+                }
+
+                len = smapnum * sizeof (struct bios_smap);
         }
 
-        len = smapnum * sizeof(struct bios_smap);
-        file_addmetadata(kfp, MODINFOMD_SMAP, len, &smap[0]);
+        file_addmetadata(kfp, MODINFOMD_SMAP, len, smap);
+        free(smap);
 }

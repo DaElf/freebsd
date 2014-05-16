@@ -44,10 +44,10 @@ static void userboot_zfs_probe(void);
 static int userboot_zfs_found;
 #endif
 
-/* Minimum version required */
-#define	USERBOOT_VERSION	USERBOOT_VERSION_3
+#define	USERBOOT_VERSION	USERBOOT_VERSION_4
 
 #define	MALLOCSZ		(64*1024*1024)
+static char mallocbuf[MALLOCSZ];
 
 struct loader_callbacks *callbacks;
 void *callbacks_arg;
@@ -75,24 +75,34 @@ exit(int v)
 }
 
 void
+loader_init(void)
+{
+	/*
+	 * It does not hurt to re-call this as it just sets global
+	 * ptrs that never change
+	 */
+	setheap((void *)mallocbuf, (void *)(mallocbuf + sizeof(mallocbuf)));
+}
+
+int
 loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 {
-	static char mallocbuf[MALLOCSZ];
 	const char *var;
 	int i;
-
-	if (version < USERBOOT_VERSION)
-		abort();
-
-	callbacks = cb;
-	callbacks_arg = arg;
-	userboot_disk_maxunit = ndisks;
 
 	/*
 	 * initialise the heap as early as possible.  Once this is done,
 	 * alloc() is usable.
 	 */
-	setheap((void *)mallocbuf, (void *)(mallocbuf + sizeof(mallocbuf)));
+	loader_init();
+
+	if (cb != NULL) {
+		callbacks = cb;
+		callbacks_arg = arg;
+		userboot_disk_maxunit = ndisks;
+	} else {
+		return (EFAULT);
+	}
 
 	/*
 	 * Hook up the console
@@ -100,6 +110,21 @@ loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 	cons_probe();
 
 	printf("\n%s", bootprog_info);
+        if (version != USERBOOT_VERSION) {
+		printf("%s: version expected %d got %d\n", __func__,
+		      USERBOOT_VERSION, version);
+		return(EOPNOTSUPP);
+	}
+
+	/*
+	 * March through the device switch probing for things.
+	 */
+	for (i = 0; devsw[i] != NULL; i++)
+		if (devsw[i]->dv_init != NULL)
+			(devsw[i]->dv_init)();
+
+	printf("%s, Revision %s\n", bootprog_name, bootprog_rev);
+	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 #if 0
 	printf("Memory: %ld k\n", memsize() / 1024);
 #endif
@@ -140,11 +165,11 @@ loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 	extract_currdev();
 
 	if (setjmp(jb))
-		return;
+		return (0);
 
 	interact(NULL);			/* doesn't return */
 
-	exit(0);
+	return(0);
 }
 
 /*
