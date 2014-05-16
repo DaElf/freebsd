@@ -32,6 +32,7 @@
 #define	USERBOOT_VERSION_1      1
 #define	USERBOOT_VERSION_2      2
 #define	USERBOOT_VERSION_3      3
+#define	USERBOOT_VERSION_4      4
 
 /*
  * Exit codes from the loader
@@ -195,4 +196,11 @@ struct loader_callbacks {
 	 * each invocation will add 1 to the previous value of 'num'.
 	 */
 	const char *	(*getenv)(void *arg, int num);
+
+	/*
+	 * build system smap
+	 * this is for kload to build pass back in a copy of the running
+	 * systems smap returns
+	 */
+	int (*buildsmap)(void *arg, void **bios_smap, size_t *len);
 };
