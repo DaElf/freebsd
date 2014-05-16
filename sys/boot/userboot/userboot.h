@@ -32,6 +32,7 @@
 #define	USERBOOT_VERSION_1      1
 #define	USERBOOT_VERSION_2      2
 #define	USERBOOT_VERSION_3      3
+#define	USERBOOT_VERSION_4      4
 
 /*
  * Version 4 added more generic callbacks for setting up
@@ -210,4 +211,11 @@ struct loader_callbacks {
 	int	(*vm_set_register)(void *arg, int vcpu, int reg, uint64_t val);
 	int	(*vm_set_desc)(void *arg, int vcpu, int reg, uint64_t base,
 	    u_int limit, u_int access);
+
+	/*
+	 * Build system map
+	 * This will query the running system and build a system map such
+	 * that it can be passed to a kload'ed kernel
+	 */
+	int (*buildsmap)(void *arg, void **bios_smap, size_t *len);
 };
