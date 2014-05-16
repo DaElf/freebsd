@@ -527,6 +527,12 @@ test_getenv(void *arg, int idx)
 		return (vars[idx - num_myvars]);
 }
 
+static int
+test_buildsmap(void *arg, void **smap_void, size_t *outlen)
+{
+	return (0);
+}
+
 struct loader_callbacks cb = {
 	.putc = test_putc,
 	.getc = test_getc,
@@ -557,6 +563,7 @@ struct loader_callbacks cb = {
         .getmem = test_getmem,
 
 	.getenv = test_getenv,
+	.buildsmap = test_buildsmap,
 };
 
 void
@@ -626,5 +633,5 @@ main(int argc, char** argv, char ** environment)
 	term.c_lflag &= ~(ICANON|ECHO);
 	tcsetattr(0, TCSAFLUSH, &term);
 
-	func(&cb, NULL, USERBOOT_VERSION_3, disk_index + 1);
+	func(&cb, NULL, USERBOOT_VERSION_6, disk_fd >= 0);
 }

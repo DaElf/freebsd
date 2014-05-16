@@ -47,6 +47,12 @@
 #define	USERBOOT_VERSION_5      5
 
 /*
+ * Version 6 added a callback for building the BIOS system memory map
+ * from the running system to pass to a kload'ed kernel.
+ */
+#define	USERBOOT_VERSION_6      6
+
+/*
  * Exit codes from the loader
  */
 #define	USERBOOT_EXIT_QUIT      1
@@ -225,4 +231,11 @@ struct loader_callbacks {
 	 * Version 5 addition.
 	 */
 	void	(*swap_interpreter)(void *arg, const char *interp);
+
+	/*
+	 * Version 6 additions.
+	 * Build system map: query the running system and build a system map
+	 * that can be passed to a kload'ed kernel.
+	 */
+	int (*buildsmap)(void *arg, void **bios_smap, size_t *len);
 };
