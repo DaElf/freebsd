@@ -16,6 +16,11 @@ SUBDIR+=	boot0cfg
 SUBDIR+=	btxld
 .endif
 SUBDIR+=	cpucontrol
+.if ${MK_HYPERV} != "no"
+SUBDIR+=	hyperv
+.endif
+SUBDIR+=	kgmon
+SUBDIR+=	kload
 SUBDIR+=	lptcontrol
 SUBDIR+=	mptable
 SUBDIR+=	spkrtest

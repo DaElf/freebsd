@@ -1,0 +1,96 @@
+.\"
+.\"
+.Dd October 7, 2015
+.Dt KLOAD 8
+.Os
+.Sh NAME
+.Nm kload
+.Nd load a
+.Fx
+new kernel into memory to be booted by kload
+.Sh SYNOPSIS
+.Nm
+.Op Fl S
+.Op Fl c Ar cons-dev
+.Op Fl d Ar disk-path
+.Op Fl e Ar name=value
+.Op Fl h Ar host-path
+.Op Fl l Ar os-loader
+.Op Fl m Ar mem-size
+.Ar vmname
+.Sh DESCRIPTION
+.Nm
+is used to load a
+.Fx
+kernel
+.Xr kload 4
+boot
+.Pp
+.Nm
+is based on
+.Xr loader 8
+and will present an interface identical to the
+.Fx
+loader on the user's terminal.
+This behavior can be changed by specifying a different OS loader.
+.Sh OPTIONS
+The following options are available:
+.Bl -tag -width indent
+.It Fl c Ar cons-dev
+.Ar cons-dev
+is a
+.Xr tty 4
+device to use for
+.Nm
+terminal I/O.
+.Pp
+The text string "stdio" is also accepted and selects the use of
+unbuffered standard I/O. This is the default value.
+.It Fl d Ar disk-path
+The
+.Ar disk-path
+is the pathname of the guest's boot disk image.
+.It Fl e Ar name=value
+Set the
+.Fx
+loader environment variable
+.Ar name
+to
+.Ar value .
+.Pp
+The option may be used more than once to set more than one environment
+variable.
+.It Fl h Ar host-path
+The
+.Ar host-path
+is the directory at the top of the boot filesystem.
+.It Fl l Ar os-loader
+Specify a different OS loader.
+By default
+.Nm
+will use
+.Pa /boot/userboot.so ,
+which presents a standard
+.Fx
+loader.
+.Sh EXAMPLES
+To create a virtual machine named
+.Ar freebsd-vm
+that boots off the ISO image
+.Pa /freebsd/release.iso
+and has 1GB memory allocated to it:
+.Pp
+.Dl "kload -d /freebsd/release.iso freebsd-vm"
+.Pp
+.Xr loader 8
+.Sh HISTORY
+.Nm
+first appeared in
+.Fx 11.0 ,
+.Sh AUTHORS
+.An Russell Cattelan Aq Mt cattelan@digitalelves.com .
+.Sh BUGS
+.Nm
+can only load
+.Fx
+as a single kernel.
