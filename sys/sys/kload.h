@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2011 - 2015
+ * Copyright (c) 2011 - 2016
  *	Russell Cattelan Digital Elves LLC
  * Copyright (c) 2012 - 2015
  *	EMC Corp / Isilon Systems Division  All rights reserved.
@@ -85,6 +85,10 @@ struct kload_args {
  */
 pt_entry_t * kload_build_page_table(void);
 void setup_freebsd_gdt(uint64_t *);
+<<<<<<< cfd72fb382fcba9b1f87fa4f3fc198004c513c05
+=======
+void kload_module_shutdown(void);
+>>>>>>> Userspace kload cmd  -- based on bhvload
 
 /*
  * defined in <arch>/kload_exec.S
