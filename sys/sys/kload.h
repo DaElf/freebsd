@@ -85,7 +85,6 @@ struct kload_args {
  */
 pt_entry_t * kload_build_page_table(void);
 void setup_freebsd_gdt(uint64_t *);
-void kload_module_shutdown(void);
 
 /*
  * defined in <arch>/kload_exec.S

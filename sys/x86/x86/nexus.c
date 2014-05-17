@@ -59,6 +59,7 @@ __FBSDID("$FreeBSD$");
 #include <machine/intr_machdep.h>
 #include <sys/rman.h>
 #include <sys/interrupt.h>
+#include <sys/sysctl.h>
 
 #include <machine/vmparam.h>
 #include <vm/vm.h>
