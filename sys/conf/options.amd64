@@ -68,3 +68,5 @@ ISCI_LOGGING	opt_isci.h
 
 # EFI Runtime services support
 EFIRT			opt_efirt.h
+# kload only supported on amd64 at the moment
+KLOAD			opt_kload.h
