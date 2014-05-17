@@ -35,6 +35,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_pmap.h"
 #include "opt_sched.h"
 #include "opt_smp.h"
+#include "opt_kload.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -89,6 +90,13 @@ int	mp_naps;		/* # of Applications processors */
 int	boot_cpu_id = -1;	/* designated BSP */
 
 extern	struct pcpu __pcpu[];
+
+#ifdef KLOAD
+/* page table setup by kload so we can set the APs to a known page table */
+extern pt_entry_t kload_pgtbl;
+#else
+static pt_entry_t kload_pgtbl = 0;
+#endif
 
 /* AP uses this during bootstrap.  Do not staticize.  */
 char *bootSTK;
@@ -973,6 +981,12 @@ cpususpend_handler(void)
 
 	mtx_assert(&smp_ipi_mtx, MA_NOTOWNED);
 
+	/*
+	 * shutdown interrupts to the cpu
+	 * and then set the mask as stopped
+	 */
+	lapic_clear_lapic(1 /* disable lapic */);
+
 	cpu = PCPU_GET(cpuid);
 	if (savectx(&susppcbs[cpu]->sp_pcb)) {
 #ifdef __amd64__
@@ -995,6 +1009,29 @@ cpususpend_handler(void)
 
 		/* Indicate that we are resumed */
 		CPU_CLR_ATOMIC(cpu, &suspended_cpus);
+	}
+
+	if (kload_pgtbl) {
+		/*
+		 * Set the pagetable to boot capable PT in case this is
+		 * kload suspend. If a normal suspend resume we restore
+		 * the originnal page table
+		 */
+		(void)intr_disable();
+		load_cr3(kload_pgtbl);
+
+		/* Disable PGE. */
+		load_cr4(rcr4() & ~CR4_PGE);
+
+		/* Disable caches (CD = 1, NW = 0) and paging*/
+		load_cr0((rcr0() & ~CR0_NW) | CR0_CD | CR0_PG);
+
+		/* Flushes caches and TLBs. */
+		wbinvd();
+		invltlb();
+
+		halt();
+
 	}
 
 	/* Wait for resume */

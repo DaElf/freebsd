@@ -571,6 +571,62 @@ native_lapic_xapic_mode(void)
 	intr_restore(saveintr);
 }
 
+void
+lapic_clear_lapic(u_int disable) {
+
+	struct lapic *la;
+	la = &lapics[lapic_id()];
+
+	uint32_t value;
+
+	if (bootverbose)
+		printf("%s lapic_id(%d) cpu(%d) la %p lapic_map %p\n",__FUNCTION__,
+		       lapic_id(), PCPU_GET(cpuid), la, lapic_map);
+
+	/*
+	 * Fist we set the mask bit to keep and new interrupts from
+	 * arriving but allowing any pending interrupts to finish
+	 * *THEN* set the registers to default values
+	 * If the interrupts are not allowed to clear a kload'ed / booted
+	 * kernel will see the old interrupts before the appropriate handlers
+	 * are in place and trigger a panic.
+	 */
+#ifdef notyet
+	/* this seems to be causing APIC error in the new kernel */
+	value = lapic_read32(LAPIC_LVT_ERROR);
+	value |= APIC_LVT_M;
+	lapic_write32(LAPIC_LVT_ERROR, value);
+#endif
+
+	value = lapic_read32(LAPIC_LVT_TIMER);
+	value |= APIC_LVT_M;
+	lapic_write32(LAPIC_LVT_TIMER, value);
+
+	value = lapic_read32(LAPIC_LVT_LINT0);
+	value |= APIC_LVT_M;
+	lapic_write32(LAPIC_LVT_LINT0, value);
+
+	value = lapic_read32(LAPIC_LVT_LINT1);
+	value |= APIC_LVT_M;
+	lapic_write32(LAPIC_LVT_LINT1, value);
+
+	value = lapic_read32(LAPIC_LVT_PCINT);
+	value |= APIC_LVT_M;
+	lapic_write32(LAPIC_LVT_PCINT, value);
+
+	/* Program timer LVT and setup handler. */
+	lapic_write32(LAPIC_LVT_TIMER, APIC_LVTT_M); /* masked */
+	lapic_write32(LAPIC_LVT_LINT0, APIC_LVT_M); /* masked */
+	lapic_write32(LAPIC_LVT_LINT1, APIC_LVT_M); /* masked */
+	//lapic_write32(LAPIC_LVT_PCINT, APIC_LVT_M);  /* masked */
+
+	if (disable) {
+		if (bootverbose)
+			printf("lapic disable\n");
+		lapic_disable();
+	}
+}
+
 static void
 native_lapic_setup(int boot)
 {
