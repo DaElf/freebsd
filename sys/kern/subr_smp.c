@@ -221,7 +221,8 @@ generic_stop_cpus(cpuset_t map, u_int type)
 
 	KASSERT(
 #if defined(__amd64__) || defined(__i386__)
-	    type == IPI_STOP || type == IPI_STOP_HARD || type == IPI_SUSPEND,
+	    type == IPI_STOP || type == IPI_STOP_HARD || type == IPI_SUSPEND
+	    || type == IPI_KLOAD,
 #else
 	    type == IPI_STOP || type == IPI_STOP_HARD,
 #endif
@@ -241,7 +242,7 @@ generic_stop_cpus(cpuset_t map, u_int type)
 	 * will be lost, violating FreeBSD's assumption of reliable
 	 * IPI delivery.
 	 */
-	if (type == IPI_SUSPEND)
+	if (type == IPI_SUSPEND || type == IPI_KLOAD)
 		mtx_lock_spin(&smp_ipi_mtx);
 #endif
 
@@ -255,7 +256,7 @@ generic_stop_cpus(cpuset_t map, u_int type)
 	ipi_selected(map, type);
 
 #if defined(__amd64__) || defined(__i386__)
-	if (type == IPI_SUSPEND)
+	if (type == IPI_SUSPEND || type == IPI_KLOAD)
 		cpus = &suspended_cpus;
 	else
 #endif
@@ -273,7 +274,7 @@ generic_stop_cpus(cpuset_t map, u_int type)
 	}
 
 #if defined(__amd64__) || defined(__i386__)
-	if (type == IPI_SUSPEND)
+	if (type == IPI_SUSPEND || type == IPI_KLOAD)
 		mtx_unlock_spin(&smp_ipi_mtx);
 #endif
 
@@ -301,6 +302,13 @@ suspend_cpus(cpuset_t map)
 {
 
 	return (generic_stop_cpus(map, IPI_SUSPEND));
+}
+
+int
+kload_suspend_cpus(cpuset_t map)
+{
+
+	return (generic_stop_cpus(map, IPI_KLOAD));
 }
 #endif
 

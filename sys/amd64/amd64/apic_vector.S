@@ -281,6 +281,18 @@ IDTVEC(cpususpend)
 	jmp	doreti
 
 /*
+ * Executed by a CPU when it receives an IPI_KLOAD from another CPU.
+ */
+	.text
+	SUPERALIGN_TEXT
+IDTVEC(cpukload)
+	PUSH_FRAME
+
+	call	as_lapic_eoi
+	call	cpukload_handler
+	jmp	doreti
+
+/*
  * Executed by a CPU when it receives a RENDEZVOUS IPI from another CPU.
  *
  * - Calls the generic rendezvous action function.
