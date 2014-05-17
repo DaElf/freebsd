@@ -454,6 +454,12 @@ kern_reboot(int howto)
 {
 	static int once = 0;
 
+	/*
+	 * Do not use kload if we're coming to this code via panic
+	 */
+	if (panicstr != NULL)
+		howto |= RB_ABORT_KLOAD;
+
 	if (initproc != NULL && curproc != initproc)
 		BOOTTRACE("kernel shutdown (dirty) started");
 	else

@@ -136,7 +136,8 @@
 #define	IPI_SUSPEND	(APIC_IPI_INTS + 7)	/* Suspend CPU until restarted. */
 #define	IPI_SWI		(APIC_IPI_INTS + 8)	/* Run clk_intr_event. */
 #define	IPI_OFF		(APIC_IPI_INTS + 9)	/* Stop CPU forever */
-#define	IPI_DYN_FIRST	(APIC_IPI_INTS + 10)
+#define	IPI_KLOAD	(APIC_IPI_INTS + 10)	/* Suspend CPU for kload. */
+#define	IPI_DYN_FIRST	(APIC_IPI_INTS + 11)
 #define	IPI_DYN_LAST	(254)			/* IPIs allocated at runtime */
 
 /*
@@ -260,6 +261,7 @@ void	lapic_handle_cmc(void);
 void	lapic_handle_error(void);
 void	lapic_handle_intr(int vector, struct trapframe *frame);
 void	lapic_handle_timer(struct trapframe *frame);
+void	lapic_clear_lapic(u_int);
 
 int	ioapic_get_rid(u_int apic_id, uint16_t *ridp);
 device_t ioapic_get_dev(u_int apic_id);

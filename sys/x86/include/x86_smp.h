@@ -79,7 +79,8 @@ inthand_t
 	IDTVEC(cpuoff),		/* CPU goes offline until hard reset */
 	IDTVEC(cpustop),	/* CPU stops & waits to be restarted */
 	IDTVEC(cpususpend),	/* CPU suspends & waits to be resumed */
-	IDTVEC(rendezvous);	/* handle CPU rendezvous */
+	IDTVEC(rendezvous),	/* handle CPU rendezvous */
+	IDTVEC(cpukload);	/* CPU suspends for kload reboots */
 
 typedef void (*smp_invl_cb_t)(struct pmap *, vm_offset_t addr1,
     vm_offset_t addr2);
@@ -94,6 +95,7 @@ void	cpu_add(u_int apic_id, char boot_cpu);
 void	cpustop_handler(void);
 void	cpususpend_handler(void);
 void	cpuoff_handler(void);
+void	cpukload_handler(void);
 void	init_secondary_tail(void);
 void	init_secondary(void);
 void	ipi_startup(int apic_id, int vector);
