@@ -231,6 +231,7 @@ generic_stop_cpus(cpuset_t map, u_int type)
 	    type == IPI_STOP || type == IPI_STOP_HARD
 #if X86
 	    || type == IPI_SUSPEND
+	    || type == IPI_KLOAD,
 #endif
 	    , ("%s: invalid stop type", __func__));
 
@@ -248,7 +249,7 @@ generic_stop_cpus(cpuset_t map, u_int type)
 	 * will be lost, violating FreeBSD's assumption of reliable
 	 * IPI delivery.
 	 */
-	if (type == IPI_SUSPEND)
+	if (type == IPI_SUSPEND || type == IPI_KLOAD)
 		mtx_lock_spin(&smp_ipi_mtx);
 #endif
 
@@ -268,7 +269,7 @@ generic_stop_cpus(cpuset_t map, u_int type)
 #endif
 
 #if X86
-	if (type == IPI_SUSPEND)
+	if (type == IPI_SUSPEND || type == IPI_KLOAD)
 		cpus = &suspended_cpus;
 	else
 #endif
@@ -286,7 +287,7 @@ generic_stop_cpus(cpuset_t map, u_int type)
 	}
 
 #if X86
-	if (type == IPI_SUSPEND)
+	if (type == IPI_SUSPEND || type == IPI_KLOAD)
 		mtx_unlock_spin(&smp_ipi_mtx);
 #endif
 
@@ -314,6 +315,13 @@ suspend_cpus(cpuset_t map)
 {
 
 	return (generic_stop_cpus(map, IPI_SUSPEND));
+}
+
+int
+kload_suspend_cpus(cpuset_t map)
+{
+
+	return (generic_stop_cpus(map, IPI_KLOAD));
 }
 #endif
 
