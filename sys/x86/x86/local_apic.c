@@ -1515,7 +1515,19 @@ lapic_handle_error(void)
 	lapic_write32(LAPIC_ESR, 0);
 	esr = lapic_read32(LAPIC_ESR);
 
-	printf("CPU%d: local APIC error 0x%x\n", PCPU_GET(cpuid), esr);
+	printf("CPU%d: local APIC error 0x%x\t", PCPU_GET(cpuid), esr);
+	if (esr & APIC_ESR_SEND_CS_ERROR)
+		printf("send_cs_error\n");
+	if (esr & APIC_ESR_RECEIVE_CS_ERROR)
+		printf("receive_cs_error\n");
+	if (esr & APIC_ESR_SEND_ACCEPT)
+		printf("send_accept\n");
+	if (esr & APIC_ESR_RECEIVE_ACCEPT)
+		printf("receive_accept\n");
+	if (esr & APIC_ESR_SEND_ILLEGAL_VECTOR)
+		printf("send_illegal_vector\n");
+	if (esr & APIC_ESR_ILLEGAL_REGISTER)
+		printf("illegal_register\n");
 	lapic_eoi();
 }
 

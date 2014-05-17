@@ -123,6 +123,8 @@ static void	ioapic_resume(struct pic *pic, bool suspend_cancelled);
 static int	ioapic_assign_cpu(struct intsrc *isrc, u_int apic_id);
 static void	ioapic_program_intpin(struct ioapic_intsrc *intpin);
 static void	ioapic_reprogram_intpin(struct intsrc *isrc);
+/* kload debug */
+static void	ioapic_print_lowreg(void *);
 
 static STAILQ_HEAD(,ioapic) ioapic_list = STAILQ_HEAD_INITIALIZER(ioapic_list);
 struct pic ioapic_template = {
@@ -146,6 +148,43 @@ static u_int next_id;
 static int enable_extint;
 SYSCTL_INT(_hw_apic, OID_AUTO, enable_extint, CTLFLAG_RDTUN, &enable_extint, 0,
     "Enable the ExtINT pin in the first I/O APIC");
+
+/*
+ * kload debugging
+ * print out the state of the io apic at system boot time
+ * so the sate of each interrupt can be inspected
+ */
+struct ioapic_route_entry {
+	uint32_t	vector		:  8,
+		delivery_mode	:  3,	/* 000: FIXED
+					 * 001: lowest prio
+					 * 111: ExtINT
+					 */
+		dest_mode	:  1,	/* 0: physical, 1: logical */
+		delivery_status	:  1,
+		polarity	:  1,
+		irr		:  1,
+		trigger		:  1,	/* 0: edge, 1: level */
+		mask		:  1,	/* 0: enabled, 1: disabled */
+		__reserved_2	: 15;
+} __attribute__ ((packed));
+
+static void
+ioapic_print_lowreg(void *value)
+{
+	struct ioapic_route_entry *lowreg=
+		(struct ioapic_route_entry *)value;
+	printf("Mask %1d Trig %1d IRR %1d Polarity %1d "
+	       "DelStat %1d DestMode %1d DelMode %d Vector %d\n",
+	       lowreg->mask,
+	       lowreg->trigger,
+	       lowreg->irr,
+	       lowreg->polarity,
+	       lowreg->delivery_status,
+	       lowreg->dest_mode,
+	       lowreg->delivery_mode,
+	       lowreg->vector);
+}
 
 static void
 _ioapic_eoi_source(struct intsrc *isrc, int locked)
@@ -392,6 +431,13 @@ ioapic_program_intpin(struct ioapic_intsrc *intpin)
 	/* Write the values to the APIC. */
 	value = ioapic_read(io->io_addr, IOAPIC_REDTBL_HI(intpin->io_intpin));
 	value &= ~IOART_DEST;
+
+	if (bootverbose) {
+		printf("%s: IOAPIC_REDTBL_HI intpin %d value 0x%x high 0x%x low 0x%x\n",
+		       __func__,
+		       intpin->io_intpin,
+		       value, high, low);
+	}
 	value |= high;
 	ioapic_write(io->io_addr, IOAPIC_REDTBL_HI(intpin->io_intpin), value);
 	intpin->io_lowreg = low;
@@ -472,8 +518,8 @@ ioapic_assign_cpu(struct intsrc *isrc, u_int apic_id)
 		printf("ioapic%u: routing intpin %u (", io->io_id,
 		    intpin->io_intpin);
 		ioapic_print_irq(intpin);
-		printf(") to lapic %u vector %u\n", intpin->io_cpu,
-		    intpin->io_vector);
+			printf(") to lapic %u vector %u (0x%02X)\n", intpin->io_cpu,
+		       intpin->io_vector, intpin->io_vector);
 	}
 	ioapic_program_intpin(intpin);
 	mtx_unlock_spin(&icu_lock);
