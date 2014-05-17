@@ -3752,6 +3752,7 @@ kern/kern_khelp.c		standard
 kern/kern_kthread.c		standard
 kern/kern_ktr.c			optional ktr
 kern/kern_ktrace.c		standard
+kern/kern_kload.c		optional kload
 kern/kern_linker.c		standard
 kern/kern_lock.c		standard
 kern/kern_lockf.c		standard
