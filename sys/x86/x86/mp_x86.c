@@ -36,6 +36,7 @@ __FBSDID("$FreeBSD$");
 #include "opt_pmap.h"
 #include "opt_sched.h"
 #include "opt_smp.h"
+#include "opt_kload.h"
 
 #include <sys/param.h>
 #include <sys/systm.h>
@@ -91,6 +92,14 @@ int	mcount_lock;
 
 int	mp_naps;		/* # of Applications processors */
 int	boot_cpu_id = -1;	/* designated BSP */
+
+
+#ifdef KLOAD
+/* page table setup by kload so we can set the APs to a known page table */
+extern pt_entry_t kload_pgtbl;
+#else
+static pt_entry_t kload_pgtbl = 0;
+#endif
 
 /* AP uses this during bootstrap.  Do not staticize.  */
 char *bootSTK;
@@ -1356,6 +1365,73 @@ cpustop_handler_post(u_int cpu)
 	if (cpu == 0 && cpustop_restartfunc != NULL) {
 		cpustop_restartfunc();
 		cpustop_restartfunc = NULL;
+	}
+}
+
+
+/*
+ * Handle an IPI_SUSPEND by saving our current context and spinning until we
+ * are resumed.
+ */
+void
+cpukload_handler(void)
+{
+	u_int cpu;
+
+	mtx_assert(&smp_ipi_mtx, MA_NOTOWNED);
+
+	/*
+	 * shutdown interrupts to the cpu
+	 * and then set the mask as stopped
+	 */
+	lapic_clear_lapic(1 /* disable lapic */);
+
+	cpu = PCPU_GET(cpuid);
+	printf("%s cpu %d\n", __func__, cpu);
+	if (savectx(&susppcbs[cpu]->sp_pcb)) {
+#ifdef __amd64__
+		fpususpend(susppcbs[cpu]->sp_fpususpend);
+#else
+		npxsuspend(susppcbs[cpu]->sp_fpususpend);
+#endif
+		wbinvd();
+		CPU_SET_ATOMIC(cpu, &suspended_cpus);
+	} else {
+#ifdef __amd64__
+		fpuresume(susppcbs[cpu]->sp_fpususpend);
+#else
+		npxresume(susppcbs[cpu]->sp_fpususpend);
+#endif
+		pmap_init_pat();
+		initializecpu();
+		PCPU_SET(switchtime, 0);
+		PCPU_SET(switchticks, ticks);
+
+		/* Indicate that we are resumed */
+		CPU_CLR_ATOMIC(cpu, &suspended_cpus);
+	}
+
+	if (kload_pgtbl) {
+		/*
+		 * Set the pagetable to boot capable PT in case this is
+		 * kload suspend. If a normal suspend resume we restore
+		 * the originnal page table
+		 */
+		(void)intr_disable();
+		load_cr3(kload_pgtbl);
+
+		/* Disable PGE. */
+		load_cr4(rcr4() & ~CR4_PGE);
+
+		/* Disable caches (CD = 1, NW = 0) and paging*/
+		load_cr0((rcr0() & ~CR0_NW) | CR0_CD | CR0_PG);
+
+		/* Flushes caches and TLBs. */
+		wbinvd();
+		invltlb();
+
+		halt();
+
 	}
 }
 

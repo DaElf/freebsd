@@ -205,6 +205,24 @@ intr_add_handler(const char *name, int vector, driver_filter_t filter,
 }
 
 int
+intr_clear_all_handlers(void)
+{
+	struct intsrc *isrc;
+	int i;
+
+	mtx_lock(&intr_table_lock);
+	for (i = 0; i < NUM_IO_INTS; i++) {
+		isrc = interrupt_sources[i];
+		if (isrc != NULL) {
+			isrc->is_pic->pic_disable_source(isrc, PIC_EOI);
+			isrc->is_pic->pic_disable_intr(isrc);
+		}
+	}
+	mtx_unlock(&intr_table_lock);
+	return (0);
+}
+
+int
 intr_remove_handler(void *cookie)
 {
 	struct intsrc *isrc;

@@ -316,6 +316,7 @@ static void	native_lapic_xapic_mode(void);
 static void	native_lapic_setup(int boot);
 static void	native_lapic_dump(const char *str);
 static void	native_lapic_disable(void);
+static void	native_lapic_clear_lapic(u_int);
 static void	native_lapic_eoi(void);
 static int	native_lapic_id(void);
 static int	native_lapic_intr_pending(u_int vector);
@@ -361,6 +362,7 @@ struct apic_ops apic_ops = {
 	.id			= native_lapic_id,
 	.intr_pending		= native_lapic_intr_pending,
 	.set_logical_id		= native_lapic_set_logical_id,
+	.clear_lapic		= native_lapic_clear_lapic,
 	.cpuid			= native_apic_cpuid,
 	.alloc_vector		= native_apic_alloc_vector,
 	.alloc_vectors		= native_apic_alloc_vectors,
@@ -722,6 +724,68 @@ native_lapic_xapic_mode(void)
 	if (x2apic_mode)
 		native_lapic_enable_x2apic();
 	intr_restore(saveintr);
+}
+
+void
+native_lapic_clear_lapic(u_int disable)
+{
+	struct lapic *la;
+	uint32_t value;
+	uint32_t maxlvt;
+
+	la = &lapics[lapic_id()];
+	maxlvt = (lapic_read32(LAPIC_VERSION) & APIC_VER_MAXLVT) >> MAXLVTSHIFT;
+
+	if (bootverbose)
+		printf("%s lapic_id(%d) cpu(%d) la %p lapic_map %p maxlvt %u\n",
+		       __func__, lapic_id(), PCPU_GET(cpuid), la,
+		       lapic_map, maxlvt);
+
+	/*
+	 * Fist we set the mask bit to keep and new interrupts from
+	 * arriving but allowing any pending interrupts to finish
+	 * *THEN* set the registers to default values
+	 * If the interrupts are not allowed to clear a kload'ed / booted
+	 * kernel will see the old interrupts before the appropriate handlers
+	 * are in place and trigger a panic.
+	 */
+	if (maxlvt >= APIC_LVT_ERROR) { /* aka 3 */
+		value = lapic_read32(LAPIC_LVT_ERROR);
+		lapic_write32(LAPIC_LVT_ERROR, value | APIC_LVT_M);
+	}
+
+	value = lapic_read32(LAPIC_LVT_TIMER);
+	lapic_write32(LAPIC_LVT_TIMER, value | APIC_LVT_M);
+
+	value = lapic_read32(LAPIC_LVT_LINT0);
+	lapic_write32(LAPIC_LVT_LINT0, value | APIC_LVT_M);
+
+	value = lapic_read32(LAPIC_LVT_LINT1);
+	lapic_write32(LAPIC_LVT_LINT1, value | APIC_LVT_M);
+
+	if (maxlvt >= APIC_LVT_PMC) { /* aka 4 */
+		value = lapic_read32(LAPIC_LVT_PCINT);
+		lapic_write32(LAPIC_LVT_PCINT, value | APIC_LVT_M);
+	}
+	if (maxlvt >= APIC_LVT_THERMAL) /* aka 5 */
+		printf("%s Therm Vector\n", __func__);
+	if (maxlvt >= APIC_LVT_CMCI) /* aka 6 */
+		printf("%s Intel MCE\n", __func__);
+
+	/* Program timer LVT and setup handler. */
+	lapic_write32(LAPIC_LVT_TIMER, APIC_LVTT_M); /* masked */
+	lapic_write32(LAPIC_LVT_LINT0, APIC_LVT_M); /* masked */
+	lapic_write32(LAPIC_LVT_LINT1, APIC_LVT_M); /* masked */
+	if (maxlvt >= APIC_LVT_ERROR) /* aka 3 */
+		lapic_write32(LAPIC_LVT_ERROR, APIC_LVT_M);
+	if (maxlvt >= APIC_LVT_PMC) /* aka 4 */
+		lapic_write32(LAPIC_LVT_PCINT, APIC_LVT_M);  /* masked */
+
+	if (disable) {
+		if (bootverbose)
+			printf("lapic disable\n");
+		lapic_disable();
+	}
 }
 
 static void

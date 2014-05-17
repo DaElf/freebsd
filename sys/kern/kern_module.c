@@ -63,7 +63,6 @@ struct module {
 static TAILQ_HEAD(modulelist, module) modules;
 struct sx modules_sx;
 static int nextid = 1;
-static void module_shutdown(void *, int);
 
 static int
 modevent_nop(module_t mod, int what, void *arg)
@@ -91,7 +90,7 @@ module_init(void *arg)
 
 SYSINIT(module, SI_SUB_KLD, SI_ORDER_FIRST, module_init, 0);
 
-static void
+void
 module_shutdown(void *arg1, int arg2)
 {
 	module_t mod;

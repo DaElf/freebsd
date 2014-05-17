@@ -180,6 +180,7 @@ int	intr_register_pic(struct pic *pic);
 int	intr_register_source(struct intsrc *isrc);
 int	intr_remove_handler(void *cookie);
 void	intr_resume(bool suspend_cancelled);
+int	intr_clear_all_handlers(void);
 void	intr_suspend(void);
 void	intr_reprogram(void);
 void	intrcnt_add(const char *name, u_long **countp);

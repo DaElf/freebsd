@@ -369,6 +369,12 @@ kern_reboot(int howto)
 {
 	static int once = 0;
 
+	/*
+	 * Do not use kload if we're coming to this code via panic
+	 */
+	if (panicstr != NULL)
+		howto |= RB_ABORT_KLOAD;
+
 #if defined(SMP)
 	/*
 	 * Bind us to CPU 0 so that all shutdown code runs there.  Some

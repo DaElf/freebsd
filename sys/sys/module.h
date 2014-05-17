@@ -230,6 +230,7 @@ module_t	module_getfnext(module_t);
 const char *	module_getname(module_t);
 void	module_setspecific(module_t, modspecific_t *);
 struct linker_file *module_file(module_t);
+void module_shutdown(void *arg1, int arg2);
 
 #ifdef	MOD_DEBUG
 extern int mod_debug;

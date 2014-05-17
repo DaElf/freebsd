@@ -61,6 +61,7 @@
 #define	RB_PAUSE	0x100000 /* pause after each output line during probe */
 #define	RB_REROOT	0x200000 /* unmount the rootfs and mount it again */
 #define	RB_POWERCYCLE	0x400000 /* Power cycle if possible */
+#define	RB_ABORT_KLOAD	0x800000 /* abort kload reboot if system has panicked */
 #define	RB_MULTIPLE	0x20000000	/* use multiple consoles */
 
 #define	RB_BOOTINFO	0x80000000	/* have `struct bootinfo *' arg */

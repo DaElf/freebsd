@@ -127,11 +127,12 @@
 
 #define	IPI_STOP	(APIC_IPI_INTS + 6)	/* Stop CPU until restarted. */
 #define	IPI_SUSPEND	(APIC_IPI_INTS + 7)	/* Suspend CPU until restarted. */
+#define	IPI_KLOAD	(APIC_IPI_INTS + 8)	/* Suspend CPU until restarted. */
 #ifdef __i386__
-#define	IPI_LAZYPMAP	(APIC_IPI_INTS + 8)	/* Lazy pmap release. */
-#define	IPI_DYN_FIRST	(APIC_IPI_INTS + 9)
+#define	IPI_LAZYPMAP	(APIC_IPI_INTS + 9)	/* Lazy pmap release. */
+#define	IPI_DYN_FIRST	(APIC_IPI_INTS + 10)
 #else
-#define	IPI_DYN_FIRST	(APIC_IPI_INTS + 8)
+#define	IPI_DYN_FIRST	(APIC_IPI_INTS + 9)
 #endif
 #define	IPI_DYN_LAST	(253)			/* IPIs allocated at runtime */
 
@@ -218,6 +219,7 @@ struct apic_ops {
 	int	(*id)(void);
 	int	(*intr_pending)(u_int);
 	void	(*set_logical_id)(u_int, u_int, u_int);
+	void	(*clear_lapic)(u_int);
 	u_int	(*cpuid)(u_int);
 
 	/* Vectors */
@@ -331,6 +333,13 @@ lapic_set_logical_id(u_int apic_id, u_int cluster, u_int cluster_id)
 {
 
 	apic_ops.set_logical_id(apic_id, cluster, cluster_id);
+}
+
+static inline void
+lapic_clear_lapic(u_int disable)
+{
+
+	return (apic_ops.clear_lapic(disable));
 }
 
 static inline u_int
@@ -479,6 +488,7 @@ void	lapic_handle_intr(int vector, struct trapframe *frame);
 void	lapic_handle_timer(struct trapframe *frame);
 
 int	ioapic_get_rid(u_int apic_id, uint16_t *ridp);
+void	lapic_clear_lapic(u_int);
 
 extern int x2apic_mode;
 extern int lapic_eoi_suppression;

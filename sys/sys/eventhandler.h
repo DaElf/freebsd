@@ -211,6 +211,7 @@ typedef void (*shutdown_fn)(void *, int);
 #define	SHUTDOWN_PRI_FIRST	EVENTHANDLER_PRI_FIRST
 #define	SHUTDOWN_PRI_DEFAULT	EVENTHANDLER_PRI_ANY
 #define	SHUTDOWN_PRI_LAST	EVENTHANDLER_PRI_LAST
+#define	SHUTDOWN_PRI_KLOAD	EVENTHANDLER_PRI_LAST - 100
 
 EVENTHANDLER_DECLARE(shutdown_pre_sync, shutdown_fn);	/* before fs sync */
 EVENTHANDLER_DECLARE(shutdown_post_sync, shutdown_fn);	/* after fs sync */
