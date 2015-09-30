@@ -41,7 +41,8 @@ enum Argtype { None = 1, Hex, Octal, Int, LongHex, Name, Ptr, Stat, Ioctl, Quad,
 	Sigset, Sigprocmask, Kevent, Sockdomain, Socktype, Open,
 	Fcntlflag, Rusage, BinString, Shutdown, Resource, Rlimit, Timeval2,
 	Pathconf, Rforkflags, ExitStatus, Waitoptions, Idtype, Procctl,
-	LinuxSockArgs, Umtxop };
+	LinuxSockArgs, Umtxop, Atfd, Atflags, Timespec2, Accessmode, Long,
+	Sysarch, ExecArgs, ExecEnv };
 
 #define	ARG_MASK	0xff
 #define	OUT	0x100
@@ -85,11 +86,11 @@ char *print_arg(struct syscall_args *, unsigned long*, long, struct trussinfo *)
 #define LINUX_SETSOCKOPT	14
 #define LINUX_GETSOCKOPT	15
 #define LINUX_SENDMSG		16
-#define LINUX_RECVMSG		17 
+#define LINUX_RECVMSG		17
 
 #define PAD_(t) (sizeof(register_t) <= sizeof(t) ? \
     0 : sizeof(register_t) - sizeof(t))
-    
+
 #if BYTE_ORDER == LITTLE_ENDIAN
 #define PADL_(t)	0
 #define PADR_(t)	PAD_(t)

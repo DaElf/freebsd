@@ -213,6 +213,22 @@ ieee80211_vap_pkt_send_dest(struct ieee80211vap *vap, struct mbuf *m,
 		}
 	}
 
+	/*
+	 * XXX If we aren't doing AMPDU TX then we /could/ do
+	 * fast-frames encapsulation, however right now this
+	 * output logic doesn't handle that case.
+	 *
+	 * So we'll be limited to "fast-frames" xmit for non-11n STA
+	 * and "no fast frames" xmit for 11n STAs.
+	 * It'd be nice to eventually test fast-frames out by
+	 * gracefully falling from failing A-MPDU transmission
+	 * (driver says no, fail to negotiate it with peer) to
+	 * using fast-frames.
+	 *
+	 * Note: we can actually put A-MSDU's inside an A-MPDU,
+	 * so hopefully we can figure out how to make that particular
+	 * combination work right.
+	 */
 #ifdef IEEE80211_SUPPORT_SUPERG
 	else if (IEEE80211_ATH_CAP(vap, ni, IEEE80211_NODE_FF)) {
 		m = ieee80211_ff_check(ni, m);
@@ -230,6 +246,11 @@ ieee80211_vap_pkt_send_dest(struct ieee80211vap *vap, struct mbuf *m,
 	 */
 	IEEE80211_TX_LOCK(ic);
 
+	/*
+	 * XXX make the encap and transmit code a separate function
+	 * so things like the FF (and later A-MSDU) path can just call
+	 * it for flushed frames.
+	 */
 	if (__predict_true((vap->iv_caps & IEEE80211_C_8023ENCAP) == 0)) {
 		/*
 		 * Encapsulate the packet in prep for transmission.
@@ -254,10 +275,6 @@ ieee80211_vap_pkt_send_dest(struct ieee80211vap *vap, struct mbuf *m,
 		/* NB: IFQ_HANDOFF reclaims mbuf */
 		ieee80211_free_node(ni);
 		if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
-	} else {
-		if_inc_counter(ifp, IFCOUNTER_OPACKETS, 1);
-		if_inc_counter(ifp, IFCOUNTER_OMCASTS, mcast);
-		if_inc_counter(ifp, IFCOUNTER_OBYTES, len);
 	}
 	ic->ic_lastdata = ticks;
 
@@ -430,17 +447,6 @@ ieee80211_vap_transmit(struct ifnet *ifp, struct mbuf *m)
 {
 	struct ieee80211vap *vap = ifp->if_softc;
 	struct ieee80211com *ic = vap->iv_ic;
-	struct ifnet *parent = ic->ic_ifp;
-
-	/* NB: parent must be up and running */
-	if (!IFNET_IS_UP_RUNNING(parent)) {
-		IEEE80211_DPRINTF(vap, IEEE80211_MSG_OUTPUT,
-		    "%s: ignore queue, parent %s not up+running\n",
-		    __func__, parent->if_xname);
-		m_freem(m);
-		if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
-		return (ENETDOWN);
-	}
 
 	/*
 	 * No data frames go out unless we're running.
@@ -507,6 +513,7 @@ ieee80211_raw_output(struct ieee80211vap *vap, struct ieee80211_node *ni,
     struct mbuf *m, const struct ieee80211_bpf_params *params)
 {
 	struct ieee80211com *ic = vap->iv_ic;
+	int error;
 
 	/*
 	 * Set node - the caller has taken a reference, so ensure
@@ -528,7 +535,10 @@ ieee80211_raw_output(struct ieee80211vap *vap, struct ieee80211_node *ni,
 	if (params)
 		(void) ieee80211_add_xmit_params(m, params);
 
-	return (ic->ic_raw_xmit(ni, m, params));
+	error = ic->ic_raw_xmit(ni, m, params);
+	if (error)
+		if_inc_counter(vap->iv_ifp, IFCOUNTER_OERRORS, 1);
+	return (error);
 }
 
 /*
@@ -1798,7 +1808,7 @@ add_ie(uint8_t *frm, const uint8_t *ie)
 /*
  * Add a WME information element to a frame.
  */
-static uint8_t *
+uint8_t *
 ieee80211_add_wme_info(uint8_t *frm, struct ieee80211_wme_state *wme)
 {
 	static const struct ieee80211_wme_info info = {
@@ -3457,6 +3467,15 @@ ieee80211_tx_complete(struct ieee80211_node *ni, struct mbuf *m, int status)
 {
 
 	if (ni != NULL) {
+		struct ifnet *ifp = ni->ni_vap->iv_ifp;
+
+		if (status == 0) {
+			if_inc_counter(ifp, IFCOUNTER_OBYTES, m->m_pkthdr.len);
+			if_inc_counter(ifp, IFCOUNTER_OPACKETS, 1);
+			if (m->m_flags & M_MCAST)
+				if_inc_counter(ifp, IFCOUNTER_OMCASTS, 1);
+		} else
+			if_inc_counter(ifp, IFCOUNTER_OERRORS, 1);
 		if (m->m_flags & M_TXCB)
 			ieee80211_process_callback(ni, m, status);
 		ieee80211_free_node(ni);

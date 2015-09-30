@@ -64,7 +64,7 @@ __FBSDID("$FreeBSD$");
 #include "syscalls.h"
 
 
-static int nsyscalls = sizeof(syscallnames) / sizeof(syscallnames[0]);
+static int nsyscalls = nitems(syscallnames);
 
 /*
  * This is what this particular file uses to keep track of a system call.
@@ -140,7 +140,7 @@ arm_syscall_entry(struct trussinfo *trussinfo, int nargs)
 #ifdef __ARM_EABI__
 	syscall_num = regs.r[7];
 #else
-	if ((syscall_num = ptrace(PT_READ_I, tid, 
+	if ((syscall_num = ptrace(PT_READ_I, tid,
 	    (caddr_t)(regs.r[_REG_PC] - INSN_SIZE), 0)) == -1) {
 		fprintf(trussinfo->outfile, "-- CANNOT READ PC --\n");
 		return;
@@ -264,28 +264,6 @@ arm_syscall_entry(struct trussinfo *trussinfo, int nargs)
 	fprintf(trussinfo->outfile, "\n");
 #endif
 
-	if (fsc->name != NULL && (strcmp(fsc->name, "execve") == 0 ||
-	    strcmp(fsc->name, "exit") == 0)) {
-		/*
-		 * XXX
-		 * This could be done in a more general
-		 * manner but it still wouldn't be very pretty.
-		 */
-		if (strcmp(fsc->name, "execve") == 0) {
-			if ((trussinfo->flags & EXECVEARGS) == 0) {
-				if (fsc->s_args[1]) {
-					free(fsc->s_args[1]);
-					fsc->s_args[1] = NULL;
-				}
-			}
-			if ((trussinfo->flags & EXECVEENVS) == 0) {
-				if (fsc->s_args[2]) {
-					free(fsc->s_args[2]);
-					fsc->s_args[2] = NULL;
-				}
-			}
-		}
-	}
 	trussinfo->curthread->fsc = fsc;
 }
 
@@ -336,6 +314,7 @@ arm_syscall_exit(struct trussinfo *trussinfo, int syscall_num __unused)
 		 */
 		for (i = 0; i < sc->nargs; i++) {
 			char *temp;
+
 			if (sc->args[i].type & OUT) {
 				/*
 				 * If an error occurred, then don't bother

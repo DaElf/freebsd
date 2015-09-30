@@ -753,7 +753,7 @@ do_fork(struct thread *td, int flags, struct proc *p2, struct thread *td2,
 	 * Tell any interested parties about the new process.
 	 */
 	knote_fork(&p1->p_klist, p2->p_pid);
-	SDT_PROBE(proc, kernel, , create, p2, p1, flags, 0, 0);
+	SDT_PROBE3(proc, kernel, , create, p2, p1, flags);
 
 	/*
 	 * Wait until debugger is attached to child.
@@ -832,7 +832,7 @@ fork1(struct thread *td, int flags, int pages, struct proc **procp,
 	mem_charged = 0;
 	vm2 = NULL;
 	if (pages == 0)
-		pages = KSTACK_PAGES;
+		pages = kstack_pages;
 	/* Allocate new proc. */
 	newproc = uma_zalloc(proc_zone, M_WAITOK);
 	td2 = FIRST_THREAD_IN_PROC(newproc);
