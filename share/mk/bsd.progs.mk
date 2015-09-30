@@ -38,10 +38,8 @@ PROG ?= $t
 
 .if defined(PROG)
 # just one of many
-PROG_OVERRIDE_VARS +=	BINDIR BINGRP BINOWN BINMODE DPSRCS MAN PROGNAME \
-			SRCS
-PROG_VARS +=	CFLAGS CPPFLAGS CXXFLAGS DPADD DPLIBS LDADD LIBADD LINKS \
-		LDFLAGS MLINKS ${PROG_OVERRIDE_VARS}
+PROG_OVERRIDE_VARS += BINDIR DPSRCS MAN SRCS
+PROG_VARS += CFLAGS CPPFLAGS CXXFLAGS DPADD DPLIBS LDADD LIBADD LDFLAGS ${PROG_OVERRIDE_VARS}
 .for v in ${PROG_VARS:O:u}
 .if empty(${PROG_OVERRIDE_VARS:M$v})
 .if defined(${v}.${PROG})
@@ -62,27 +60,27 @@ UPDATE_DEPENDFILE ?= NO
 
 # prog.mk will do the rest
 .else
-all: ${PROGS}
+all: ${FILES} ${PROGS} ${SCRIPTS}
 
 # We cannot capture dependencies for meta mode here
 UPDATE_DEPENDFILE = NO
+# nor can we safely run in parallel.
+.NOTPARALLEL:
 .endif
-.endif	# PROGS || PROGS_CXX
+.endif
 
-# These are handled by the main make process.
+# The non-recursive call to bsd.progs.mk will handle FILES; NUL out
+# FILESGROUPS so recursive calls don't duplicate the work
 .ifdef _RECURSING_PROGS
-_PROGS_GLOBAL_VARS= CLEANFILES CLEANDIRS FILESGROUPS SCRIPTS
-.for v in ${_PROGS_GLOBAL_VARS}
-$v =
-.endfor
+FILESGROUPS=
 .endif
 
 # handle being called [bsd.]progs.mk
 .include <bsd.prog.mk>
 
-.if !empty(PROGS) && !defined(_RECURSING_PROGS)
+.ifndef _RECURSING_PROGS
 # tell progs.mk we might want to install things
-PROGS_TARGETS+= checkdpadd clean cleandepend cleandir depend install
+PROGS_TARGETS+= checkdpadd clean cleandepend cleandir cleanobj depend install
 
 .for p in ${PROGS}
 .if defined(PROGS_CXX) && !empty(PROGS_CXX:M$p)
@@ -90,14 +88,12 @@ PROGS_TARGETS+= checkdpadd clean cleandepend cleandir depend install
 x.$p= PROG_CXX=$p
 .endif
 
-# Main PROG target
 $p ${p}_p: .PHONY .MAKE
 	(cd ${.CURDIR} && \
 	    DEPENDFILE=.depend.$p \
 	    ${MAKE} -f ${MAKEFILE} _RECURSING_PROGS= \
 	    SUBDIR= PROG=$p ${x.$p})
 
-# Pseudo targets for PROG, such as 'install'.
 .for t in ${PROGS_TARGETS:O:u}
 $p.$t: .PHONY .MAKE
 	(cd ${.CURDIR} && \
@@ -107,8 +103,21 @@ $p.$t: .PHONY .MAKE
 .endfor
 .endfor
 
-# Depend main pseudo targets on all PROG.pseudo targets too.
+.if !empty(PROGS)
 .for t in ${PROGS_TARGETS:O:u}
 $t: ${PROGS:%=%.$t}
 .endfor
+.endif
+
+.if empty(PROGS) && !empty(SCRIPTS)
+
+.for t in ${PROGS_TARGETS:O:u}
+scripts.$t: .PHONY .MAKE
+	(cd ${.CURDIR} && ${MAKE} -f ${MAKEFILE} SUBDIR= _RECURSING_PROGS= \
+	    $t)
+$t: scripts.$t
+.endfor
+
+.endif
+
 .endif

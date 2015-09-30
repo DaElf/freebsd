@@ -144,6 +144,7 @@ VT_SYSCTL_INT(splash_cpu_style, 2, "Draw logo style "
     "(0 = Alternate beastie, 1 = Beastie, 2 = Orb)");
 VT_SYSCTL_INT(splash_cpu_duration, 10, "Hide logos after (seconds)");
 
+static struct vt_device	vt_consdev;
 static unsigned int vt_unit = 0;
 static MALLOC_DEFINE(M_VT, "vt", "vt device");
 struct vt_device *main_vd = &vt_consdev;
@@ -186,7 +187,7 @@ SET_DECLARE(vt_drv_set, struct vt_driver);
 
 struct terminal	vt_consterm;
 static struct vt_window	vt_conswindow;
-struct vt_device	vt_consdev = {
+static struct vt_device	vt_consdev = {
 	.vd_driver = NULL,
 	.vd_softc = NULL,
 	.vd_prev_driver = NULL,
@@ -263,9 +264,8 @@ vt_update_static(void *dummy)
 	if (!vty_enabled(VTY_VT))
 		return;
 	if (main_vd->vd_driver != NULL)
-		printf("VT(%s): %s %ux%u\n", main_vd->vd_driver->vd_name,
-		    (main_vd->vd_flags & VDF_TEXTMODE) ? "text" : "resolution",
-		    main_vd->vd_width, main_vd->vd_height);
+		printf("VT: running with driver \"%s\".\n",
+		    main_vd->vd_driver->vd_name);
 	else
 		printf("VT: init without driver.\n");
 

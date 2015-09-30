@@ -162,17 +162,19 @@ dsl_prop_get_ds(dsl_dataset_t *ds, const char *propname,
 {
 	zfs_prop_t prop = zfs_name_to_prop(propname);
 	boolean_t inheritable;
+	boolean_t snapshot;
 	uint64_t zapobj;
 
 	ASSERT(dsl_pool_config_held(ds->ds_dir->dd_pool));
 	inheritable = (prop == ZPROP_INVAL || zfs_prop_inheritable(prop));
+	snapshot = dsl_dataset_is_snapshot(ds);
 	zapobj = dsl_dataset_phys(ds)->ds_props_obj;
 
 	if (zapobj != 0) {
 		objset_t *mos = ds->ds_dir->dd_pool->dp_meta_objset;
 		int err;
 
-		ASSERT(ds->ds_is_snapshot);
+		ASSERT(snapshot);
 
 		/* Check for a local value. */
 		err = zap_lookup(mos, zapobj, propname, intsz, numints, buf);
@@ -212,59 +214,7 @@ dsl_prop_get_ds(dsl_dataset_t *ds, const char *propname,
 	}
 
 	return (dsl_prop_get_dd(ds->ds_dir, propname,
-	    intsz, numints, buf, setpoint, ds->ds_is_snapshot));
-}
-
-static dsl_prop_record_t *
-dsl_prop_record_find(dsl_dir_t *dd, const char *propname)
-{
-	dsl_prop_record_t *pr = NULL;
-
-	ASSERT(MUTEX_HELD(&dd->dd_lock));
-
-	for (pr = list_head(&dd->dd_props);
-	    pr != NULL; pr = list_next(&dd->dd_props, pr)) {
-		if (strcmp(pr->pr_propname, propname) == 0)
-			break;
-	}
-
-	return (pr);
-}
-
-static dsl_prop_record_t *
-dsl_prop_record_create(dsl_dir_t *dd, const char *propname)
-{
-	dsl_prop_record_t *pr;
-
-	ASSERT(MUTEX_HELD(&dd->dd_lock));
-
-	pr = kmem_alloc(sizeof (dsl_prop_record_t), KM_SLEEP);
-	pr->pr_propname = spa_strdup(propname);
-	list_create(&pr->pr_cbs, sizeof (dsl_prop_cb_record_t),
-	    offsetof(dsl_prop_cb_record_t, cbr_pr_node));
-	list_insert_head(&dd->dd_props, pr);
-
-	return (pr);
-}
-
-void
-dsl_prop_init(dsl_dir_t *dd)
-{
-	list_create(&dd->dd_props, sizeof (dsl_prop_record_t),
-	    offsetof(dsl_prop_record_t, pr_node));
-}
-
-void
-dsl_prop_fini(dsl_dir_t *dd)
-{
-	dsl_prop_record_t *pr;
-
-	while ((pr = list_remove_head(&dd->dd_props)) != NULL) {
-		list_destroy(&pr->pr_cbs);
-		strfree((char *)pr->pr_propname);
-		kmem_free(pr, sizeof (dsl_prop_record_t));
-	}
-	list_destroy(&dd->dd_props);
+	    intsz, numints, buf, setpoint, snapshot));
 }
 
 /*
@@ -281,7 +231,6 @@ dsl_prop_register(dsl_dataset_t *ds, const char *propname,
 	dsl_dir_t *dd = ds->ds_dir;
 	dsl_pool_t *dp = dd->dd_pool;
 	uint64_t value;
-	dsl_prop_record_t *pr;
 	dsl_prop_cb_record_t *cbr;
 	int err;
 
@@ -293,16 +242,12 @@ dsl_prop_register(dsl_dataset_t *ds, const char *propname,
 
 	cbr = kmem_alloc(sizeof (dsl_prop_cb_record_t), KM_SLEEP);
 	cbr->cbr_ds = ds;
+	cbr->cbr_propname = kmem_alloc(strlen(propname)+1, KM_SLEEP);
+	(void) strcpy((char *)cbr->cbr_propname, propname);
 	cbr->cbr_func = callback;
 	cbr->cbr_arg = cbarg;
-
 	mutex_enter(&dd->dd_lock);
-	pr = dsl_prop_record_find(dd, propname);
-	if (pr == NULL)
-		pr = dsl_prop_record_create(dd, propname);
-	cbr->cbr_pr = pr;
-	list_insert_head(&pr->pr_cbs, cbr);
-	list_insert_head(&ds->ds_prop_cbs, cbr);
+	list_insert_head(&dd->dd_prop_cbs, cbr);
 	mutex_exit(&dd->dd_lock);
 
 	cbr->cbr_func(cbr->cbr_arg, value);
@@ -433,34 +378,56 @@ dsl_prop_predict(dsl_dir_t *dd, const char *propname,
 }
 
 /*
- * Unregister all callbacks that are registered with the
- * given callback argument.
+ * Unregister this callback.  Return 0 on success, ENOENT if ddname is
+ * invalid, or ENOMSG if no matching callback registered.
  */
-void
-dsl_prop_unregister_all(dsl_dataset_t *ds, void *cbarg)
+int
+dsl_prop_unregister(dsl_dataset_t *ds, const char *propname,
+    dsl_prop_changed_cb_t *callback, void *cbarg)
 {
-	dsl_prop_cb_record_t *cbr, *next_cbr;
-
 	dsl_dir_t *dd = ds->ds_dir;
+	dsl_prop_cb_record_t *cbr;
 
 	mutex_enter(&dd->dd_lock);
-	next_cbr = list_head(&ds->ds_prop_cbs);
-	while (next_cbr != NULL) {
-		cbr = next_cbr;
-		next_cbr = list_next(&ds->ds_prop_cbs, cbr);
-		if (cbr->cbr_arg == cbarg) {
-			list_remove(&ds->ds_prop_cbs, cbr);
-			list_remove(&cbr->cbr_pr->pr_cbs, cbr);
-			kmem_free(cbr, sizeof (dsl_prop_cb_record_t));
-		}
+	for (cbr = list_head(&dd->dd_prop_cbs);
+	    cbr; cbr = list_next(&dd->dd_prop_cbs, cbr)) {
+		if (cbr->cbr_ds == ds &&
+		    cbr->cbr_func == callback &&
+		    cbr->cbr_arg == cbarg &&
+		    strcmp(cbr->cbr_propname, propname) == 0)
+			break;
 	}
+
+	if (cbr == NULL) {
+		mutex_exit(&dd->dd_lock);
+		return (SET_ERROR(ENOMSG));
+	}
+
+	list_remove(&dd->dd_prop_cbs, cbr);
 	mutex_exit(&dd->dd_lock);
+	kmem_free((void*)cbr->cbr_propname, strlen(cbr->cbr_propname)+1);
+	kmem_free(cbr, sizeof (dsl_prop_cb_record_t));
+
+	return (0);
 }
 
 boolean_t
 dsl_prop_hascb(dsl_dataset_t *ds)
 {
-	return (!list_is_empty(&ds->ds_prop_cbs));
+	dsl_dir_t *dd = ds->ds_dir;
+	boolean_t rv = B_FALSE;
+	dsl_prop_cb_record_t *cbr;
+
+	mutex_enter(&dd->dd_lock);
+	for (cbr = list_head(&dd->dd_prop_cbs); cbr;
+	    cbr = list_next(&dd->dd_prop_cbs, cbr)) {
+		if (cbr->cbr_ds == ds) {
+			rv = B_TRUE;
+			break;
+		}
+	}
+	mutex_exit(&dd->dd_lock);
+	return (rv);
 }
 
 /* ARGSUSED */
@@ -468,50 +435,16 @@ static int
 dsl_prop_notify_all_cb(dsl_pool_t *dp, dsl_dataset_t *ds, void *arg)
 {
 	dsl_dir_t *dd = ds->ds_dir;
-	dsl_prop_record_t *pr;
 	dsl_prop_cb_record_t *cbr;
 
 	mutex_enter(&dd->dd_lock);
-	for (pr = list_head(&dd->dd_props);
-	    pr; pr = list_next(&dd->dd_props, pr)) {
-		for (cbr = list_head(&pr->pr_cbs); cbr;
-		    cbr = list_next(&pr->pr_cbs, cbr)) {
-			uint64_t value;
+	for (cbr = list_head(&dd->dd_prop_cbs); cbr;
+	    cbr = list_next(&dd->dd_prop_cbs, cbr)) {
+		uint64_t value;
 
-			/*
-			 * Callback entries do not have holds on their
-			 * datasets so that datasets with registered
-			 * callbacks are still eligible for eviction.
-			 * Unlike operations to update properties on a
-			 * single dataset, we are performing a recursive
-			 * descent of related head datasets.  The caller
-			 * of this function only has a dataset hold on
-			 * the passed in head dataset, not the snapshots
-			 * associated with this dataset.  Without a hold,
-			 * the dataset pointer within callback records
-			 * for snapshots can be invalidated by eviction
-			 * at any time.
-			 *
-			 * Use dsl_dataset_try_add_ref() to verify
-			 * that the dataset for a snapshot has not
-			 * begun eviction processing and to prevent
-			 * eviction from occurring for the duration of
-			 * the callback.  If the hold attempt fails,
-			 * this object is already being evicted and the
-			 * callback can be safely ignored.
-			 */
-			if (ds != cbr->cbr_ds &&
-			    !dsl_dataset_try_add_ref(dp, cbr->cbr_ds, FTAG))
-				continue;
-
-			if (dsl_prop_get_ds(cbr->cbr_ds,
-			    cbr->cbr_pr->pr_propname, sizeof (value), 1,
-			    &value, NULL) == 0)
-				cbr->cbr_func(cbr->cbr_arg, value);
-
-			if (ds != cbr->cbr_ds)
-				dsl_dataset_rele(cbr->cbr_ds, FTAG);
-		}
+		if (dsl_prop_get_ds(cbr->cbr_ds, cbr->cbr_propname,
+		    sizeof (value), 1, &value, NULL) == 0)
+			cbr->cbr_func(cbr->cbr_arg, value);
 	}
 	mutex_exit(&dd->dd_lock);
 
@@ -536,7 +469,6 @@ dsl_prop_changed_notify(dsl_pool_t *dp, uint64_t ddobj,
     const char *propname, uint64_t value, int first)
 {
 	dsl_dir_t *dd;
-	dsl_prop_record_t *pr;
 	dsl_prop_cb_record_t *cbr;
 	objset_t *mos = dp->dp_meta_objset;
 	zap_cursor_t zc;
@@ -563,33 +495,21 @@ dsl_prop_changed_notify(dsl_pool_t *dp, uint64_t ddobj,
 	}
 
 	mutex_enter(&dd->dd_lock);
-	pr = dsl_prop_record_find(dd, propname);
-	if (pr != NULL) {
-		for (cbr = list_head(&pr->pr_cbs); cbr;
-		    cbr = list_next(&pr->pr_cbs, cbr)) {
-			uint64_t propobj;
+	for (cbr = list_head(&dd->dd_prop_cbs); cbr;
+	    cbr = list_next(&dd->dd_prop_cbs, cbr)) {
+		uint64_t propobj = dsl_dataset_phys(cbr->cbr_ds)->ds_props_obj;
 
-			/*
-			 * cbr->cbr_ds may be invalidated due to eviction,
-			 * requiring the use of dsl_dataset_try_add_ref().
-			 * See comment block in dsl_prop_notify_all_cb()
-			 * for details.
-			 */
-			if (!dsl_dataset_try_add_ref(dp, cbr->cbr_ds, FTAG))
-				continue;
+		if (strcmp(cbr->cbr_propname, propname) != 0)
+			continue;
 
-			propobj = dsl_dataset_phys(cbr->cbr_ds)->ds_props_obj;
+		/*
+		 * If the property is set on this ds, then it is not
+		 * inherited here; don't call the callback.
+		 */
+		if (propobj && 0 == zap_contains(mos, propobj, propname))
+			continue;
 
-			/*
-			 * If the property is not set on this ds, then it is
-			 * inherited here; call the callback.
-			 */
-			if (propobj == 0 ||
-			    zap_contains(mos, propobj, propname) != 0)
-				cbr->cbr_func(cbr->cbr_arg, value);
-
-			dsl_dataset_rele(cbr->cbr_ds, FTAG);
-		}
+		cbr->cbr_func(cbr->cbr_arg, value);
 	}
 	mutex_exit(&dd->dd_lock);
 
@@ -624,7 +544,7 @@ dsl_prop_set_sync_impl(dsl_dataset_t *ds, const char *propname,
 
 	isint = (dodefault(propname, 8, 1, &intval) == 0);
 
-	if (ds->ds_is_snapshot) {
+	if (dsl_dataset_is_snapshot(ds)) {
 		ASSERT(version >= SPA_VERSION_SNAP_PROPS);
 		if (dsl_dataset_phys(ds)->ds_props_obj == 0) {
 			dmu_buf_will_dirty(ds->ds_dbuf, tx);
@@ -721,7 +641,7 @@ dsl_prop_set_sync_impl(dsl_dataset_t *ds, const char *propname,
 	if (isint) {
 		VERIFY0(dsl_prop_get_int_ds(ds, propname, &intval));
 
-		if (ds->ds_is_snapshot) {
+		if (dsl_dataset_is_snapshot(ds)) {
 			dsl_prop_cb_record_t *cbr;
 			/*
 			 * It's a snapshot; nothing can inherit this
@@ -729,10 +649,10 @@ dsl_prop_set_sync_impl(dsl_dataset_t *ds, const char *propname,
 			 * ds here.
 			 */
 			mutex_enter(&ds->ds_dir->dd_lock);
-			for (cbr = list_head(&ds->ds_prop_cbs); cbr;
-			    cbr = list_next(&ds->ds_prop_cbs, cbr)) {
-				if (strcmp(cbr->cbr_pr->pr_propname,
-				    propname) == 0)
+			for (cbr = list_head(&ds->ds_dir->dd_prop_cbs); cbr;
+			    cbr = list_next(&ds->ds_dir->dd_prop_cbs, cbr)) {
+				if (cbr->cbr_ds == ds &&
+				    strcmp(cbr->cbr_propname, propname) == 0)
 					cbr->cbr_func(cbr->cbr_arg, intval);
 			}
 			mutex_exit(&ds->ds_dir->dd_lock);
@@ -839,7 +759,7 @@ dsl_props_set_check(void *arg, dmu_tx_t *tx)
 		}
 	}
 
-	if (ds->ds_is_snapshot && version < SPA_VERSION_SNAP_PROPS) {
+	if (dsl_dataset_is_snapshot(ds) && version < SPA_VERSION_SNAP_PROPS) {
 		dsl_dataset_rele(ds, FTAG);
 		return (SET_ERROR(ENOTSUP));
 	}
@@ -1062,7 +982,7 @@ dsl_prop_get_all_ds(dsl_dataset_t *ds, nvlist_t **nvp,
 
 	VERIFY(nvlist_alloc(nvp, NV_UNIQUE_NAME, KM_SLEEP) == 0);
 
-	if (ds->ds_is_snapshot)
+	if (dsl_dataset_is_snapshot(ds))
 		flags |= DSL_PROP_GET_SNAPSHOT;
 
 	ASSERT(dsl_pool_config_held(dp));

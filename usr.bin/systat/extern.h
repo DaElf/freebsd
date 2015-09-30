@@ -163,14 +163,3 @@ void	 showtcp(void);
 void	 status(void);
 void	 suspend(int);
 char	*sysctl_dynread(const char *, size_t *);
-
-#define SYSTAT_CMD(name)	\
-	void	 close ## name(WINDOW *); \
-	void	 fetch ## name(void); \
-	int	 init ## name(void); \
-	void	 label ## name(void); \
-	WINDOW	*open ## name(void); \
-	void	 reset ## name(void); \
-	void	 show ## name(void)
-
-SYSTAT_CMD( zarc );

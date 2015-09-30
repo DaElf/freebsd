@@ -114,11 +114,10 @@ struct g_command class_commands[] = {
 		{ 'l', "keylen", "0", G_TYPE_NUMBER },
 		{ 'P', "nonewpassphrase", NULL, G_TYPE_BOOL },
 		{ 's', "sectorsize", "0", G_TYPE_NUMBER },
-		{ 'T', "notrim", NULL, G_TYPE_BOOL },
 		{ 'V', "mdversion", "-1", G_TYPE_NUMBER },
 		G_OPT_SENTINEL
 	    },
-	    "[-bPTv] [-a aalgo] [-B backupfile] [-e ealgo] [-i iterations] [-l keylen] [-J newpassfile] [-K newkeyfile] [-s sectorsize] [-V version] prov"
+	    "[-bPv] [-a aalgo] [-B backupfile] [-e ealgo] [-i iterations] [-l keylen] [-J newpassfile] [-K newkeyfile] [-s sectorsize] [-V version] prov"
 	},
 	{ "label", G_FLAG_VERBOSE, eli_main,
 	    {
@@ -171,20 +170,17 @@ struct g_command class_commands[] = {
 		{ 'e', "ealgo", GELI_ENC_ALGO, G_TYPE_STRING },
 		{ 'l', "keylen", "0", G_TYPE_NUMBER },
 		{ 's', "sectorsize", "0", G_TYPE_NUMBER },
-		{ 'T', "notrim", NULL, G_TYPE_BOOL },
 		G_OPT_SENTINEL
 	    },
-	    "[-dT] [-a aalgo] [-e ealgo] [-l keylen] [-s sectorsize] prov"
+	    "[-d] [-a aalgo] [-e ealgo] [-l keylen] [-s sectorsize] prov"
 	},
 	{ "configure", G_FLAG_VERBOSE, eli_main,
 	    {
 		{ 'b', "boot", NULL, G_TYPE_BOOL },
 		{ 'B', "noboot", NULL, G_TYPE_BOOL },
-		{ 't', "trim", NULL, G_TYPE_BOOL },
-		{ 'T', "notrim", NULL, G_TYPE_BOOL },
 		G_OPT_SENTINEL
 	    },
-	    "[-bBtT] prov ..."
+	    "[-bB] prov ..."
 	},
 	{ "setkey", G_FLAG_VERBOSE, eli_main,
 	    {
@@ -702,8 +698,6 @@ eli_init(struct gctl_req *req)
 	md.md_flags = 0;
 	if (gctl_get_int(req, "boot"))
 		md.md_flags |= G_ELI_FLAG_BOOT;
-	if (gctl_get_int(req, "notrim"))
-		md.md_flags |= G_ELI_FLAG_NODELETE;
 	md.md_ealgo = CRYPTO_ALGORITHM_MIN - 1;
 	str = gctl_get_ascii(req, "aalgo");
 	if (*str != '\0') {
@@ -905,45 +899,26 @@ eli_attach(struct gctl_req *req)
 }
 
 static void
-eli_configure_detached(struct gctl_req *req, const char *prov, int boot,
- int trim)
+eli_configure_detached(struct gctl_req *req, const char *prov, bool boot)
 {
 	struct g_eli_metadata md;
-	bool changed = 0;
 
 	if (eli_metadata_read(req, prov, &md) == -1)
 		return;
 
-	if (boot == 1 && (md.md_flags & G_ELI_FLAG_BOOT)) {
+	if (boot && (md.md_flags & G_ELI_FLAG_BOOT)) {
 		if (verbose)
 			printf("BOOT flag already configured for %s.\n", prov);
-	} else if (boot == 0 && !(md.md_flags & G_ELI_FLAG_BOOT)) {
+	} else if (!boot && !(md.md_flags & G_ELI_FLAG_BOOT)) {
 		if (verbose)
 			printf("BOOT flag not configured for %s.\n", prov);
-	} else if (boot >= 0) {
+	} else {
 		if (boot)
 			md.md_flags |= G_ELI_FLAG_BOOT;
 		else
 			md.md_flags &= ~G_ELI_FLAG_BOOT;
-		changed = 1;
-	}
-
-	if (trim == 0 && (md.md_flags & G_ELI_FLAG_NODELETE)) {
-		if (verbose)
-			printf("TRIM disable flag already configured for %s.\n", prov);
-	} else if (trim == 1 && !(md.md_flags & G_ELI_FLAG_NODELETE)) {
-		if (verbose)
-			printf("TRIM disable flag not configured for %s.\n", prov);
-	} else if (trim >= 0) {
-		if (trim)
-			md.md_flags &= ~G_ELI_FLAG_NODELETE;
-		else
-			md.md_flags |= G_ELI_FLAG_NODELETE;
-		changed = 1;
-	}
-
-	if (changed)
 		eli_metadata_store(req, prov, &md);
+	}
 	bzero(&md, sizeof(md));
 }
 
@@ -951,8 +926,7 @@ static void
 eli_configure(struct gctl_req *req)
 {
 	const char *prov;
-	bool boot, noboot, trim, notrim;
-	int doboot, dotrim;
+	bool boot, noboot;
 	int i, nargs;
 
 	nargs = gctl_get_int(req, "nargs");
@@ -963,30 +937,12 @@ eli_configure(struct gctl_req *req)
 
 	boot = gctl_get_int(req, "boot");
 	noboot = gctl_get_int(req, "noboot");
-	trim = gctl_get_int(req, "trim");
-	notrim = gctl_get_int(req, "notrim");
 
-	doboot = -1;
 	if (boot && noboot) {
 		gctl_error(req, "Options -b and -B are mutually exclusive.");
 		return;
 	}
-	if (boot)
-		doboot = 1;
-	else if (noboot)
-		doboot = 0;
-
-	dotrim = -1;
-	if (trim && notrim) {
-		gctl_error(req, "Options -t and -T are mutually exclusive.");
-		return;
-	}
-	if (trim)
-		dotrim = 1;
-	else if (notrim)
-		dotrim = 0;
-
-	if (doboot == -1 && dotrim == -1) {
+	if (!boot && !noboot) {
 		gctl_error(req, "No option given.");
 		return;
 	}
@@ -997,7 +953,7 @@ eli_configure(struct gctl_req *req)
 	for (i = 0; i < nargs; i++) {
 		prov = gctl_get_ascii(req, "arg%d", i);
 		if (!eli_is_attached(prov))
-			eli_configure_detached(req, prov, doboot, dotrim);
+			eli_configure_detached(req, prov, boot);
 	}
 }
 

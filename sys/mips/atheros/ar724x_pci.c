@@ -369,6 +369,7 @@ static int
 ar724x_pci_attach(device_t dev)
 {
 	struct ar71xx_pci_softc *sc = device_get_softc(dev);
+	int busno = 0;
 	int rid = 0;
 
 	sc->sc_mem_rman.rm_type = RMAN_ARRAY;
@@ -428,7 +429,7 @@ ar724x_pci_attach(device_t dev)
 	    | PCIM_CMD_SERRESPEN | PCIM_CMD_BACKTOBACK
 	    | PCIM_CMD_PERRESPEN | PCIM_CMD_MWRICEN, 2);
 
-	device_add_child(dev, "pci", -1);
+	device_add_child(dev, "pci", busno);
 	return (bus_generic_attach(dev));
 }
 

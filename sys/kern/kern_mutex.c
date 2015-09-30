@@ -224,7 +224,7 @@ __mtx_lock_flags(volatile uintptr_t *c, int opts, const char *file, int line)
 	    line);
 	WITNESS_LOCK(&m->lock_object, (opts & ~MTX_RECURSE) | LOP_EXCLUSIVE,
 	    file, line);
-	TD_LOCKS_INC(curthread);
+	curthread->td_locks++;
 }
 
 void
@@ -248,7 +248,7 @@ __mtx_unlock_flags(volatile uintptr_t *c, int opts, const char *file, int line)
 	mtx_assert(m, MA_OWNED);
 
 	__mtx_unlock(m, curthread, opts, file, line);
-	TD_LOCKS_DEC(curthread);
+	curthread->td_locks--;
 }
 
 void
@@ -347,7 +347,7 @@ _mtx_trylock_flags_(volatile uintptr_t *c, int opts, const char *file, int line)
 	if (rval) {
 		WITNESS_LOCK(&m->lock_object, opts | LOP_EXCLUSIVE | LOP_TRYLOCK,
 		    file, line);
-		TD_LOCKS_INC(curthread);
+		curthread->td_locks++;
 		if (m->mtx_recurse == 0)
 			LOCKSTAT_PROFILE_OBTAIN_LOCK_SUCCESS(adaptive__acquire,
 			    m, contested, waittime, file, line);
@@ -958,7 +958,7 @@ _mtx_destroy(volatile uintptr_t *c)
 		if (LOCK_CLASS(&m->lock_object) == &lock_class_mtx_spin)
 			spinlock_exit();
 		else
-			TD_LOCKS_DEC(curthread);
+			curthread->td_locks--;
 
 		lock_profile_release_lock(&m->lock_object);
 		/* Tell witness this isn't locked to make it happy. */

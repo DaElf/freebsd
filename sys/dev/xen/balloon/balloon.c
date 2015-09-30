@@ -49,6 +49,8 @@ __FBSDID("$FreeBSD$");
 #include <xen/features.h>
 #include <xen/xenstore/xenstorevar.h>
 
+#include <machine/xen/xenvar.h>
+
 static MALLOC_DEFINE(M_BALLOON, "Balloon", "Xen Balloon Driver");
 
 /* Convert from KB (as fetched from xenstore) to number of PAGES */

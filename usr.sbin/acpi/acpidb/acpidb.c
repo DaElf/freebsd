@@ -480,7 +480,7 @@ load_dsdt(const char *dsdtfile)
 
 	AcpiDbGetTableFromFile(filetmp, NULL, TRUE);
 
-	AcpiInitializeDebugger();
+	AcpiDbInitialize();
 	AcpiGbl_DebuggerConfiguration = 0;
 	AcpiDbUserCommands(':', NULL);
 

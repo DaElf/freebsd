@@ -1,7 +1,5 @@
 {
   "top": {
-    "host": "my-box",
-    "domain": "example.com",
     "data": {
       "item": [
         {
@@ -41,7 +39,7 @@
         }
       ]
     },
-    "data2": {
+    "data": {
       "item": [
         {
           "sku": "GRO-000-415",
@@ -80,7 +78,7 @@
         }
       ]
     },
-    "data3": {
+    "data": {
       "item": [
         {
           "sku": "GRO-000-533",
@@ -91,7 +89,7 @@
         }
       ]
     },
-    "data4": {
+    "data": {
       "item": [
         "gum",
         "rope",

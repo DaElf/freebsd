@@ -44,7 +44,9 @@ __FBSDID("$FreeBSD$");
 #include <unistd.h>
 
 int
-initgroups(const char *uname, gid_t agroup)
+initgroups(uname, agroup)
+	const char *uname;
+	gid_t agroup;
 {
 	int ngroups, ret;
 	long ngroups_max;

@@ -32,6 +32,7 @@ LIBADD=	pam ssh util wrap
 CFLAGS+=	-DHAVE_LDNS=1
 #DPADD+=	${LIBLDNS}
 #LDADD+=	-lldns
+#USEPRIVATELIB+= ldns
 .endif
 
 .if ${MK_AUDIT} != "no"

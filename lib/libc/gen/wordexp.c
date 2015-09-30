@@ -38,7 +38,6 @@
 #include <unistd.h>
 #include <wordexp.h>
 #include "un-namespace.h"
-#include "libc_private.h"
 
 __FBSDID("$FreeBSD$");
 
@@ -104,7 +103,8 @@ static int
 we_askshell(const char *words, wordexp_t *we, int flags)
 {
 	int pdes[2];			/* Pipe to child */
-	char buf[18];			/* Buffer for byte and word count */
+	char bbuf[9];			/* Buffer for byte count */
+	char wbuf[9];			/* Buffer for word count */
 	long nwords, nbytes;		/* Number of words, bytes from child */
 	long i;				/* Handy integer */
 	size_t sofs;			/* Offset into we->we_strings */
@@ -119,7 +119,6 @@ we_askshell(const char *words, wordexp_t *we, int flags)
 	char **nwv;			/* Temporary for realloc() */
 	sigset_t newsigblock, oldsigblock;
 	const char *ifs;
-	char save;
 
 	serrno = errno;
 	ifs = getenv("IFS");
@@ -128,29 +127,27 @@ we_askshell(const char *words, wordexp_t *we, int flags)
 		return (WRDE_NOSPACE);	/* XXX */
 	(void)sigemptyset(&newsigblock);
 	(void)sigaddset(&newsigblock, SIGCHLD);
-	(void)__libc_sigprocmask(SIG_BLOCK, &newsigblock, &oldsigblock);
+	(void)_sigprocmask(SIG_BLOCK, &newsigblock, &oldsigblock);
 	if ((pid = fork()) < 0) {
 		serrno = errno;
 		_close(pdes[0]);
 		_close(pdes[1]);
-		(void)__libc_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
+		(void)_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
 		errno = serrno;
 		return (WRDE_NOSPACE);	/* XXX */
 	}
 	else if (pid == 0) {
 		/*
-		 * We are the child; make /bin/sh expand `words'.
+		 * We are the child; just get /bin/sh to run the wordexp
+		 * builtin on `words'.
 		 */
-		(void)__libc_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
+		(void)_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
 		if ((pdes[1] != STDOUT_FILENO ?
 		    _dup2(pdes[1], STDOUT_FILENO) :
 		    _fcntl(pdes[1], F_SETFD, 0)) < 0)
 			_exit(1);
 		execl(_PATH_BSHELL, "sh", flags & WRDE_UNDEF ? "-u" : "+u",
-		    "-c", "IFS=$1;eval \"$2\";eval \"echo;set -- $3\";"
-		    "IFS=;a=\"$*\";printf '%08x' \"$#\" \"${#a}\";"
-		    "printf '%s\\0' \"$@\"",
-		    "",
+		    "-c", "IFS=$1;eval \"$2\";eval \"wordexp $3\"", "",
 		    ifs != NULL ? ifs : " \t\n",
 		    flags & WRDE_SHOWERR ? "" : "exec 2>/dev/null", words,
 		    (char *)NULL);
@@ -159,30 +156,20 @@ we_askshell(const char *words, wordexp_t *we, int flags)
 
 	/*
 	 * We are the parent; read the output of the shell wordexp function,
-	 * which is a byte indicating that the words were parsed successfully,
-	 * a 32-bit hexadecimal word count, a 32-bit hexadecimal byte count
-	 * (not including terminating null bytes), followed by the expanded
-	 * words separated by nulls.
+	 * which is a 32-bit hexadecimal word count, a 32-bit hexadecimal
+	 * byte count (not including terminating null bytes), followed by
+	 * the expanded words separated by nulls.
 	 */
 	_close(pdes[1]);
-	switch (we_read_fully(pdes[0], buf, 17)) {
-	case 1:
-		error = WRDE_BADVAL;
-		serrno = errno;
-		goto cleanup;
-	case 17:
-		break;
-	default:
-		error = WRDE_SYNTAX;
+	if (we_read_fully(pdes[0], wbuf, 8) != 8 ||
+			we_read_fully(pdes[0], bbuf, 8) != 8) {
+		error = flags & WRDE_UNDEF ? WRDE_BADVAL : WRDE_SYNTAX;
 		serrno = errno;
 		goto cleanup;
 	}
-	save = buf[9];
-	buf[9] = '\0';
-	nwords = strtol(buf + 1, NULL, 16);
-	buf[9] = save;
-	buf[17] = '\0';
-	nbytes = strtol(buf + 9, NULL, 16) + nwords;
+	wbuf[8] = bbuf[8] = '\0';
+	nwords = strtol(wbuf, NULL, 16);
+	nbytes = strtol(bbuf, NULL, 16) + nwords;
 
 	/*
 	 * Allocate or reallocate (when flags & WRDE_APPEND) the word vector
@@ -212,7 +199,7 @@ we_askshell(const char *words, wordexp_t *we, int flags)
 	we->we_strings = nstrings;
 
 	if (we_read_fully(pdes[0], we->we_strings + sofs, nbytes) != nbytes) {
-		error = WRDE_NOSPACE; /* abort for unknown reason */
+		error = flags & WRDE_UNDEF ? WRDE_BADVAL : WRDE_SYNTAX;
 		serrno = errno;
 		goto cleanup;
 	}
@@ -223,13 +210,13 @@ cleanup:
 	do
 		wpid = _waitpid(pid, &status, 0);
 	while (wpid < 0 && errno == EINTR);
-	(void)__libc_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
+	(void)_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
 	if (error != 0) {
 		errno = serrno;
 		return (error);
 	}
 	if (wpid < 0 || !WIFEXITED(status) || WEXITSTATUS(status) != 0)
-		return (WRDE_NOSPACE); /* abort for unknown reason */
+		return (flags & WRDE_UNDEF ? WRDE_BADVAL : WRDE_SYNTAX);
 
 	/*
 	 * Break the null-terminated expanded word strings out into

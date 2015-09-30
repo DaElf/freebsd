@@ -156,11 +156,11 @@ int
 main(int argc, char **argv)
 {
 	FILE *fp;
-	const char *opt_f, *opt_t;
+	char *opt_f, *opt_t;
 	int ch, i, res;
 	bool opt_c = false, opt_s = false;
 
-	opt_f = opt_t = "";
+	opt_f = opt_t = strdup("");
 
 	setlocale(LC_ALL, "");
 	setprogname(argv[0]);
@@ -186,12 +186,12 @@ main(int argc, char **argv)
 		case 'f':
 			/* from */
 			if (optarg != NULL)
-				opt_f = optarg;
+				opt_f = strdup(optarg);
 			break;
 		case 't':
 			/* to */
 			if (optarg != NULL)
-				opt_t = optarg;
+				opt_t = strdup(optarg);
 			break;
 		default:
 			usage();

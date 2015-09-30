@@ -32,7 +32,6 @@ __FBSDID("$FreeBSD$");
 #include <limits.h>
 #include <math.h>
 #include <stdlib.h>
-#include "../stdio/floatio.h"
 #include "fpmath.h"
 #include "gdtoaimp.h"
 

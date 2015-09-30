@@ -97,13 +97,14 @@ STRING		[a-zA-Z][a-zA-Z0-9_]*
 
 #undef _nsyywrap
 int
-_nsyywrap(void)
+_nsyywrap()
 {
 	return 1;
 } /* _nsyywrap */
 
 void
-_nsyyerror(const char *msg)
+_nsyyerror(msg)
+	const char *msg;
 {
 
 	 syslog(LOG_ERR, "NSSWITCH(nslexer): %s line %d: %s at '%s'",

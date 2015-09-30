@@ -27,7 +27,9 @@
  * Use is subject to license terms.
  */
 
-#pragma D depends_on module kernel
+#pragma ident	"%Z%%M%	%I%	%E% SMI"
+
+#pragma D depends_on module unix
 #pragma D depends_on provider sched
 
 struct cpuinfo {

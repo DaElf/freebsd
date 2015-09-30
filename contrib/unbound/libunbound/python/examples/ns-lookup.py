@@ -33,7 +33,6 @@
  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  POSSIBILITY OF SUCH DAMAGE.
 '''
-from __future__ import print_function
 import unbound
 
 ctx = unbound.ub_ctx()
@@ -43,6 +42,6 @@ status, result = ctx.resolve("vutbr.cz", unbound.RR_TYPE_NS, unbound.RR_CLASS_IN
 if status == 0 and result.havedata:
     print("Result:")
     print("      raw data:", result.data)
-    for k in sorted(result.data.domain_list):
+    for k in result.data.domain_list:
         print("      host: %s" % k)
 

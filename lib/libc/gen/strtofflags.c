@@ -94,13 +94,14 @@ static struct {
  *	are set, return the empty string.
  */
 char *
-fflagstostr(u_long flags)
+fflagstostr(flags)
+	u_long flags;
 {
 	char *string;
 	const char *sp;
 	char *dp;
 	u_long setflags;
-	u_int i;
+	int i;
 
 	if ((string = (char *)malloc(nmappings * (longestflaglen + 1))) == NULL)
 		return (NULL);
@@ -127,7 +128,9 @@ fflagstostr(u_long flags)
  *	to the offending token.
  */
 int
-strtofflags(char **stringp, u_long *setp, u_long *clrp)
+strtofflags(stringp, setp, clrp)
+	char **stringp;
+	u_long *setp, *clrp;
 {
 	char *string, *p;
 	int i;

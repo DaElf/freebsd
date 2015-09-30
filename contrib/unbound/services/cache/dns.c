@@ -50,7 +50,7 @@
 #include "util/net_help.h"
 #include "util/regional.h"
 #include "util/config_file.h"
-#include "sldns/sbuffer.h"
+#include "ldns/sbuffer.h"
 
 /** store rrsets in the rrset cache. 
  * @param env: module environment with caches.
@@ -366,8 +366,6 @@ dns_msg_create(uint8_t* qname, size_t qnamelen, uint16_t qtype,
 		sizeof(struct reply_info)-sizeof(struct rrset_ref));
 	if(!msg->rep)
 		return NULL;
-	if(capacity > RR_COUNT_MAX)
-		return NULL; /* integer overflow protection */
 	msg->rep->flags = BIT_QR; /* with QR, no AA */
 	msg->rep->qdcount = 1;
 	msg->rep->rrsets = (struct ub_packed_rrset_key**)
@@ -386,18 +384,6 @@ dns_msg_authadd(struct dns_msg* msg, struct regional* region,
 		packed_rrset_copy_region(rrset, region, now)))
 		return 0;
 	msg->rep->ns_numrrsets++;
-	return 1;
-}
-
-/** add rrset to answer section */
-static int
-dns_msg_ansadd(struct dns_msg* msg, struct regional* region, 
-	struct ub_packed_rrset_key* rrset, time_t now)
-{
-	if(!(msg->rep->rrsets[msg->rep->rrset_count++] = 
-		packed_rrset_copy_region(rrset, region, now)))
-		return 0;
-	msg->rep->an_numrrsets++;
 	return 1;
 }
 
@@ -467,8 +453,6 @@ gen_dns_msg(struct regional* region, struct query_info* q, size_t num)
 		sizeof(struct reply_info) - sizeof(struct rrset_ref));
 	if(!msg->rep)
 		return NULL;
-	if(num > RR_COUNT_MAX)
-		return NULL; /* integer overflow protection */
 	msg->rep->rrsets = (struct ub_packed_rrset_key**)
 		regional_alloc(region,
 		num * sizeof(struct ub_packed_rrset_key*));
@@ -505,7 +489,7 @@ tomsg(struct module_env* env, struct query_info* q, struct reply_info* r,
 		return NULL;
 	if(r->an_numrrsets > 0 && (r->rrsets[0]->rk.type == htons(
 		LDNS_RR_TYPE_CNAME) || r->rrsets[0]->rk.type == htons(
-		LDNS_RR_TYPE_DNAME)) && !reply_check_cname_chain(q, r)) {
+		LDNS_RR_TYPE_DNAME)) && !reply_check_cname_chain(r)) {
 		/* cname chain is now invalid, reconstruct msg */
 		rrset_array_unlock(r->ref, r->rrset_count);
 		return NULL;
@@ -647,58 +631,6 @@ synth_dname_msg(struct ub_packed_rrset_key* rrset, struct regional* region,
 	return msg;
 }
 
-/** Fill TYPE_ANY response with some data from cache */
-static struct dns_msg*
-fill_any(struct module_env* env,
-	uint8_t* qname, size_t qnamelen, uint16_t qtype, uint16_t qclass,
-	struct regional* region)
-{
-	time_t now = *env->now;
-	struct dns_msg* msg = NULL;
-	uint16_t lookup[] = {LDNS_RR_TYPE_A, LDNS_RR_TYPE_AAAA,
-		LDNS_RR_TYPE_MX, LDNS_RR_TYPE_SOA, LDNS_RR_TYPE_NS, 0};
-	int i, num=5; /* number of RR types to look up */
-	log_assert(lookup[num] == 0);
-
-	for(i=0; i<num; i++) {
-		/* look up this RR for inclusion in type ANY response */
-		struct ub_packed_rrset_key* rrset = rrset_cache_lookup(
-			env->rrset_cache, qname, qnamelen, lookup[i],
-			qclass, 0, now, 0);
-		struct packed_rrset_data *d;
-		if(!rrset)
-			continue;
-
-		/* only if rrset from answer section */
-		d = (struct packed_rrset_data*)rrset->entry.data;
-		if(d->trust == rrset_trust_add_noAA ||
-			d->trust == rrset_trust_auth_noAA ||
-			d->trust == rrset_trust_add_AA ||
-			d->trust == rrset_trust_auth_AA) {
-			lock_rw_unlock(&rrset->entry.lock);
-			continue;
-		}
-
-		/* create msg if none */
-		if(!msg) {
-			msg = dns_msg_create(qname, qnamelen, qtype, qclass,
-				region, (size_t)(num-i));
-			if(!msg) {
-				lock_rw_unlock(&rrset->entry.lock);
-				return NULL;
-			}
-		}
-
-		/* add RRset to response */
-		if(!dns_msg_ansadd(msg, region, rrset, now)) {
-			lock_rw_unlock(&rrset->entry.lock);
-			return NULL;
-		}
-		lock_rw_unlock(&rrset->entry.lock);
-	}
-	return msg;
-}
-
 struct dns_msg* 
 dns_cache_lookup(struct module_env* env,
 	uint8_t* qname, size_t qnamelen, uint16_t qtype, uint16_t qclass,
@@ -809,11 +741,6 @@ dns_cache_lookup(struct module_env* env,
 			}
 			lock_rw_unlock(&e->lock);
 		}
-	}
-
-	/* fill common RR types for ANY response to avoid requery */
-	if(qtype == LDNS_RR_TYPE_ANY) {
-		return fill_any(env, qname, qnamelen, qtype, qclass, region);
 	}
 
 	return NULL;

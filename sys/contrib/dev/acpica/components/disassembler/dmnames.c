@@ -48,6 +48,8 @@
 #include <contrib/dev/acpica/include/acdisasm.h>
 
 
+#ifdef ACPI_DISASSEMBLER
+
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dmnames")
 
@@ -412,8 +414,6 @@ AcpiDmValidateName (
     char                    *Name,
     ACPI_PARSE_OBJECT       *Op)
 {
-    ACPI_PARSE_OBJECT       *TargetOp;
-
 
     if ((!Name) ||
         (!Op->Common.Parent))
@@ -426,6 +426,9 @@ AcpiDmValidateName (
         AcpiOsPrintf (
             " /**** Name not found or not accessible from this scope ****/ ");
     }
+
+    ACPI_PARSE_OBJECT       *TargetOp;
+
 
     if ((!Name) ||
         (!Op->Common.Parent))
@@ -446,4 +449,6 @@ AcpiDmValidateName (
             " /**** Name not found or not accessible from this scope ****/ ");
     }
 }
+#endif
+
 #endif

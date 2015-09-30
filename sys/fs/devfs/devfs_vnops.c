@@ -65,7 +65,6 @@
 #include <sys/vnode.h>
 
 static struct vop_vector devfs_vnodeops;
-static struct vop_vector devfs_specops;
 static struct fileops devfs_ops_f;
 
 #include <fs/devfs/devfs.h>
@@ -1775,24 +1774,13 @@ devfs_mmap_f(struct file *fp, vm_map_t map, vm_offset_t *addr, vm_size_t size,
 		return (EACCES);
 
 	/*
-	 * If we are sharing potential changes via MAP_SHARED and we
-	 * are trying to get write permission although we opened it
-	 * without asking for it, bail out.
-	 *
-	 * Note that most character devices always share mappings.
-	 * The one exception is that D_MMAP_ANON devices
-	 * (i.e. /dev/zero) permit private writable mappings.
-	 *
-	 * Rely on vm_mmap_cdev() to fail invalid MAP_PRIVATE requests
-	 * as well as updating maxprot to permit writing for
-	 * D_MMAP_ANON devices rather than doing that here.
+	 * Character devices always share mappings, so
+	 * require a writable fd for writable mappings.
 	 */
-	if ((flags & MAP_SHARED) != 0) {
-		if ((fp->f_flag & FWRITE) != 0)
-			maxprot |= VM_PROT_WRITE;
-		else if ((prot & VM_PROT_WRITE) != 0)
-			return (EACCES);
-	}
+	if ((fp->f_flag & FWRITE) != 0)
+		maxprot |= VM_PROT_WRITE;
+	else if ((prot & VM_PROT_WRITE) != 0)
+		return (EACCES);
 	maxprot &= cap_maxprot;
 
 	fpop = td->td_fpop;
@@ -1863,7 +1851,7 @@ static struct vop_vector devfs_vnodeops = {
 	.vop_vptocnp =		devfs_vptocnp,
 };
 
-static struct vop_vector devfs_specops = {
+struct vop_vector devfs_specops = {
 	.vop_default =		&default_vnodeops,
 
 	.vop_access =		devfs_access,

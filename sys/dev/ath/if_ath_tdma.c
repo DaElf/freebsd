@@ -250,7 +250,8 @@ void
 ath_tdma_config(struct ath_softc *sc, struct ieee80211vap *vap)
 {
 	struct ath_hal *ah = sc->sc_ah;
-	struct ieee80211com *ic = &sc->sc_ic;
+	struct ifnet *ifp = sc->sc_ifp;
+	struct ieee80211com *ic = ifp->if_l2com;
 	const struct ieee80211_txparam *tp;
 	const struct ieee80211_tdma_state *tdma = NULL;
 	int rix;
@@ -288,7 +289,7 @@ ath_tdma_config(struct ath_softc *sc, struct ieee80211vap *vap)
 		/* XXX short preamble assumed */
 		/* XXX non-11n rate assumed */
 		sc->sc_tdmaguard = ath_hal_computetxtime(ah, sc->sc_currates,
-		    vap->iv_ifp->if_mtu + IEEE80211_MAXOVERHEAD, rix, AH_TRUE);
+			ifp->if_mtu + IEEE80211_MAXOVERHEAD, rix, AH_TRUE);
 	}
 
 	ath_hal_intrset(ah, 0);
@@ -358,7 +359,7 @@ ath_tdma_update(struct ieee80211_node *ni,
 #define	TU_TO_TSF(_tu)	(((u_int64_t)(_tu)) << 10)
 	struct ieee80211vap *vap = ni->ni_vap;
 	struct ieee80211com *ic = ni->ni_ic;
-	struct ath_softc *sc = ic->ic_softc;
+	struct ath_softc *sc = ic->ic_ifp->if_softc;
 	struct ath_hal *ah = sc->sc_ah;
 	const HAL_RATE_TABLE *rt = sc->sc_currates;
 	u_int64_t tsf, rstamp, nextslot, nexttbtt, nexttbtt_full;
@@ -548,7 +549,7 @@ ath_tdma_update(struct ieee80211_node *ni,
 	 *     slot position changes) because ieee80211_add_tdma
 	 *     skips over the data.
 	 */
-	memcpy(vap->iv_bcn_off.bo_tdma +
+	memcpy(ATH_VAP(vap)->av_boff.bo_tdma +
 		__offsetof(struct ieee80211_tdma_param, tdma_tstamp),
 		&ni->ni_tstamp.data, 8);
 #if 0

@@ -29,8 +29,6 @@
  * $FreeBSD$
  */
 
-#include <sys/param.h>
-
 #include "opt_ah.h"
 
 /*
@@ -370,12 +368,13 @@ BSDSTAT_DEFINE_BOUNCE(athaggrstatfoo)
 struct athaggrstatfoo *
 athaggrstats_new(const char *ifname, const char *fmtstring)
 {
+#define	N(a)	(sizeof(a) / sizeof(a[0]))
 	struct athaggrstatfoo_p *wf;
 
 	wf = calloc(1, sizeof(struct athaggrstatfoo_p));
 	if (wf != NULL) {
 		bsdstat_init(&wf->base.base, "athaggrstats",
-		    athaggrstats, nitems(athaggrstats));
+		    athaggrstats, N(athaggrstats));
 		/* override base methods */
 		wf->base.base.collect_cur = ath_collect_cur;
 		wf->base.base.collect_tot = ath_collect_tot;
@@ -401,4 +400,5 @@ athaggrstats_new(const char *ifname, const char *fmtstring)
 		wf->base.setfmt(&wf->base, fmtstring);
 	}
 	return &wf->base;
+#undef N
 }

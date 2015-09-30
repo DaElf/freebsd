@@ -35,7 +35,6 @@
 #include <machine/tlb.h>
 
 struct pmap;
-struct pvo_entry;
 #define	CPUSAVE_LEN	9
 
 #define	PCPU_MD_COMMON_FIELDS						\
@@ -54,9 +53,6 @@ struct pvo_entry;
 	void		*pc_restore;
 
 #define PCPU_MD_AIM32_FIELDS						\
-	vm_offset_t	pc_qmap_addr;					\
-	struct pvo_entry *pc_qmap_pvo;					\
-	struct mtx	pc_qmap_lock;					\
 	/* char		__pad[0] */
 
 #define PCPU_MD_AIM64_FIELDS						\
@@ -64,10 +60,7 @@ struct pvo_entry;
 	struct slb	**pc_userslb;					\
 	register_t	pc_slbsave[18];					\
 	uint8_t		pc_slbstack[1024];				\
-	vm_offset_t	pc_qmap_addr;					\
-	struct pvo_entry *pc_qmap_pvo;					\
-	struct mtx	pc_qmap_lock;					\
-	char		__pad[1121 - sizeof(struct mtx)]
+	char		__pad[1137]
 
 #ifdef __powerpc64__
 #define PCPU_MD_AIM_FIELDS	PCPU_MD_AIM64_FIELDS
@@ -85,10 +78,9 @@ struct pvo_entry;
 	register_t	pc_booke_mchksave[CPUSAVE_LEN];			\
 	register_t	pc_booke_tlbsave[BOOKE_TLBSAVE_LEN];		\
 	register_t	pc_booke_tlb_level;				\
-	vm_offset_t	pc_qmap_addr;					\
 	uint32_t	*pc_booke_tlb_lock;				\
 	int		pc_tid_next;					\
-	char		__pad[165]
+	char		__pad[173]
 
 /* Definitions for register offsets within the exception tmp save areas */
 #define	CPUSAVE_R27	0		/* where r27 gets saved */

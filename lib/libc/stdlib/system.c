@@ -70,20 +70,16 @@ __libc_system(const char *command)
 	(void)sigaddset(&newsigblock, SIGCHLD);
 	(void)sigaddset(&newsigblock, SIGINT);
 	(void)sigaddset(&newsigblock, SIGQUIT);
-	(void)__libc_sigprocmask(SIG_BLOCK, &newsigblock, &oldsigblock);
+	(void)_sigprocmask(SIG_BLOCK, &newsigblock, &oldsigblock);
 	switch(pid = vfork()) {
-	/*
-	 * In the child, use unwrapped syscalls.  libthr is in
-	 * undefined state after vfork().
-	 */
 	case -1:			/* error */
-		(void)__libc_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
+		(void)_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
 		return (-1);
 	case 0:				/* child */
 		/*
 		 * Restore original signal dispositions and exec the command.
 		 */
-		(void)__sys_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
+		(void)_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
 		execl(_PATH_BSHELL, "sh", "-c", command, (char *)NULL);
 		_exit(127);
 	}
@@ -96,16 +92,16 @@ __libc_system(const char *command)
 	memset(&ign, 0, sizeof(ign));
 	ign.sa_handler = SIG_IGN;
 	(void)sigemptyset(&ign.sa_mask);
-	(void)__libc_sigaction(SIGINT, &ign, &intact);
-	(void)__libc_sigaction(SIGQUIT, &ign, &quitact);
+	(void)_sigaction(SIGINT, &ign, &intact);
+	(void)_sigaction(SIGQUIT, &ign, &quitact);
 	savedpid = pid;
 	do {
 		pid = _wait4(savedpid, &pstat, 0, (struct rusage *)0);
 	} while (pid == -1 && errno == EINTR);
-	(void)__libc_sigaction(SIGINT, &intact, NULL);
-	(void)__libc_sigaction(SIGQUIT,  &quitact, NULL);
-	(void)__libc_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
-	return (pid == -1 ? -1 : pstat);
+	(void)_sigaction(SIGINT, &intact, NULL);
+	(void)_sigaction(SIGQUIT,  &quitact, NULL);
+	(void)_sigprocmask(SIG_SETMASK, &oldsigblock, NULL);
+	return(pid == -1 ? -1 : pstat);
 }
 
 __weak_reference(__libc_system, __system);

@@ -258,7 +258,7 @@ realinstall: _maninstall
 .ORDER: beforeinstall _maninstall
 .endif
 
-.endif	# !target(install)
+.endif
 
 .if !target(lint)
 lint: ${SRCS:M*.c}

@@ -1,6 +1,5 @@
 /*-
  * Copyright (c) 2015 Allan Jude <allanjude@FreeBSD.org>
- * Copyright (c) 2015 Xin LI <delphij@FreeBSD.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -43,33 +42,29 @@ __FBSDID("$FreeBSD$");
 int
 fstyp_zfs(FILE *fp, char *label, size_t labelsize)
 {
-	vdev_label_t *vdev_label = NULL;
-	vdev_phys_t *vdev_phys;
+	vdev_label_t *zpool_ptr = NULL;
+	vdev_label_t zpool_label;
+	char *buf = zpool_label.vl_vdev_phys.vp_nvlist;
 	char *zpool_name = NULL;
+	size_t buflen = sizeof (zpool_label.vl_vdev_phys.vp_nvlist);
 	nvlist_t *config = NULL;
-	int err = 0;
 
-	/*
-	 * Read in the first ZFS vdev label ("L0"), located at the beginning
-	 * of the vdev and extract the pool name from it.
-	 *
-	 * TODO: the checksum of label should be validated.
-	 */
-	vdev_label = (vdev_label_t *)read_buf(fp, 0, sizeof(*vdev_label));
-	if (vdev_label == NULL)
+	zpool_ptr = (vdev_label_t *)read_buf(fp, 0, sizeof(zpool_label));
+	if (zpool_ptr == NULL)
 		return (1);
-
-	vdev_phys = &(vdev_label->vl_vdev_phys);
-
-	if ((nvlist_unpack(vdev_phys->vp_nvlist, sizeof(vdev_phys->vp_nvlist),
-	    &config, 0)) == 0 &&
-	    (nvlist_lookup_string(config, "name", &zpool_name) == 0)) {
-		strlcpy(label, zpool_name, labelsize);
-	} else
-		err = 1;
-
+	zpool_label = *zpool_ptr;
+	if (nvlist_unpack(buf, buflen, &config, 0) != 0)
+		goto zfserr;
+	if (nvlist_lookup_string(config, "name", &zpool_name) != 0)
+		goto zfserr;
+	strlcpy(label, zpool_name, labelsize);
 	nvlist_free(config);
-	free(vdev_label);
+	free(zpool_ptr);
+	return (0);
 
-	return (err);
+zfserr:
+	nvlist_free(config);
+	free(zpool_ptr);
+
+	return (1);
 }

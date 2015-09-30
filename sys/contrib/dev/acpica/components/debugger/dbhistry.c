@@ -45,6 +45,7 @@
 #include <contrib/dev/acpica/include/accommon.h>
 #include <contrib/dev/acpica/include/acdebug.h>
 
+#ifdef ACPI_DEBUGGER
 
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dbhistry")
@@ -101,7 +102,6 @@ AcpiDbAddToHistory (
     {
         BufferLen = (UINT16) strlen (
             AcpiGbl_HistoryBuffer[AcpiGbl_NextHistoryIndex].Command);
-
         if (CmdLen > BufferLen)
         {
             AcpiOsFree (AcpiGbl_HistoryBuffer[AcpiGbl_NextHistoryIndex].
@@ -269,3 +269,5 @@ AcpiDbGetHistoryByIndex (
     AcpiOsPrintf ("Invalid history number: %u\n", HistoryIndex);
     return (NULL);
 }
+
+#endif /* ACPI_DEBUGGER */

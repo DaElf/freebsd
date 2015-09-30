@@ -42,8 +42,6 @@ __FBSDID("$FreeBSD$");
 
 #include "libc_private.h"
 
-unsigned int __sleep(unsigned int);
-
 unsigned int
 __sleep(unsigned int seconds)
 {

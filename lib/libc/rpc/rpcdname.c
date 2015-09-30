@@ -46,7 +46,7 @@ __FBSDID("$FreeBSD$");
 static char *default_domain = 0;
 
 static char *
-get_default_domain(void)
+get_default_domain()
 {
 	char temp[256];
 
@@ -71,7 +71,8 @@ get_default_domain(void)
  * get rejected elsewhere in the NIS client package.
  */
 int
-__rpc_get_default_domain(char **domain)
+__rpc_get_default_domain(domain)
+	char **domain;
 {
 	if ((*domain = get_default_domain()) != 0)
 		return (0);

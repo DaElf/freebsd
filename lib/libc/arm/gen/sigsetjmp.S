@@ -66,5 +66,3 @@ ENTRY(siglongjmp)
 	beq	PIC_SYM(_C_LABEL(_longjmp), PLT)
 	b	PIC_SYM(_C_LABEL(longjmp), PLT)
 END(siglongjmp)
-
-	.section .note.GNU-stack,"",%progbits

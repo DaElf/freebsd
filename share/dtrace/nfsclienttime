@@ -53,13 +53,13 @@ syscall:::entry
         self->count = 0;
 }
 
-nfscl:nfs3::start
+nfsclient:nfs3::start
 {
 
         self->timestamp = timestamp;
 }
 
-nfscl:nfs3::done
+nfsclient:nfs3::done
 {
 
         self->count += (timestamp - self->timestamp);

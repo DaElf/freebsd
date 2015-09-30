@@ -407,11 +407,9 @@ _rm_rlock_hard(struct rmlock *rm, struct rm_priotracker *tracker, int trylock)
 				return (0);
 		}
 	} else {
-		if (rm->lock_object.lo_flags & LO_SLEEPABLE) {
-			THREAD_SLEEPING_OK();
+		if (rm->lock_object.lo_flags & LO_SLEEPABLE)
 			sx_xlock(&rm->rm_lock_sx);
-			THREAD_NO_SLEEPING();
-		} else
+		else
 			mtx_lock(&rm->rm_lock_mtx);
 	}
 
@@ -610,8 +608,11 @@ _rm_wlock_debug(struct rmlock *rm, const char *file, int line)
 	_rm_wlock(rm);
 
 	LOCK_LOG_LOCK("RMWLOCK", &rm->lock_object, 0, 0, file, line);
+
 	WITNESS_LOCK(&rm->lock_object, LOP_EXCLUSIVE, file, line);
-	TD_LOCKS_INC(curthread);
+
+	curthread->td_locks++;
+
 }
 
 void
@@ -627,7 +628,7 @@ _rm_wunlock_debug(struct rmlock *rm, const char *file, int line)
 	WITNESS_UNLOCK(&rm->lock_object, LOP_EXCLUSIVE, file, line);
 	LOCK_LOG_LOCK("RMWUNLOCK", &rm->lock_object, 0, 0, file, line);
 	_rm_wunlock(rm);
-	TD_LOCKS_DEC(curthread);
+	curthread->td_locks--;
 }
 
 int
@@ -669,7 +670,9 @@ _rm_rlock_debug(struct rmlock *rm, struct rm_priotracker *tracker,
 			LOCK_LOG_LOCK("RMRLOCK", &rm->lock_object, 0, 0, file,
 			    line);
 		WITNESS_LOCK(&rm->lock_object, 0, file, line);
-		TD_LOCKS_INC(curthread);
+
+		curthread->td_locks++;
+
 		return (1);
 	} else if (trylock)
 		LOCK_LOG_TRY("RMRLOCK", &rm->lock_object, 0, 0, file, line);
@@ -691,7 +694,7 @@ _rm_runlock_debug(struct rmlock *rm, struct rm_priotracker *tracker,
 	WITNESS_UNLOCK(&rm->lock_object, 0, file, line);
 	LOCK_LOG_LOCK("RMRUNLOCK", &rm->lock_object, 0, 0, file, line);
 	_rm_runlock(rm, tracker);
-	TD_LOCKS_DEC(curthread);
+	curthread->td_locks--;
 }
 
 #else

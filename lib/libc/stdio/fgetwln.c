@@ -40,8 +40,6 @@ __FBSDID("$FreeBSD$");
 #include "local.h"
 #include "xlocale_private.h"
 
-wchar_t *fgetwln_l(FILE * __restrict, size_t *, locale_t);
-
 wchar_t *
 fgetwln_l(FILE * __restrict fp, size_t *lenp, locale_t locale)
 {

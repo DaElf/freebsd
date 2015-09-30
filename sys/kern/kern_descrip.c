@@ -911,7 +911,7 @@ kern_dup(struct thread *td, u_int mode, int flags, int old, int new)
 #endif
 	filecaps_free(&newfde->fde_caps);
 	memcpy(newfde, oldfde, fde_change_size);
-	filecaps_copy(&oldfde->fde_caps, &newfde->fde_caps, true);
+	filecaps_copy(&oldfde->fde_caps, &newfde->fde_caps);
 	if ((flags & FDDUP_FLAG_CLOEXEC) != 0)
 		newfde->fde_flags = oldfde->fde_flags | UF_EXCLOSE;
 	else
@@ -1433,31 +1433,21 @@ filecaps_init(struct filecaps *fcaps)
 
 /*
  * Copy filecaps structure allocating memory for ioctls array if needed.
- *
- * The last parameter indicates whether the fdtable is locked. If it is not and
- * ioctls are encountered, copying fails and the caller must lock the table.
- *
- * Note that if the table was not locked, the caller has to check the relevant
- * sequence counter to determine whether the operation was successful.
  */
-int
-filecaps_copy(const struct filecaps *src, struct filecaps *dst, bool locked)
+void
+filecaps_copy(const struct filecaps *src, struct filecaps *dst)
 {
 	size_t size;
 
 	*dst = *src;
-	if (src->fc_ioctls == NULL)
-		return (0);
-	if (!locked)
-		return (1);
+	if (src->fc_ioctls != NULL) {
+		KASSERT(src->fc_nioctls > 0,
+		    ("fc_ioctls != NULL, but fc_nioctls=%hd", src->fc_nioctls));
 
-	KASSERT(src->fc_nioctls > 0,
-	    ("fc_ioctls != NULL, but fc_nioctls=%hd", src->fc_nioctls));
-
-	size = sizeof(src->fc_ioctls[0]) * src->fc_nioctls;
-	dst->fc_ioctls = malloc(size, M_FILECAPS, M_WAITOK);
-	bcopy(src->fc_ioctls, dst->fc_ioctls, size);
-	return (0);
+		size = sizeof(src->fc_ioctls[0]) * src->fc_nioctls;
+		dst->fc_ioctls = malloc(size, M_FILECAPS, M_WAITOK);
+		bcopy(src->fc_ioctls, dst->fc_ioctls, size);
+	}
 }
 
 /*
@@ -1966,7 +1956,7 @@ fdcopy(struct filedesc *fdp)
 		}
 		nfde = &newfdp->fd_ofiles[i];
 		*nfde = *ofde;
-		filecaps_copy(&ofde->fde_caps, &nfde->fde_caps, true);
+		filecaps_copy(&ofde->fde_caps, &nfde->fde_caps);
 		fhold(nfde->fde_file);
 		fdused_init(newfdp, i);
 		newfdp->fd_lastfile = i;
@@ -2022,7 +2012,7 @@ fdcopy_remapped(struct filedesc *fdp, const int *fds, size_t nfds,
 		}
 		nfde = &newfdp->fd_ofiles[i];
 		*nfde = *ofde;
-		filecaps_copy(&ofde->fde_caps, &nfde->fde_caps, true);
+		filecaps_copy(&ofde->fde_caps, &nfde->fde_caps);
 		fhold(nfde->fde_file);
 		fdused_init(newfdp, i);
 		newfdp->fd_lastfile = i;
@@ -2721,9 +2711,11 @@ fgetvp_rights(struct thread *td, int fd, cap_rights_t *needrightsp,
 		return (EBADF);
 
 #ifdef CAPABILITIES
-	error = cap_check(cap_rights(fdp, fd), needrightsp);
-	if (error != 0)
-		return (error);
+	if (needrightsp != NULL) {
+		error = cap_check(cap_rights(fdp, fd), needrightsp);
+		if (error != 0)
+			return (error);
+	}
 #endif
 
 	if (fp->f_vnode == NULL)
@@ -2731,7 +2723,7 @@ fgetvp_rights(struct thread *td, int fd, cap_rights_t *needrightsp,
 
 	*vpp = fp->f_vnode;
 	vref(*vpp);
-	filecaps_copy(&fdp->fd_ofiles[fd].fde_caps, havecaps, true);
+	filecaps_copy(&fdp->fd_ofiles[fd].fde_caps, havecaps);
 
 	return (0);
 }
@@ -2946,7 +2938,7 @@ dupfdopen(struct thread *td, struct filedesc *fdp, int dfd, int mode,
 		seq_write_begin(&newfde->fde_seq);
 #endif
 		memcpy(newfde, oldfde, fde_change_size);
-		filecaps_copy(&oldfde->fde_caps, &newfde->fde_caps, true);
+		filecaps_copy(&oldfde->fde_caps, &newfde->fde_caps);
 #ifdef CAPABILITIES
 		seq_write_end(&newfde->fde_seq);
 #endif
@@ -3291,7 +3283,7 @@ pack_kinfo(struct kinfo_file *kif)
 
 static void
 export_file_to_kinfo(struct file *fp, int fd, cap_rights_t *rightsp,
-    struct kinfo_file *kif, struct filedesc *fdp, int flags)
+    struct kinfo_file *kif, struct filedesc *fdp)
 {
 	int error;
 
@@ -3315,15 +3307,12 @@ export_file_to_kinfo(struct file *fp, int fd, cap_rights_t *rightsp,
 	error = fo_fill_kinfo(fp, kif, fdp);
 	if (error == 0)
 		kif->kf_status |= KF_ATTR_VALID;
-	if ((flags & KERN_FILEDESC_PACK_KINFO) != 0)
-		pack_kinfo(kif);
-	else
-		kif->kf_structsize = roundup2(sizeof(*kif), sizeof(uint64_t));
+	pack_kinfo(kif);
 }
 
 static void
 export_vnode_to_kinfo(struct vnode *vp, int fd, int fflags,
-    struct kinfo_file *kif, int flags)
+    struct kinfo_file *kif)
 {
 	int error;
 
@@ -3338,10 +3327,7 @@ export_vnode_to_kinfo(struct vnode *vp, int fd, int fflags,
 	kif->kf_fd = fd;
 	kif->kf_ref_count = -1;
 	kif->kf_offset = -1;
-	if ((flags & KERN_FILEDESC_PACK_KINFO) != 0)
-		pack_kinfo(kif);
-	else
-		kif->kf_structsize = roundup2(sizeof(*kif), sizeof(uint64_t));
+	pack_kinfo(kif);
 	vrele(vp);
 }
 
@@ -3350,7 +3336,6 @@ struct export_fd_buf {
 	struct sbuf 		*sb;
 	ssize_t			remainder;
 	struct kinfo_file	kif;
-	int			flags;
 };
 
 static int
@@ -3378,8 +3363,7 @@ export_file_to_sb(struct file *fp, int fd, cap_rights_t *rightsp,
 
 	if (efbuf->remainder == 0)
 		return (0);
-	export_file_to_kinfo(fp, fd, rightsp, &efbuf->kif, efbuf->fdp,
-	    efbuf->flags);
+	export_file_to_kinfo(fp, fd, rightsp, &efbuf->kif, efbuf->fdp);
 	FILEDESC_SUNLOCK(efbuf->fdp);
 	error = export_kinfo_to_sb(efbuf);
 	FILEDESC_SLOCK(efbuf->fdp);
@@ -3396,7 +3380,7 @@ export_vnode_to_sb(struct vnode *vp, int fd, int fflags,
 		return (0);
 	if (efbuf->fdp != NULL)
 		FILEDESC_SUNLOCK(efbuf->fdp);
-	export_vnode_to_kinfo(vp, fd, fflags, &efbuf->kif, efbuf->flags);
+	export_vnode_to_kinfo(vp, fd, fflags, &efbuf->kif);
 	error = export_kinfo_to_sb(efbuf);
 	if (efbuf->fdp != NULL)
 		FILEDESC_SLOCK(efbuf->fdp);
@@ -3409,8 +3393,7 @@ export_vnode_to_sb(struct vnode *vp, int fd, int fflags,
  * Takes a locked proc as argument, and returns with the proc unlocked.
  */
 int
-kern_proc_filedesc_out(struct proc *p,  struct sbuf *sb, ssize_t maxlen,
-    int flags)
+kern_proc_filedesc_out(struct proc *p,  struct sbuf *sb, ssize_t maxlen)
 {
 	struct file *fp;
 	struct filedesc *fdp;
@@ -3442,7 +3425,6 @@ kern_proc_filedesc_out(struct proc *p,  struct sbuf *sb, ssize_t maxlen,
 	efbuf->fdp = NULL;
 	efbuf->sb = sb;
 	efbuf->remainder = maxlen;
-	efbuf->flags = flags;
 	if (tracevp != NULL)
 		export_vnode_to_sb(tracevp, KF_FD_TYPE_TRACE, FREAD | FWRITE,
 		    efbuf);
@@ -3519,8 +3501,7 @@ sysctl_kern_proc_filedesc(SYSCTL_HANDLER_ARGS)
 		return (error);
 	}
 	maxlen = req->oldptr != NULL ? req->oldlen : -1;
-	error = kern_proc_filedesc_out(p, &sb, maxlen,
-	    KERN_FILEDESC_PACK_KINFO);
+	error = kern_proc_filedesc_out(p, &sb, maxlen);
 	error2 = sbuf_finish(&sb);
 	sbuf_delete(&sb);
 	return (error != 0 ? error : error2);
@@ -3560,7 +3541,7 @@ export_vnode_for_osysctl(struct vnode *vp, int type, struct kinfo_file *kif,
 
 	vref(vp);
 	FILEDESC_SUNLOCK(fdp);
-	export_vnode_to_kinfo(vp, type, 0, kif, KERN_FILEDESC_PACK_KINFO);
+	export_vnode_to_kinfo(vp, type, 0, kif);
 	kinfo_to_okinfo(kif, okif);
 	error = SYSCTL_OUT(req, okif, sizeof(*okif));
 	FILEDESC_SLOCK(fdp);
@@ -3603,8 +3584,7 @@ sysctl_kern_proc_ofiledesc(SYSCTL_HANDLER_ARGS)
 	for (i = 0; fdp->fd_refcnt > 0 && i <= fdp->fd_lastfile; i++) {
 		if ((fp = fdp->fd_ofiles[i].fde_file) == NULL)
 			continue;
-		export_file_to_kinfo(fp, i, NULL, kif, fdp,
-		    KERN_FILEDESC_PACK_KINFO);
+		export_file_to_kinfo(fp, i, NULL, kif, fdp);
 		FILEDESC_SUNLOCK(fdp);
 		kinfo_to_okinfo(kif, okif);
 		error = SYSCTL_OUT(req, okif, sizeof(*okif));

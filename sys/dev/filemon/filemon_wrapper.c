@@ -1,7 +1,6 @@
 /*-
  * Copyright (c) 2011, David E. O'Brien.
  * Copyright (c) 2009-2011, Juniper Networks, Inc.
- * Copyright (c) 2015, EMC Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -87,25 +86,17 @@ filemon_pid_check(struct proc *p)
 {
 	struct filemon *filemon;
 
-	filemon_lock_read();
-	if (TAILQ_EMPTY(&filemons_inuse)) {
-		filemon_unlock_read();
-		return (NULL);
-	}
 	sx_slock(&proctree_lock);
 	while (p != initproc) {
 		TAILQ_FOREACH(filemon, &filemons_inuse, link) {
 			if (p->p_pid == filemon->pid) {
 				sx_sunlock(&proctree_lock);
-				filemon_filemon_lock(filemon);
-				filemon_unlock_read();
 				return (filemon);
 			}
 		}
 		p = proc_realparent(p);
 	}
 	sx_sunlock(&proctree_lock);
-	filemon_unlock_read();
 	return (NULL);
 }
 
@@ -117,6 +108,9 @@ filemon_comment(struct filemon *filemon)
 
 	/* Load timestamp before locking.  Less accurate but less contention. */
 	getmicrotime(&now);
+
+	/* Grab a read lock on the filemon inuse list. */
+	filemon_lock_read();
 
 	/* Lock the found filemon structure. */
 	filemon_filemon_lock(filemon);
@@ -130,6 +124,9 @@ filemon_comment(struct filemon *filemon)
 
 	/* Unlock the found filemon structure. */
 	filemon_filemon_unlock(filemon);
+
+	/* Release the read lock. */
+	filemon_unlock_read();
 }
 
 static int
@@ -141,7 +138,13 @@ filemon_wrapper_chdir(struct thread *td, struct chdir_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_chdir(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->path, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 
@@ -154,6 +157,9 @@ filemon_wrapper_chdir(struct thread *td, struct chdir_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -171,7 +177,13 @@ filemon_wrapper_execve(struct thread *td, struct execve_args *uap)
 	copyinstr(uap->fname, fname, sizeof(fname), &done);
 
 	if ((ret = sys_execve(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			len = snprintf(filemon->msgbufr,
 			    sizeof(filemon->msgbufr), "E %d %s\n",
 			    curproc->p_pid, fname);
@@ -181,6 +193,9 @@ filemon_wrapper_execve(struct thread *td, struct execve_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -200,7 +215,13 @@ filemon_wrapper_freebsd32_execve(struct thread *td,
 	copyinstr(uap->fname, fname, sizeof(fname), &done);
 
 	if ((ret = freebsd32_execve(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			len = snprintf(filemon->msgbufr,
 			    sizeof(filemon->msgbufr), "E %d %s\n",
 			    curproc->p_pid, fname);
@@ -210,6 +231,9 @@ filemon_wrapper_freebsd32_execve(struct thread *td,
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -224,7 +248,13 @@ filemon_wrapper_fork(struct thread *td, struct fork_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_fork(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			len = snprintf(filemon->msgbufr,
 			    sizeof(filemon->msgbufr), "F %d %ld\n",
 			    curproc->p_pid, (long)curthread->td_retval[0]);
@@ -234,6 +264,9 @@ filemon_wrapper_fork(struct thread *td, struct fork_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -248,7 +281,13 @@ filemon_wrapper_open(struct thread *td, struct open_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_open(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->path, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 
@@ -274,6 +313,9 @@ filemon_wrapper_open(struct thread *td, struct open_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -288,7 +330,13 @@ filemon_wrapper_openat(struct thread *td, struct openat_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_openat(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->path, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 
@@ -327,6 +375,9 @@ filemon_wrapper_openat(struct thread *td, struct openat_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -341,7 +392,13 @@ filemon_wrapper_rename(struct thread *td, struct rename_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_rename(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->from, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 			copyinstr(uap->to, filemon->fname2,
@@ -356,6 +413,9 @@ filemon_wrapper_rename(struct thread *td, struct rename_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -370,7 +430,13 @@ filemon_wrapper_link(struct thread *td, struct link_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_link(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->path, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 			copyinstr(uap->link, filemon->fname2,
@@ -385,6 +451,9 @@ filemon_wrapper_link(struct thread *td, struct link_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -399,7 +468,13 @@ filemon_wrapper_symlink(struct thread *td, struct symlink_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_symlink(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->path, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 			copyinstr(uap->link, filemon->fname2,
@@ -414,6 +489,9 @@ filemon_wrapper_symlink(struct thread *td, struct symlink_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -429,7 +507,13 @@ filemon_wrapper_linkat(struct thread *td, struct linkat_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_linkat(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->path1, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 			copyinstr(uap->path2, filemon->fname2,
@@ -444,6 +528,9 @@ filemon_wrapper_linkat(struct thread *td, struct linkat_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -459,7 +546,13 @@ filemon_wrapper_stat(struct thread *td, struct stat_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_stat(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->path, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 
@@ -472,6 +565,9 @@ filemon_wrapper_stat(struct thread *td, struct stat_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -488,7 +584,13 @@ filemon_wrapper_freebsd32_stat(struct thread *td,
 	struct filemon *filemon;
 
 	if ((ret = freebsd32_stat(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->path, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 
@@ -501,6 +603,9 @@ filemon_wrapper_freebsd32_stat(struct thread *td,
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -517,7 +622,13 @@ filemon_wrapper_sys_exit(struct thread *td, struct sys_exit_args *uap)
 	/* Get timestamp before locking. */
 	getmicrotime(&now);
 
+	/* Grab a read lock on the filemon inuse list. */
+	filemon_lock_read();
+
 	if ((filemon = filemon_pid_check(curproc)) != NULL) {
+		/* Lock the found filemon structure. */
+		filemon_filemon_lock(filemon);
+
 		len = snprintf(filemon->msgbufr, sizeof(filemon->msgbufr),
 		    "X %d %d\n", curproc->p_pid, uap->rval);
 
@@ -538,6 +649,9 @@ filemon_wrapper_sys_exit(struct thread *td, struct sys_exit_args *uap)
 		filemon_filemon_unlock(filemon);
 	}
 
+	/* Release the read lock. */
+	filemon_unlock_read();
+
 	sys_sys_exit(td, uap);
 }
 
@@ -550,7 +664,13 @@ filemon_wrapper_unlink(struct thread *td, struct unlink_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_unlink(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			copyinstr(uap->path, filemon->fname1,
 			    sizeof(filemon->fname1), &done);
 
@@ -563,6 +683,9 @@ filemon_wrapper_unlink(struct thread *td, struct unlink_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);
@@ -576,7 +699,13 @@ filemon_wrapper_vfork(struct thread *td, struct vfork_args *uap)
 	struct filemon *filemon;
 
 	if ((ret = sys_vfork(td, uap)) == 0) {
+		/* Grab a read lock on the filemon inuse list. */
+		filemon_lock_read();
+
 		if ((filemon = filemon_pid_check(curproc)) != NULL) {
+			/* Lock the found filemon structure. */
+			filemon_filemon_lock(filemon);
+
 			len = snprintf(filemon->msgbufr,
 			    sizeof(filemon->msgbufr), "F %d %ld\n",
 			    curproc->p_pid, (long)curthread->td_retval[0]);
@@ -586,6 +715,9 @@ filemon_wrapper_vfork(struct thread *td, struct vfork_args *uap)
 			/* Unlock the found filemon structure. */
 			filemon_filemon_unlock(filemon);
 		}
+
+		/* Release the read lock. */
+		filemon_unlock_read();
 	}
 
 	return (ret);

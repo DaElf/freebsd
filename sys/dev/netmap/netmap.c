@@ -2841,12 +2841,10 @@ void
 netmap_detach(struct ifnet *ifp)
 {
 	struct netmap_adapter *na = NA(ifp);
-	int skip;
 
 	if (!na)
 		return;
 
-	skip = 0;
 	NMG_LOCK();
 	netmap_disable_all_rings(ifp);
 	na->ifp = NULL;
@@ -2858,11 +2856,10 @@ netmap_detach(struct ifnet *ifp)
 	 * the driver is gone.
 	 */
 	if (na->na_flags & NAF_NATIVE) {
-		skip = netmap_adapter_put(na);
+	        netmap_adapter_put(na);
 	}
 	/* give them a chance to notice */
-	if (skip == 0)
-		netmap_enable_all_rings(ifp);
+	netmap_enable_all_rings(ifp);
 	NMG_UNLOCK();
 }
 

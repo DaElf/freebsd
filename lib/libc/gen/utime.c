@@ -38,7 +38,9 @@ __FBSDID("$FreeBSD$");
 #include <utime.h>
 
 int
-utime(const char *path, const struct utimbuf *times)
+utime(path, times)
+	const char *path;
+	const struct utimbuf *times;
 {
 	struct timeval tv[2], *tvp;
 

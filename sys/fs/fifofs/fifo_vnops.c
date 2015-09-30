@@ -64,8 +64,6 @@ struct fifoinfo {
 	struct pipe *fi_pipe;
 	long	fi_readers;
 	long	fi_writers;
-	u_int	fi_rgen;
-	u_int	fi_wgen;
 };
 
 static vop_print_t	fifo_print;
@@ -139,7 +137,6 @@ fifo_open(ap)
 	struct thread *td;
 	struct fifoinfo *fip;
 	struct pipe *fpipe;
-	u_int gen;
 	int error, stops_deferred;
 
 	vp = ap->a_vp;
@@ -167,7 +164,6 @@ fifo_open(ap)
 	PIPE_LOCK(fpipe);
 	if (ap->a_mode & FREAD) {
 		fip->fi_readers++;
-		fip->fi_rgen++;
 		if (fip->fi_readers == 1) {
 			fpipe->pipe_state &= ~PIPE_EOF;
 			if (fip->fi_writers > 0)
@@ -183,7 +179,6 @@ fifo_open(ap)
 			return (ENXIO);
 		}
 		fip->fi_writers++;
-		fip->fi_wgen++;
 		if (fip->fi_writers == 1) {
 			fpipe->pipe_state &= ~PIPE_EOF;
 			if (fip->fi_readers > 0)
@@ -192,7 +187,6 @@ fifo_open(ap)
 	}
 	if ((ap->a_mode & O_NONBLOCK) == 0) {
 		if ((ap->a_mode & FREAD) && fip->fi_writers == 0) {
-			gen = fip->fi_wgen;
 			VOP_UNLOCK(vp, 0);
 			stops_deferred = sigallowstop();
 			error = msleep(&fip->fi_readers, PIPE_MTX(fpipe),
@@ -200,7 +194,7 @@ fifo_open(ap)
 			if (stops_deferred)
 				sigdeferstop();
 			vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-			if (error != 0 && gen == fip->fi_wgen) {
+			if (error) {
 				fip->fi_readers--;
 				if (fip->fi_readers == 0) {
 					PIPE_LOCK(fpipe);
@@ -220,7 +214,6 @@ fifo_open(ap)
 			 */
 		}
 		if ((ap->a_mode & FWRITE) && fip->fi_readers == 0) {
-			gen = fip->fi_rgen;
 			VOP_UNLOCK(vp, 0);
 			stops_deferred = sigallowstop();
 			error = msleep(&fip->fi_writers, PIPE_MTX(fpipe),
@@ -228,7 +221,7 @@ fifo_open(ap)
 			if (stops_deferred)
 				sigdeferstop();
 			vn_lock(vp, LK_EXCLUSIVE | LK_RETRY);
-			if (error != 0 && gen == fip->fi_rgen) {
+			if (error) {
 				fip->fi_writers--;
 				if (fip->fi_writers == 0) {
 					PIPE_LOCK(fpipe);

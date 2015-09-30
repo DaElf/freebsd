@@ -155,16 +155,12 @@ gpiobus_attach_bus(device_t dev)
 int
 gpiobus_detach_bus(device_t dev)
 {
-	int err;
 
 #ifdef FDT
 	ofw_gpiobus_unregister_provider(dev);
 #endif
-	err = bus_generic_detach(dev);
-	if (err != 0)
-		return (err);
 
-	return (device_delete_children(dev));
+	return (bus_generic_detach(dev));
 }
 
 int
@@ -342,14 +338,11 @@ gpiobus_detach(device_t dev)
 	if ((err = device_get_children(dev, &devlist, &ndevs)) != 0)
 		return (err);
 	for (i = 0; i < ndevs; i++) {
+		device_delete_child(dev, devlist[i]);
 		devi = GPIOBUS_IVAR(devlist[i]);
 		gpiobus_free_ivars(devi);
-		resource_list_free(&devi->rl);
-		free(devi, M_DEVBUF);
-		device_delete_child(dev, devlist[i]);
 	}
 	free(devlist, M_TEMP);
-	rman_fini(&sc->sc_intr_rman);
 	if (sc->sc_pins) {
 		for (i = 0; i < sc->sc_npins; i++) {
 			if (sc->sc_pins[i].name != NULL)
@@ -386,10 +379,7 @@ gpiobus_probe_nomatch(device_t dev, device_t child)
 	devi = GPIOBUS_IVAR(child);
 	memset(pins, 0, sizeof(pins));
 	gpiobus_print_pins(devi, pins, sizeof(pins));
-	if (devi->npins > 1)
-		device_printf(dev, "<unknown device> at pins %s", pins);
-	else
-		device_printf(dev, "<unknown device> at pin %s", pins);
+	device_printf(dev, "<unknown device> at pin(s) %s", pins);
 	resource_list_print_type(&devi->rl, "irq", SYS_RES_IRQ, "%ld");
 	printf("\n");
 }
@@ -425,10 +415,7 @@ gpiobus_child_location_str(device_t bus, device_t child, char *buf,
 	struct gpiobus_ivar *devi;
 
 	devi = GPIOBUS_IVAR(child);
-	if (devi->npins > 1)
-		strlcpy(buf, "pins=", buflen);
-	else
-		strlcpy(buf, "pin=", buflen);
+	strlcpy(buf, "pin(s)=", buflen);
 	gpiobus_print_pins(devi, buf, buflen);
 
 	return (0);
@@ -455,7 +442,7 @@ gpiobus_add_child(device_t dev, u_int order, const char *name, int unit)
 	devi = malloc(sizeof(struct gpiobus_ivar), M_DEVBUF, M_NOWAIT | M_ZERO);
 	if (devi == NULL) {
 		device_delete_child(dev, child);
-		return (NULL);
+		return (0);
 	}
 	resource_list_init(&devi->rl);
 	device_set_ivars(child, devi);
@@ -474,11 +461,8 @@ gpiobus_hinted_child(device_t bus, const char *dname, int dunit)
 	child = BUS_ADD_CHILD(bus, 0, dname, dunit);
 	devi = GPIOBUS_IVAR(child);
 	resource_int_value(dname, dunit, "pins", &pins);
-	if (gpiobus_parse_pins(sc, child, pins)) {
-		resource_list_free(&devi->rl);
-		free(devi, M_DEVBUF);
+	if (gpiobus_parse_pins(sc, child, pins))
 		device_delete_child(bus, child);
-	}
 	if (resource_int_value(dname, dunit, "irq", &irq) == 0) {
 		if (bus_set_resource(child, SYS_RES_IRQ, 0, irq, 1) != 0)
 			device_printf(bus,

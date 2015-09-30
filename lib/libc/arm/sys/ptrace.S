@@ -47,5 +47,3 @@ ENTRY(ptrace)
 	bcs	PIC_SYM(CERROR, PLT)
 	RET
 END(ptrace)
-
-	.section .note.GNU-stack,"",%progbits

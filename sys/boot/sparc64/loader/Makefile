@@ -99,6 +99,12 @@ loader.help: help.common help.sparc64
 .PATH: ${.CURDIR}/../../forth
 .include	"${.CURDIR}/../../forth/Makefile.inc"
 
-FILES+= loader.rc menu.rc
+.if !exists(${DESTDIR}/boot/loader.rc)
+FILES+= loader.rc
+.endif
+
+.if !exists(${DESTDIR}/boot/menu.rc)
+FILES+= menu.rc
+.endif
 
 .include <bsd.prog.mk>

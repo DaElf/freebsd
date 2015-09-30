@@ -37,12 +37,12 @@
 .\"
 .\" $FreeBSD$
 .\"
-.Dd August 6, 2015
+.Dd November 30, 2013
 .Dt MDCONFIG 8
 .Os
 .Sh NAME
 .Nm mdconfig
-.Nd create and control memory disks
+.Nd configure and enable memory disks
 .Sh SYNOPSIS
 .Nm
 .Fl a
@@ -75,7 +75,7 @@
 .Sh DESCRIPTION
 The
 .Nm
-utility creates and controls
+utility configures and enables
 .Xr md 4
 devices.
 .Pp
@@ -103,7 +103,7 @@ If the
 .Fl o Cm reserve
 option is not set, creating and filling a large
 malloc-backed memory disk is a very easy way to
-panic the system.
+panic a system.
 .It Cm vnode
 A file specified with
 .Fl f Ar file
@@ -164,9 +164,7 @@ or
 .Cm t
 which
 denotes byte, kilobyte, megabyte, gigabyte and terabyte respectively.
-When used without the
-.Fl r
-option, the
+The
 .Fl a
 and
 .Fl t Ar swap
@@ -208,11 +206,6 @@ Enable/disable compression features to reduce memory usage.
 .It Oo Cm no Oc Ns Cm force
 Disable/enable extra sanity checks to prevent the user from doing something
 that might adversely affect the system.
-This can be used with the
-.Fl d
-flag to forcibly destroy an
-.Xr md 4
-disk that is still in use.
 .It Oo Cm no Oc Ns Cm readonly
 Enable/disable readonly mode.
 .El
@@ -234,58 +227,66 @@ is provided for convenience as an abbreviation of
 .Fl t Ar vnode
 .Fl f Ar file .
 .Sh EXAMPLES
-Create a disk with
-.Pa /tmp/boot.flp
-as backing storage.
+Create a 4 megabyte
+.Xr malloc 9
+backed memory disk.
 The name of the allocated unit will be printed on stdout, such as
-.Dq Li md0 :
-.Bd -literal -offset indent
-mdconfig /tmp/boot.flp
-.Ed
-.Pp
-Create a 1 gigabyte swap backed memory disk named
 .Dq Li md3 :
-.Bd -literal -offset indent
-mdconfig -s 1g -u md3
-.Ed
+.Pp
+.Dl mdconfig -a -t malloc -s 4m
+.Pp
+Create a disk named
+.Pa /dev/md4
+with
+.Pa /tmp/boot.flp
+as backing storage:
+.Pp
+.Dl mdconfig -a -t vnode -f /tmp/boot.flp -u md4
 .Pp
 Detach and free all resources used by
-.Pa /dev/md3 :
-.Bd -literal -offset indent
-mdconfig -du md3
-.Ed
+.Pa /dev/md4 :
 .Pp
-Show detailed information on current memory disks:
-.Bd -literal -offset indent
-mdconfig -lv
-.Ed
+.Dl mdconfig -d -u md4
 .Pp
-Resize the
-.Dq Li md3
-memory disk to 2 gigabytes:
-.Bd -literal -offset indent
-mdconfig -rs 2g -u md3
-.Ed
-.Pp
-Create a 1 gigabyte swap backed disk, initialize an
+Create a 128MByte swap backed disk, initialize an
 .Xr ffs 7
 file system on it, and mount it on
 .Pa /tmp :
 .Bd -literal -offset indent
-mdconfig -s 1g -u md10
+mdconfig -a -t swap -s 128M -u md10
 newfs -U /dev/md10
 mount /dev/md10 /tmp
 chmod 1777 /tmp
 .Ed
 .Pp
-Create a memory disk out of an ISO 9660 CD image file,
-using the first available
-.Xr md 4
-device, and then mount it:
+Create a 5MB file-backed disk
+.Po Fl a
+and
+.Fl t Ar vnode
+are implied
+.Pc :
 .Bd -literal -offset indent
-mount -t cd9660 /dev/`mdconfig -f cdimage.iso` /mnt
+dd if=/dev/zero of=somebackingfile bs=1k count=5k
+mdconfig -f somebackingfile -u md0
+bsdlabel -w md0 auto
+newfs md0c
+mount /dev/md0c /mnt
 .Ed
 .Pp
+Create an
+.Xr md 4
+device out of an ISO 9660 CD image file
+.Po Fl a
+and
+.Fl t Ar vnode
+are implied
+.Pc , using the first available
+.Xr md 4
+device, and then mount the new memory disk:
+.Bd -literal -offset indent
+mount -t cd9660 /dev/`mdconfig -f cdimage.iso` /mnt
+.Pp
+.Ed
 Create a file-backed device from a hard disk image that begins
 with 512K of raw header information.
 .Xr gnop 8
@@ -293,14 +294,15 @@ is used to skip over the header information, positioning
 .Pa md1.nop
 to the start of the filesystem in the image.
 .Bd -literal -offset indent
-mdconfig -u md1 -f diskimage.img
+mdconfig -f diskimage.img -u md1
 gnop create -o 512K md1
 mount /dev/md1.nop /mnt
 .Ed
 .Sh SEE ALSO
 .Xr md 4 ,
 .Xr ffs 7 ,
-.Xr gpart 8 ,
+.Xr bsdlabel 8 ,
+.Xr fdisk 8 ,
 .Xr mdmfs 8 ,
 .Xr malloc 9
 .Sh HISTORY

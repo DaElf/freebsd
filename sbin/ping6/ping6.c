@@ -288,6 +288,9 @@ main(int argc, char *argv[])
 {
 	struct timeval last, intvl;
 	struct sockaddr_in6 from, *sin6;
+#ifndef HAVE_ARC4RANDOM
+	struct timeval seed;
+#endif
 	struct addrinfo hints, *res;
 	struct sigaction si_sa;
 	int cc, i;
@@ -748,7 +751,17 @@ main(int argc, char *argv[])
 			*datap++ = i;
 
 	ident = getpid() & 0xFFFF;
-	arc4random_buf(nonce, sizeof(nonce));
+#ifndef HAVE_ARC4RANDOM
+	gettimeofday(&seed, NULL);
+	srand((unsigned int)(seed.tv_sec ^ seed.tv_usec ^ (long)ident));
+	memset(nonce, 0, sizeof(nonce));
+	for (i = 0; i < sizeof(nonce); i += sizeof(int))
+		*((int *)&nonce[i]) = rand();
+#else
+	memset(nonce, 0, sizeof(nonce));
+	for (i = 0; i < (int)sizeof(nonce); i += sizeof(u_int32_t))
+		*((u_int32_t *)&nonce[i]) = arc4random();
+#endif
 	optval = 1;
 	if (options & F_DONTFRAG)
 		if (setsockopt(s, IPPROTO_IPV6, IPV6_DONTFRAG,

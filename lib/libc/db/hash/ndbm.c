@@ -56,7 +56,9 @@ __FBSDID("$FreeBSD$");
  *	 NULL on failure
  */
 extern DBM *
-dbm_open(const char *file, int flags, int mode)
+dbm_open(file, flags, mode)
+	const char *file;
+	int flags, mode;
 {
 	HASHINFO info;
 	char path[MAXPATHLEN];
@@ -78,7 +80,8 @@ dbm_open(const char *file, int flags, int mode)
 }
 
 extern void
-dbm_close(DBM *db)
+dbm_close(db)
+	DBM *db;
 {
 	(void)(db->close)(db);
 }
@@ -89,7 +92,9 @@ dbm_close(DBM *db)
  *	NULL on failure
  */
 extern datum
-dbm_fetch(DBM *db, datum key)
+dbm_fetch(db, key)
+	DBM *db;
+	datum key;
 {
 	datum retdata;
 	int status;
@@ -113,7 +118,8 @@ dbm_fetch(DBM *db, datum key)
  *	NULL on failure
  */
 extern datum
-dbm_firstkey(DBM *db)
+dbm_firstkey(db)
+	DBM *db;
 {
 	int status;
 	datum retkey;
@@ -133,7 +139,8 @@ dbm_firstkey(DBM *db)
  *	NULL on failure
  */
 extern datum
-dbm_nextkey(DBM *db)
+dbm_nextkey(db)
+	DBM *db;
 {
 	int status;
 	datum retkey;
@@ -153,7 +160,9 @@ dbm_nextkey(DBM *db)
  *	<0 failure
  */
 extern int
-dbm_delete(DBM *db, datum key)
+dbm_delete(db, key)
+	DBM *db;
+	datum key;
 {
 	int status;
 	DBT dbtkey;
@@ -174,7 +183,10 @@ dbm_delete(DBM *db, datum key)
  *	 1 if DBM_INSERT and entry exists
  */
 extern int
-dbm_store(DBM *db, datum key, datum data, int flags)
+dbm_store(db, key, data, flags)
+	DBM *db;
+	datum key, data;
+	int flags;
 {
 	DBT dbtkey, dbtdata;
 
@@ -187,7 +199,8 @@ dbm_store(DBM *db, datum key, datum data, int flags)
 }
 
 extern int
-dbm_error(DBM *db)
+dbm_error(db)
+	DBM *db;
 {
 	HTAB *hp;
 
@@ -196,7 +209,8 @@ dbm_error(DBM *db)
 }
 
 extern int
-dbm_clearerr(DBM *db)
+dbm_clearerr(db)
+	DBM *db;
 {
 	HTAB *hp;
 
@@ -206,7 +220,8 @@ dbm_clearerr(DBM *db)
 }
 
 extern int
-dbm_dirfno(DBM *db)
+dbm_dirfno(db)
+	DBM *db;
 {
 	return(((HTAB *)db->internal)->fp);
 }

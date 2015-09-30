@@ -990,7 +990,12 @@ print_rule(struct pf_rule *r, const char *anchor_call, int verbose, int numeric)
 		if (r->rule_flag & PFRULE_REASSEMBLE_TCP)
 			printf(" reassemble tcp");
 
-		printf(" fragment reassemble");
+		if (r->rule_flag & PFRULE_FRAGDROP)
+			printf(" fragment drop-ovl");
+		else if (r->rule_flag & PFRULE_FRAGCROP)
+			printf(" fragment crop");
+		else
+			printf(" fragment reassemble");
 	}
 	if (r->label[0])
 		printf(" label \"%s\"", r->label);

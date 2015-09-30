@@ -105,7 +105,7 @@
 #define PACKAGE_NAME "subversion"
 
 /* Define to the full name and version of this package. */
-#define PACKAGE_STRING "subversion 1.8.14"
+#define PACKAGE_STRING "subversion 1.8.10"
 
 /* Define to the one symbol short name of this package. */
 #define PACKAGE_TARNAME "subversion"
@@ -114,13 +114,10 @@
 #define PACKAGE_URL ""
 
 /* Define to the version of this package. */
-#define PACKAGE_VERSION "1.8.14"
+#define PACKAGE_VERSION "1.8.10"
 
 /* Define to 1 if you have the ANSI C header files. */
 #define STDC_HEADERS 1
-
-/* Defined to allow building against httpd 2.4 with broken auth */
-/* #undef SVN_ALLOW_BROKEN_HTTPD_AUTH */
 
 /* Define to the Python/C API format character suitable for apr_int64_t */
 #define SVN_APR_INT64_T_PYCFMT "l"
@@ -132,10 +129,10 @@
 #define SVN_BINDIR "/usr/bin"
 
 /* Defined to the config.guess name of the build system */
-#define SVN_BUILD_HOST "bikeshed-rgb-freebsd"
+#define SVN_BUILD_HOST "bikeshed-malachite-topaz-amber-freebsd"
 
 /* Defined to the config.guess name of the build target */
-#define SVN_BUILD_TARGET "bikeshed-rgb-freebsd"
+#define SVN_BUILD_TARGET "bikeshed-malachite-topaz-amber-freebsd"
 
 /* The path of a default editor for the client. */
 /* #undef SVN_CLIENT_EDITOR */
@@ -156,7 +153,7 @@
 #define SVN_FS_WANT_DB_PATCH 14
 
 /* Define if compiler provides atomic builtins */
-/* #undef SVN_HAS_ATOMIC_BUILTINS */
+#define SVN_HAS_ATOMIC_BUILTINS 0
 
 /* Is GNOME Keyring support enabled? */
 /* #undef SVN_HAVE_GNOME_KEYRING */

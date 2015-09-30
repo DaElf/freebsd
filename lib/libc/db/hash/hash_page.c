@@ -66,7 +66,6 @@ __FBSDID("$FreeBSD$");
 #include <assert.h>
 #endif
 #include "un-namespace.h"
-#include "libc_private.h"
 
 #include <db.h>
 #include "hash.h"
@@ -862,10 +861,10 @@ open_temp(HTAB *hashp)
 
 	/* Block signals; make sure file goes away at process exit. */
 	(void)sigfillset(&set);
-	(void)__libc_sigprocmask(SIG_BLOCK, &set, &oset);
+	(void)_sigprocmask(SIG_BLOCK, &set, &oset);
 	if ((hashp->fp = mkostemp(path, O_CLOEXEC)) != -1)
 		(void)unlink(path);
-	(void)__libc_sigprocmask(SIG_SETMASK, &oset, (sigset_t *)NULL);
+	(void)_sigprocmask(SIG_SETMASK, &oset, (sigset_t *)NULL);
 	return (hashp->fp != -1 ? 0 : -1);
 }
 

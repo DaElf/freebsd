@@ -17,6 +17,7 @@ LIBADD=	ssh edit
 CFLAGS+=	-DHAVE_LDNS=1
 #DPADD+=	${LIBLDNS}
 #LDADD+=	-lldns
+#USEPRIVATELIB+= ldns
 .endif
 
 .include <bsd.prog.mk>

@@ -69,8 +69,9 @@ test: example minigzip
 		echo hello world | ./minigzip | ./minigzip -d )
 
 .ifndef COMPAT_32BIT
-FILES=		zlib.pc
-FILESDIR=	${LIBDATADIR}/pkgconfig
+beforeinstall:
+	${INSTALL} -C -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
+		${.CURDIR}/zlib.pc ${DESTDIR}${LIBDATADIR}/pkgconfig
 .endif
 
 .include <bsd.lib.mk>

@@ -8,5 +8,3 @@ ENTRY(_ctx_start)
 	bl	_C_LABEL(ctx_done)
 	bl	_C_LABEL(abort)
 END(_ctx_start)
-
-	.section .note.GNU-stack,"",%progbits

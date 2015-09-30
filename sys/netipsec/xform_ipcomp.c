@@ -449,7 +449,6 @@ ipcomp_output(struct mbuf *m, struct ipsecrequest *isr, struct mbuf **mp,
 		goto bad;
 	}
 
-	key_addref(isr->sp);
 	tc->tc_isr = isr;
 	KEY_ADDREFSA(sav);
 	tc->tc_sav = sav;

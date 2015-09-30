@@ -63,13 +63,8 @@ __FBSDID("$FreeBSD$");
 .endm
 
 .macro	restore_registers el
-.if \el == 1
-	msr	daifset, #2
-	/*
-	 * Disable interrupts, x18 may change in the interrupt exception
-	 * handler.  For EL0 exceptions, do_ast already did this.
-	 */
-.endif
+	msr	daifset, #2		/* Disable interrupts, x18 may change
+					 * in the interrupt exception handler */
 	ldp	x18, lr, [sp], #16
 	ldp	x10, x11, [sp], #16
 .if \el == 0
@@ -105,12 +100,11 @@ __FBSDID("$FreeBSD$");
 .macro	do_ast
 	/* Disable interrupts */
 	mrs	x19, daif
-1:
 	msr	daifset, #2
 
 	/* Read the current thread flags */
-	ldr	x1, [x18, #PC_CURTHREAD]	/* Load curthread */
-	ldr	x2, [x1, #TD_FLAGS]
+1:	ldr	x1, [x18, #PC_CURTHREAD]	/* Load curthread */
+	ldr	x2, [x1, #TD_FLAGS]! /* TODO: No need for the ! but clang fails without it */
 
 	/* Check if we have either bits set */
 	mov	x3, #((TDF_ASTPENDING|TDF_NEEDRESCHED) >> 8)
@@ -126,9 +120,13 @@ __FBSDID("$FreeBSD$");
 	mov	x0, sp
 	bl	_C_LABEL(ast)
 
-	/* Re-check for new ast scheduled */
-	b	1b
+	/* Disable interrupts */
+	mrs	x19, daif
+	msr	daifset, #2
+
 2:
+	/* Restore interrupts */
+	msr	daif, x19
 .endm
 
 handle_el1h_sync:
@@ -160,7 +158,6 @@ handle_el0_irq:
 	save_registers 0
 	mov	x0, sp
 	bl	arm_cpu_intr
-	do_ast
 	restore_registers 0
 	eret
 

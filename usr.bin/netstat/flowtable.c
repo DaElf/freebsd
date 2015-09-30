@@ -28,15 +28,13 @@
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
-
 #include <sys/param.h>
-
+#include <sys/sysctl.h>
 #include <net/flowtable.h>
-
+#include <err.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
-
 #include "netstat.h"
 
 /*
@@ -70,18 +68,17 @@ void
 flowtable_stats(void)
 {
 	struct flowtable_stat stat;
+	size_t len = sizeof(stat);
 
 	if (!live)
 		return;
 
-	if (fetch_stats("net.flowtable.ip4.stat", 0, &stat,
-	    sizeof(stat), NULL) == 0) {
+	if (sysctlbyname("net.flowtable.ip4.stat", &stat, &len, NULL, 0) == 0) {
 		printf("flowtable for IPv4:\n");
 		print_stats(&stat);
 	}
 
-	if (fetch_stats("net.flowtable.ip6.stat", 0, &stat,
-	    sizeof(stat), NULL) == 0) {
+	if (sysctlbyname("net.flowtable.ip6.stat", &stat, &len, NULL, 0) == 0) {
 		printf("flowtable for IPv6:\n");
 		print_stats(&stat);
 	}

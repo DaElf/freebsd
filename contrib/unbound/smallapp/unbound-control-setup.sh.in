@@ -46,7 +46,7 @@ CLIENTNAME=unbound-control
 DAYS=7200
 
 # size of keys in bits
-BITS=3072
+BITS=1536
 
 # hash algorithm
 HASH=sha256

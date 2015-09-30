@@ -106,8 +106,6 @@ static int startlinno;		/* line # where last token started */
 static int funclinno;		/* line # where the current function started */
 static struct parser_temp *parser_temp;
 
-#define NOEOFMARK ((const char *)&heredoclist)
-
 
 static union node *list(int);
 static union node *andor(void);
@@ -974,10 +972,6 @@ checkend(int c, const char *eofmark, int striptabs)
 			pungetc();
 			pushstring(eofmark + 1, q - (eofmark + 1), NULL);
 		}
-	} else if (c == '\n' && *eofmark == '\0') {
-		c = PEOF;
-		plinno++;
-		needprompt = doprompt;
 	}
 	return (c);
 }
@@ -1201,8 +1195,7 @@ parsebackq(char *out, struct nodelist **pbqlist,
 static char *
 readcstyleesc(char *out)
 {
-	int c, vc, i, n;
-	unsigned int v;
+	int c, v, i, n;
 
 	c = pgetc();
 	switch (c) {
@@ -1317,12 +1310,12 @@ readcstyleesc(char *out)
 	default:
 		  synerror("Bad escape sequence");
 	}
-	vc = (char)v;
+	v = (char)v;
 	/*
 	 * We can't handle NUL bytes.
 	 * POSIX says we should skip till the closing quote.
 	 */
-	if (vc == '\0') {
+	if (v == '\0') {
 		while ((c = pgetc()) != '\'') {
 			if (c == '\\')
 				c = pgetc();
@@ -1339,9 +1332,9 @@ readcstyleesc(char *out)
 		pungetc();
 		return out;
 	}
-	if (SQSYNTAX[vc] == CCTL)
+	if (SQSYNTAX[v] == CCTL)
 		USTPUTC(CTLESC, out);
-	USTPUTC(vc, out);
+	USTPUTC(v, out);
 	return out;
 }
 
@@ -1389,7 +1382,7 @@ readtoken1(int firstc, char const *initialsyntax, const char *eofmark,
 
 	STARTSTACKSTR(out);
 	loop: {	/* for each line, until end of word */
-		if (eofmark && eofmark != NOEOFMARK)
+		if (eofmark)
 			/* set c to PEOF if at end of here document */
 			c = checkend(c, eofmark, striptabs);
 		for (;;) {	/* until end of line or end of word */
@@ -1668,7 +1661,7 @@ varname:
 				pungetc();
 			else if (c == '\n' || c == PEOF)
 				synerror("Unexpected end of line in substitution");
-			else if (BASESYNTAX[c] != CCTL)
+			else
 				USTPUTC(c, out);
 		}
 		if (subtype == 0) {
@@ -1684,8 +1677,7 @@ varname:
 						synerror("Unexpected end of line in substitution");
 					if (flags == VSNUL)
 						STPUTC(':', out);
-					if (BASESYNTAX[c] != CCTL)
-						STPUTC(c, out);
+					STPUTC(c, out);
 					subtype = VSERROR;
 				} else
 					subtype = p - types + VSNORMAL;
@@ -2052,7 +2044,7 @@ expandstr(const char *ps)
 		parser_temp = NULL;
 		setinputstring(ps, 1);
 		doprompt = 0;
-		readtoken1(pgetc(), DQSYNTAX, NOEOFMARK, 0);
+		readtoken1(pgetc(), DQSYNTAX, "", 0);
 		if (backquotelist != NULL)
 			error("Command substitution not allowed here");
 

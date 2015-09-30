@@ -50,12 +50,21 @@ __FBSDID("$FreeBSD$");
 
 ENTRY(setjmp)
 	movl	4(%esp),%ecx
+	PIC_PROLOGUE
+#ifdef PIC
+	subl	$12,%esp		/* make the stack 16-byte aligned */
+#endif
 	leal	28(%ecx), %eax
 	pushl	%eax			/* (sigset_t*)oset */
 	pushl	$0			/* (sigset_t*)set  */
 	pushl	$1			/* SIG_BLOCK       */
-	call	__libc_sigprocmask
+	call	PIC_PLT(CNAME(_sigprocmask))
+#ifdef PIC
+	addl	$24,%esp
+#else
 	addl	$12,%esp
+#endif
+	PIC_EPILOGUE
 	movl	4(%esp),%ecx
 	movl	0(%esp),%edx
 	movl	%edx, 0(%ecx)
@@ -72,12 +81,21 @@ END(setjmp)
 	WEAK_REFERENCE(__longjmp, longjmp)
 ENTRY(__longjmp)
 	movl	4(%esp),%edx
+	PIC_PROLOGUE
+#ifdef PIC
+	subl	$12,%esp		/* make the stack 16-byte aligned */
+#endif
 	pushl	$0			/* (sigset_t*)oset */
 	leal	28(%edx), %eax
 	pushl	%eax			/* (sigset_t*)set  */
 	pushl	$3			/* SIG_SETMASK     */
-	call	__libc_sigprocmask
+	call	PIC_PLT(CNAME(_sigprocmask))
+#ifdef PIC
+	addl	$24,%esp
+#else
 	addl	$12,%esp
+#endif
+	PIC_EPILOGUE
 	movl	4(%esp),%edx
 	movl	8(%esp),%eax
 	movl	0(%edx),%ecx

@@ -1,8 +1,5 @@
 # $FreeBSD$
 
-SUBDIR = lib .WAIT \
-	 svn svnadmin svndumpfilter svnlook svnserve svnsync svnversion \
-	 svnmucc svnrdump
-SUBDIR_PARALLEL=
+SUBDIR = lib svn svnadmin svndumpfilter svnlook svnserve svnsync svnversion svnmucc svnrdump
 
 .include <bsd.subdir.mk>

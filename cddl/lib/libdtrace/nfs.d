@@ -30,7 +30,6 @@
 
 #pragma	D depends_on library ip.d
 #pragma	D depends_on library net.d
-#pragma	D depends_on module kernel
 #pragma	D depends_on module nfs
 
 typedef struct nfsv4opinfo {

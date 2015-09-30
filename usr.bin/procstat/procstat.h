@@ -1,6 +1,5 @@
 /*-
  * Copyright (c) 2007 Robert N. M. Watson
- * Copyright (c) 2015 Allan Jude <allanjude@freebsd.org>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -27,12 +26,8 @@
  * $FreeBSD$
  */
 
-#include <libxo/xo.h>
-
 #ifndef PROCSTAT_H
 #define	PROCSTAT_H
-
-#define PROCSTAT_XO_VERSION "1"
 
 extern int	hflag, nflag, Cflag, Hflag;
 

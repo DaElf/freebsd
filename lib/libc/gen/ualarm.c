@@ -44,7 +44,9 @@ __FBSDID("$FreeBSD$");
  * every ``reload'' microseconds after the first signal.
  */
 useconds_t
-ualarm(useconds_t usecs, useconds_t reload)
+ualarm(usecs, reload)
+	useconds_t usecs;
+	useconds_t reload;
 {
 	struct itimerval new, old;
 

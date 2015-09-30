@@ -131,15 +131,6 @@ static struct config_entry c[] = {
 		false,
 		true,
 	},
-	[PUBKEY] = {
-		PKG_CONFIG_STRING,
-		"PUBKEY",
-		NULL,
-		NULL,
-		NULL,
-		false,
-		false
-	}
 };
 
 static int
@@ -240,8 +231,6 @@ config_parse(const ucl_object_t *obj, pkg_conf_file_t conftype)
 				sbuf_cpy(buf, "SIGNATURE_TYPE");
 			else if (strcasecmp(key, "fingerprints") == 0)
 				sbuf_cpy(buf, "FINGERPRINTS");
-			else if (strcasecmp(key, "pubkey") == 0)
-				sbuf_cpy(buf, "PUBKEY");
 			else if (strcasecmp(key, "enabled") == 0) {
 				if ((cur->type != UCL_BOOLEAN) ||
 				    !ucl_object_toboolean(cur))

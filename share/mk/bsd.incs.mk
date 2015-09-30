@@ -42,12 +42,10 @@ ${group}NAME_${header:T}?=	${${group}NAME}
 .else
 ${group}NAME_${header:T}?=	${header:T}
 .endif
-STAGE_AS_SETS+= ${header:T}
+STAGE_AS_SETS+= ${group}
 STAGE_AS_${header:T}= ${${group}NAME_${header:T}}
-# XXX {group}OWN,GRP,MODE
-STAGE_DIR.${header:T}= ${STAGE_OBJTOP}${${group}DIR_${header:T}}
-stage_as.${header:T}: ${header}
-stage_includes: stage_as.${header:T}
+stage_as.${group}: ${header}
+stage_includes: stage_as.${group}
 
 installincludes: _${group}INS_${header:T}
 _${group}INS_${header:T}: ${header}

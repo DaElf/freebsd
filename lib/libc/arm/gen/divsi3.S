@@ -389,5 +389,3 @@ ENTRY(__divsi3)
 	mov	r0, r3
 	RET
 END(__divsi3)
-
-	.section .note.GNU-stack,"",%progbits

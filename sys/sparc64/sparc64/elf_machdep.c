@@ -344,7 +344,6 @@ elf_reloc(linker_file_t lf, Elf_Addr relocbase, const void *data, int type,
 	Elf_Addr value;
 	Elf_Addr mask;
 	Elf_Addr addr;
-	int error;
 
 	if (type != ELF_RELOC_RELA)
 		return (-1);
@@ -373,8 +372,8 @@ elf_reloc(linker_file_t lf, Elf_Addr relocbase, const void *data, int type,
 	value = rela->r_addend;
 
 	if (RELOC_RESOLVE_SYMBOL(rtype)) {
-		error = lookup(lf, symidx, 1, &addr);
-		if (error != 0)
+		addr = lookup(lf, symidx, 1);
+		if (addr == 0)
 			return (-1);
 		value += addr;
 		if (RELOC_BARE_SYMBOL(rtype))

@@ -1,6 +1,5 @@
 /*-
- * Copyright (C) 2006 Bruce M. Simpson.
- * Copyright (c) 2015 The FreeBSD Foundation
+ * Copyright (c) 2014 The FreeBSD Foundation
  * All rights reserved.
  *
  * This software was developed by Andrew Turner under
@@ -28,78 +27,38 @@
  * SUCH DAMAGE.
  */
 
-/*
- * arm64 (AArch64) machine dependent routines for kvm.
- */
-
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
 #include <sys/param.h>
-#include <sys/mman.h>
-
-#include <vm/vm.h>
-#include <vm/vm_param.h>
-#include <vm/pmap.h>
-
-#include <machine/pmap.h>
 
 #include <limits.h>
 #include <kvm.h>
+#include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
 
 #include "kvm_private.h"
-
-/* minidump must be the first item! */
-struct vmstate {
-	int minidump;		/* 1 = minidump mode */
-	void *mmapbase;
-	size_t mmapsize;
-};
 
 void
 _kvm_freevtop(kvm_t *kd)
 {
 
-	if (kd->vmst != 0) {
-		if (kd->vmst->minidump)
-			return (_kvm_minidump_freevtop(kd));
-		if (kd->vmst->mmapbase != NULL)
-			munmap(kd->vmst->mmapbase, kd->vmst->mmapsize);
-		free(kd->vmst);
-		kd->vmst = NULL;
-	}
+	printf("_kvm_freevtop\n");
+	abort();
 }
 
 int
 _kvm_initvtop(kvm_t *kd)
 {
-	char minihdr[8];
 
-	if (!kd->rawdump) {
-		if (pread(kd->pmfd, &minihdr, 8, 0) == 8) {
-			if (memcmp(&minihdr, "minidump", 8) == 0)
-				return (_kvm_minidump_initvtop(kd));
-		} else {
-			_kvm_err(kd, kd->program, "cannot read header");
-			return (-1);
-		}
-	}
-
-	_kvm_err(kd, 0, "_kvm_initvtop: Unsupported image type");
-	return (-1);
+	printf("_kvm_initvtop\n");
+	abort();
 }
 
 int
 _kvm_kvatop(kvm_t *kd, u_long va, off_t *pa)
 {
 
-	if (kd->vmst->minidump)
-		return _kvm_minidump_kvatop(kd, va, pa);
-
-
-	_kvm_err(kd, 0, "_kvm_kvatop: Unsupported image type");
-	return (0);
+	printf("_kvm_kvatop\n");
+	abort();
 }

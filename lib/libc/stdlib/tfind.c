@@ -23,15 +23,12 @@ __FBSDID("$FreeBSD$");
 #include <stdlib.h>
 #include <search.h>
 
-/* 
- * find a node, or return 0
- *
- * vkey   - key to be found 
- * vrootp - address of the tree root 
- */
+/* find a node, or return 0 */
 void *
-tfind(const void *vkey, void * const *vrootp,
-    int (*compar)(const void *, const void *))
+tfind(vkey, vrootp, compar)
+	const void *vkey;		/* key to be found */
+	void * const *vrootp;		/* address of the tree root */
+	int (*compar)(const void *, const void *);
 {
 	node_t **rootp = (node_t **)vrootp;
 

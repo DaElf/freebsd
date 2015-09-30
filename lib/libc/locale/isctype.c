@@ -45,161 +45,184 @@ __FBSDID("$FreeBSD$");
 
 #undef digittoint
 int
-digittoint(int c)
+digittoint(c)
+	int c;
 {
 	return (__sbmaskrune(c, 0xFF));
 }
 
 #undef isalnum
 int
-isalnum(int c)
+isalnum(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_A|_CTYPE_D));
 }
 
 #undef isalpha
 int
-isalpha(int c)
+isalpha(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_A));
 }
 
 #undef isascii
 int
-isascii(int c)
+isascii(c)
+	int c;
 {
 	return ((c & ~0x7F) == 0);
 }
 
 #undef isblank
 int
-isblank(int c)
+isblank(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_B));
 }
 
 #undef iscntrl
 int
-iscntrl(int c)
+iscntrl(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_C));
 }
 
 #undef isdigit
 int
-isdigit(int c)
+isdigit(c)
+	int c;
 {
 	return (__isctype(c, _CTYPE_D));
 }
 
 #undef isgraph
 int
-isgraph(int c)
+isgraph(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_G));
 }
 
 #undef ishexnumber 
 int
-ishexnumber(int c)
+ishexnumber(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_X));
 }
 
 #undef isideogram
 int
-isideogram(int c)
+isideogram(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_I));
 }
 
 #undef islower
 int
-islower(int c)
+islower(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_L));
 }
 
 #undef isnumber
 int
-isnumber(int c)
+isnumber(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_D));
 }
 
 #undef isphonogram	
 int
-isphonogram(int c)
+isphonogram(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_Q));
 }
 
 #undef isprint
 int
-isprint(int c)
+isprint(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_R));
 }
 
 #undef ispunct
 int
-ispunct(int c)
+ispunct(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_P));
 }
 
 #undef isrune
 int
-isrune(int c)
+isrune(c)
+	int c;
 {
 	return (__sbistype(c, 0xFFFFFF00L));
 }
 
 #undef isspace
 int
-isspace(int c)
+isspace(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_S));
 }
 
 #undef isspecial
 int
-isspecial(int c)
+isspecial(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_T));
 }
 
 #undef isupper
 int
-isupper(int c)
+isupper(c)
+	int c;
 {
 	return (__sbistype(c, _CTYPE_U));
 }
 
 #undef isxdigit
 int
-isxdigit(int c)
+isxdigit(c)
+	int c;
 {
 	return (__isctype(c, _CTYPE_X));
 }
 
 #undef toascii
 int
-toascii(int c)
+toascii(c)
+	int c;
 {
 	return (c & 0x7F);
 }
 
 #undef tolower
 int
-tolower(int c)
+tolower(c)
+	int c;
 {
 	return (__sbtolower(c));
 }
 
 #undef toupper
 int
-toupper(int c)
+toupper(c)
+	int c;
 {
 	return (__sbtoupper(c));
 }

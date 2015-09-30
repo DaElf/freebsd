@@ -23,7 +23,7 @@
 
 /*
  * Copyright (c) 2003, 2010, Oracle and/or its affiliates. All rights reserved.
- * Copyright (c) 2015, Joyent, Inc. All rights reserved.
+ * Copyright (c) 2013, Joyent, Inc. All rights reserved.
  * Copyright (c) 2012, 2014 by Delphix. All rights reserved.
  */
 
@@ -155,7 +155,7 @@ int		dtrace_destructive_disallow = 0;
 dtrace_optval_t	dtrace_nonroot_maxsize = (16 * 1024 * 1024);
 size_t		dtrace_difo_maxsize = (256 * 1024);
 dtrace_optval_t	dtrace_dof_maxsize = (8 * 1024 * 1024);
-size_t		dtrace_statvar_maxsize = (16 * 1024);
+size_t		dtrace_global_maxsize = (16 * 1024);
 size_t		dtrace_actions_max = (16 * 1024);
 size_t		dtrace_retain_max = 1024;
 dtrace_optval_t	dtrace_helper_actions_max = 128;
@@ -699,32 +699,12 @@ dtrace_canstore_statvar(uint64_t addr, size_t sz,
     dtrace_statvar_t **svars, int nsvars)
 {
 	int i;
-	size_t maxglobalsize, maxlocalsize;
-
-	if (nsvars == 0)
-		return (0);
-
-	maxglobalsize = dtrace_statvar_maxsize;
-	maxlocalsize = (maxglobalsize + sizeof (uint64_t)) * NCPU;
 
 	for (i = 0; i < nsvars; i++) {
 		dtrace_statvar_t *svar = svars[i];
-		uint8_t scope;
-		size_t size;
 
-		if (svar == NULL || (size = svar->dtsv_size) == 0)
+		if (svar == NULL || svar->dtsv_size == 0)
 			continue;
-
-		scope = svar->dtsv_var.dtdv_scope;
-
-		/*
-		 * We verify that our size is valid in the spirit of providing
-		 * defense in depth:  we want to prevent attackers from using
-		 * DTrace to escalate an orthogonal kernel heap corruption bug
-		 * into the ability to store to arbitrary locations in memory.
-		 */
-		VERIFY((scope == DIFV_SCOPE_GLOBAL && size < maxglobalsize) ||
-		    (scope == DIFV_SCOPE_LOCAL && size < maxlocalsize));
 
 		if (DTRACE_INRANGE(addr, sz, svar->dtsv_data, svar->dtsv_size))
 			return (1);
@@ -2166,7 +2146,7 @@ retry:
 	 * this hash chain, or another CPU is deleting an element from this
 	 * hash chain.  The simplest way to deal with both of these cases
 	 * (though not necessarily the most efficient) is to free our
-	 * allocated block and re-attempt it all.  Note that the free is
+	 * allocated block and tail-call ourselves.  Note that the free is
 	 * to the dirty list and _not_ to the free list.  This is to prevent
 	 * races with allocators, above.
 	 */
@@ -2179,7 +2159,7 @@ retry:
 		dvar->dtdv_next = free;
 	} while (dtrace_casptr(&dcpu->dtdsc_dirty, free, dvar) != free);
 
-	goto top;
+	return (dtrace_dynvar(dstate, nkeys, key, dsize, op, mstate, vstate));
 }
 
 /*ARGSUSED*/
@@ -3530,6 +3510,7 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 		 */
 		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
 			return ((uint64_t)p0.p_cred->cr_uid);
+#endif
 
 		/*
 		 * It is always safe to dereference one's own t_procp pointer:
@@ -3541,9 +3522,6 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 		 * credential, since this is never NULL after process birth.
 		 */
 		return ((uint64_t)curthread->t_procp->p_cred->cr_uid);
-#else
-		return ((uint64_t)curthread->td_ucred->cr_uid);
-#endif
 
 	case DIF_VAR_GID:
 		if (!dtrace_priv_proc(state))
@@ -3555,6 +3533,7 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 		 */
 		if (DTRACE_ANCHORED(mstate->dtms_probe) && CPU_ON_INTR(CPU))
 			return ((uint64_t)p0.p_cred->cr_gid);
+#endif
 
 		/*
 		 * It is always safe to dereference one's own t_procp pointer:
@@ -3566,9 +3545,6 @@ dtrace_dif_variable(dtrace_mstate_t *mstate, dtrace_state_t *state, uint64_t v,
 		 * credential, since this is never NULL after process birth.
 		 */
 		return ((uint64_t)curthread->t_procp->p_cred->cr_gid);
-#else
-		return ((uint64_t)curthread->td_ucred->cr_gid);
-#endif
 
 	case DIF_VAR_ERRNO: {
 #ifdef illumos
@@ -4475,8 +4451,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 
 		if (!dtrace_destructive_disallow &&
 		    dtrace_priv_proc_control(state) &&
-		    !dtrace_istoxic(kaddr, size) &&
-		    dtrace_canload(kaddr, size, mstate, vstate)) {
+		    !dtrace_istoxic(kaddr, size)) {
 			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
 			dtrace_copyout(kaddr, uaddr, size, flags);
 			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
@@ -4491,8 +4466,7 @@ dtrace_dif_subr(uint_t subr, uint_t rd, uint64_t *regs,
 
 		if (!dtrace_destructive_disallow &&
 		    dtrace_priv_proc_control(state) &&
-		    !dtrace_istoxic(kaddr, size) &&
-		    dtrace_strcanload(kaddr, size, mstate, vstate)) {
+		    !dtrace_istoxic(kaddr, size)) {
 			DTRACE_CPUFLAG_SET(CPU_DTRACE_NOFAULT);
 			dtrace_copyoutstr(kaddr, uaddr, size, flags);
 			DTRACE_CPUFLAG_CLEAR(CPU_DTRACE_NOFAULT);
@@ -6480,11 +6454,6 @@ dtrace_dif_emulate(dtrace_difo_t *difo, dtrace_mstate_t *mstate,
 				    regs[r2] ? regs[r2] :
 				    dtrace_strsize_default) + 1;
 			} else {
-				if (regs[r2] > LONG_MAX) {
-					*flags |= CPU_DTRACE_ILLOP;
-					break;
-				}
-
 				tupregs[ttop].dttk_size = regs[r2];
 			}
 
@@ -9942,10 +9911,9 @@ dtrace_difo_validate(dtrace_difo_t *dp, dtrace_vstate_t *vstate, uint_t nregs,
 				break;
 			}
 
-			if ((v->dtdv_scope == DIFV_SCOPE_GLOBAL ||
-			    v->dtdv_scope == DIFV_SCOPE_LOCAL) &&
-			    vt->dtdt_size > dtrace_statvar_maxsize) {
-				err += efunc(i, "oversized by-ref static\n");
+			if (v->dtdv_scope == DIFV_SCOPE_GLOBAL &&
+			    vt->dtdt_size > dtrace_global_maxsize) {
+				err += efunc(i, "oversized by-ref global\n");
 				break;
 			}
 		}
@@ -10289,9 +10257,6 @@ dtrace_difo_chunksize(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 				if (srd == 0)
 					return;
 
-				if (sval > LONG_MAX)
-					return;
-
 				tupregs[ttop++].dttk_size = sval;
 			}
 
@@ -10352,19 +10317,6 @@ dtrace_difo_chunksize(dtrace_difo_t *dp, dtrace_vstate_t *vstate)
 		 * for our dynamic variable state, reset the chunk size.
 		 */
 		size = P2ROUNDUP(size, sizeof (uint64_t));
-
-		/*
-		 * Before setting the chunk size, check that we're not going
-		 * to set it to a negative value...
-		 */
-		if (size > LONG_MAX)
-			return;
-
-		/*
-		 * ...and make certain that we didn't badly overflow.
-		 */
-		if (size < ksize || size < sizeof (dtrace_dynvar_t))
-			return;
 
 		if (size > vstate->dtvs_dynvars.dtds_chunksize)
 			vstate->dtvs_dynvars.dtds_chunksize = size;
@@ -13986,8 +13938,6 @@ dtrace_dstate_init(dtrace_dstate_t *dstate, size_t size)
 	if ((dstate->dtds_chunksize = chunksize) == 0)
 		dstate->dtds_chunksize = DTRACE_DYNVAR_CHUNKSIZE;
 
-	VERIFY(dstate->dtds_chunksize < LONG_MAX);
-
 	if (size < (min = dstate->dtds_chunksize + sizeof (dtrace_dynhash_t)))
 		size = min;
 
@@ -14028,9 +13978,6 @@ dtrace_dstate_init(dtrace_dstate_t *dstate, size_t size)
 	    ((uintptr_t)base + hashsize * sizeof (dtrace_dynhash_t));
 	limit = (uintptr_t)base + size;
 
-	VERIFY((uintptr_t)start < limit);
-	VERIFY((uintptr_t)start >= (uintptr_t)base);
-
 	maxper = (limit - (uintptr_t)start) / NCPU;
 	maxper = (maxper / dstate->dtds_chunksize) * dstate->dtds_chunksize;
 
@@ -14056,7 +14003,7 @@ dtrace_dstate_init(dtrace_dstate_t *dstate, size_t size)
 			start = (dtrace_dynvar_t *)limit;
 		}
 
-		VERIFY(limit <= (uintptr_t)base + size);
+		ASSERT(limit <= (uintptr_t)base + size);
 
 		for (;;) {
 			next = (dtrace_dynvar_t *)((uintptr_t)dvar +
@@ -14065,8 +14012,6 @@ dtrace_dstate_init(dtrace_dstate_t *dstate, size_t size)
 			if ((uintptr_t)next + dstate->dtds_chunksize >= limit)
 				break;
 
-			VERIFY((uintptr_t)dvar >= (uintptr_t)base &&
-			    (uintptr_t)dvar <= (uintptr_t)base + size);
 			dvar->dtdv_next = next;
 			dvar = next;
 		}

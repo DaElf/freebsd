@@ -29,7 +29,6 @@
 __FBSDID("$FreeBSD$");
 
 #include "namespace.h"
-#define _NS_PRIVATE
 #include <nsswitch.h>
 #include <stdlib.h>
 #include <string.h>

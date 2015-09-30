@@ -495,8 +495,7 @@ fetch_ssl_get_numeric_addrinfo(const char *hostname, size_t len)
 	hints.ai_protocol = 0;
 	hints.ai_flags = AI_NUMERICHOST;
 	/* port is not relevant for this purpose */
-	if (getaddrinfo(host, "443", &hints, &res) != 0)
-		res = NULL;
+	getaddrinfo(host, "443", &hints, &res);
 	free(host);
 	return res;
 }

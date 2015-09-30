@@ -49,7 +49,6 @@ __FBSDID("$FreeBSD$");
 #include <errno.h>
 #include <fcntl.h>
 #include <signal.h>
-#include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -150,13 +149,15 @@ set_etype(struct trussinfo *trussinfo)
 char *
 strsig(int sig)
 {
-	static char tmp[64];
+	char *ret;
 
+	ret = NULL;
 	if (sig > 0 && sig < NSIG) {
-		snprintf(tmp, sizeof(tmp), "SIG%s", sys_signame[sig]);
-		return (tmp);
+		asprintf(&ret, "SIG%s", sys_signame[sig]);
+		if (ret == NULL)
+			return (NULL);
 	}
-	return (NULL);
+	return (ret);
 }
 
 int
@@ -324,21 +325,22 @@ START_TRACE:
 			if (trussinfo->flags & ABSOLUTETIMESTAMPS) {
 				timespecsubt(&trussinfo->curthread->after,
 				    &trussinfo->start_time, &timediff);
-				fprintf(trussinfo->outfile, "%jd.%09ld ",
-				    (intmax_t)timediff.tv_sec,
+				fprintf(trussinfo->outfile, "%ld.%09ld ",
+				    (long)timediff.tv_sec,
 				    timediff.tv_nsec);
 			}
 			if (trussinfo->flags & RELATIVETIMESTAMPS) {
 				timespecsubt(&trussinfo->curthread->after,
 				    &trussinfo->curthread->before, &timediff);
-				fprintf(trussinfo->outfile, "%jd.%09ld ",
-				    (intmax_t)timediff.tv_sec,
+				fprintf(trussinfo->outfile, "%ld.%09ld ",
+				    (long)timediff.tv_sec,
 				    timediff.tv_nsec);
 			}
 			signame = strsig(trussinfo->pr_data);
 			fprintf(trussinfo->outfile,
 			    "SIGNAL %u (%s)\n", trussinfo->pr_data,
 			    signame == NULL ? "?" : signame);
+			free(signame);
 			break;
 		case S_EXIT:
 			if (trussinfo->flags & COUNTONLY)
@@ -349,16 +351,15 @@ START_TRACE:
 			if (trussinfo->flags & ABSOLUTETIMESTAMPS) {
 				timespecsubt(&trussinfo->curthread->after,
 				    &trussinfo->start_time, &timediff);
-				fprintf(trussinfo->outfile, "%jd.%09ld ",
-				    (intmax_t)timediff.tv_sec,
+				fprintf(trussinfo->outfile, "%ld.%09ld ",
+				    (long)timediff.tv_sec,
 				    timediff.tv_nsec);
 			}
 			if (trussinfo->flags & RELATIVETIMESTAMPS) {
 				timespecsubt(&trussinfo->curthread->after,
 				    &trussinfo->curthread->before, &timediff);
-				fprintf(trussinfo->outfile, "%jd.%09ld ",
-				    (intmax_t)timediff.tv_sec,
-				    timediff.tv_nsec);
+				fprintf(trussinfo->outfile, "%ld.%09ld ",
+				    (long)timediff.tv_sec, timediff.tv_nsec);
 			}
 			fprintf(trussinfo->outfile,
 			    "process exit, rval = %u\n", trussinfo->pr_data);

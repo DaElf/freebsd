@@ -185,9 +185,7 @@ _thr_rtld_init(void)
 {
 	struct RtldLockInfo	li;
 	struct pthread		*curthread;
-	ucontext_t *uc;
 	long dummy = -1;
-	int uc_len;
 
 	curthread = _get_curthread();
 
@@ -233,9 +231,4 @@ _thr_rtld_init(void)
 	_thr_signal_block(curthread);
 	_rtld_thread_init(&li);
 	_thr_signal_unblock(curthread);
-
-	uc_len = __getcontextx_size();
-	uc = alloca(uc_len);
-	getcontext(uc);
-	__fillcontextx2((char *)uc);
 }

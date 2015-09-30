@@ -14,8 +14,6 @@
         ..
         expr
         ..
-        ls
-        ..
         mv
         ..
         pax
@@ -575,8 +573,6 @@
     ..
     usr.sbin
         etcupdate
-        ..
-        fstyp
         ..
         newsyslog
         ..

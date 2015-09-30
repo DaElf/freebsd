@@ -182,7 +182,7 @@ _clang=		clang
 _cuse=		libcuse
 .endif
 
-.if ${MK_TOOLCHAIN} != "no"
+.if ${MK_ELFTOOLCHAIN_TOOLS} != "no"
 _libelftc=	libelftc
 .endif
 

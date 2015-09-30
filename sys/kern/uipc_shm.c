@@ -68,7 +68,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/resourcevar.h>
 #include <sys/rwlock.h>
 #include <sys/stat.h>
-#include <sys/syscallsubr.h>
 #include <sys/sysctl.h>
 #include <sys/sysproto.h>
 #include <sys/systm.h>
@@ -684,9 +683,9 @@ shm_remove(char *path, Fnv32_t fnv, struct ucred *ucred)
 	return (ENOENT);
 }
 
+/* System calls. */
 int
-kern_shm_open(struct thread *td, const char *userpath, int flags, mode_t mode,
-    struct filecaps *fcaps)
+sys_shm_open(struct thread *td, struct shm_open_args *uap)
 {
 	struct filedesc *fdp;
 	struct shmfd *shmfd;
@@ -700,27 +699,28 @@ kern_shm_open(struct thread *td, const char *userpath, int flags, mode_t mode,
 	/*
 	 * shm_open(2) is only allowed for anonymous objects.
 	 */
-	if (IN_CAPABILITY_MODE(td) && (userpath != SHM_ANON))
+	if (IN_CAPABILITY_MODE(td) && (uap->path != SHM_ANON))
 		return (ECAPMODE);
 #endif
 
-	if ((flags & O_ACCMODE) != O_RDONLY && (flags & O_ACCMODE) != O_RDWR)
+	if ((uap->flags & O_ACCMODE) != O_RDONLY &&
+	    (uap->flags & O_ACCMODE) != O_RDWR)
 		return (EINVAL);
 
-	if ((flags & ~(O_ACCMODE | O_CREAT | O_EXCL | O_TRUNC | O_CLOEXEC)) != 0)
+	if ((uap->flags & ~(O_ACCMODE | O_CREAT | O_EXCL | O_TRUNC | O_CLOEXEC)) != 0)
 		return (EINVAL);
 
 	fdp = td->td_proc->p_fd;
-	cmode = (mode & ~fdp->fd_cmask) & ACCESSPERMS;
+	cmode = (uap->mode & ~fdp->fd_cmask) & ACCESSPERMS;
 
-	error = falloc_caps(td, &fp, &fd, O_CLOEXEC, fcaps);
+	error = falloc(td, &fp, &fd, O_CLOEXEC);
 	if (error)
 		return (error);
 
 	/* A SHM_ANON path pointer creates an anonymous object. */
-	if (userpath == SHM_ANON) {
+	if (uap->path == SHM_ANON) {
 		/* A read-only anonymous object is pointless. */
-		if ((flags & O_ACCMODE) == O_RDONLY) {
+		if ((uap->flags & O_ACCMODE) == O_RDONLY) {
 			fdclose(td, fp, fd);
 			fdrop(fp, td);
 			return (EINVAL);
@@ -728,7 +728,7 @@ kern_shm_open(struct thread *td, const char *userpath, int flags, mode_t mode,
 		shmfd = shm_alloc(td->td_ucred, cmode);
 	} else {
 		path = malloc(MAXPATHLEN, M_SHMFD, M_WAITOK);
-		error = copyinstr(userpath, path, MAXPATHLEN, NULL);
+		error = copyinstr(uap->path, path, MAXPATHLEN, NULL);
 #ifdef KTRACE
 		if (error == 0 && KTRPOINT(curthread, KTR_NAMEI))
 			ktrnamei(path);
@@ -748,7 +748,7 @@ kern_shm_open(struct thread *td, const char *userpath, int flags, mode_t mode,
 		shmfd = shm_lookup(path, fnv);
 		if (shmfd == NULL) {
 			/* Object does not yet exist, create it if requested. */
-			if (flags & O_CREAT) {
+			if (uap->flags & O_CREAT) {
 #ifdef MAC
 				error = mac_posixshm_check_create(td->td_ucred,
 				    path);
@@ -769,16 +769,17 @@ kern_shm_open(struct thread *td, const char *userpath, int flags, mode_t mode,
 			 * reference if requested and permitted.
 			 */
 			free(path, M_SHMFD);
-			if ((flags & (O_CREAT | O_EXCL)) == (O_CREAT | O_EXCL))
+			if ((uap->flags & (O_CREAT | O_EXCL)) ==
+			    (O_CREAT | O_EXCL))
 				error = EEXIST;
 			else {
 #ifdef MAC
 				error = mac_posixshm_check_open(td->td_ucred,
-				    shmfd, FFLAGS(flags & O_ACCMODE));
+				    shmfd, FFLAGS(uap->flags & O_ACCMODE));
 				if (error == 0)
 #endif
 				error = shm_access(shmfd, td->td_ucred,
-				    FFLAGS(flags & O_ACCMODE));
+				    FFLAGS(uap->flags & O_ACCMODE));
 			}
 
 			/*
@@ -787,7 +788,7 @@ kern_shm_open(struct thread *td, const char *userpath, int flags, mode_t mode,
 			 * opened with read/write.
 			 */
 			if (error == 0 &&
-			    (flags & (O_ACCMODE | O_TRUNC)) ==
+			    (uap->flags & (O_ACCMODE | O_TRUNC)) ==
 			    (O_RDWR | O_TRUNC)) {
 #ifdef MAC
 				error = mac_posixshm_check_truncate(
@@ -808,20 +809,12 @@ kern_shm_open(struct thread *td, const char *userpath, int flags, mode_t mode,
 		}
 	}
 
-	finit(fp, FFLAGS(flags & O_ACCMODE), DTYPE_SHM, shmfd, &shm_ops);
+	finit(fp, FFLAGS(uap->flags & O_ACCMODE), DTYPE_SHM, shmfd, &shm_ops);
 
 	td->td_retval[0] = fd;
 	fdrop(fp, td);
 
 	return (0);
-}
-
-/* System calls. */
-int
-sys_shm_open(struct thread *td, struct shm_open_args *uap)
-{
-
-	return (kern_shm_open(td, uap->path, uap->flags, uap->mode, NULL));
 }
 
 int

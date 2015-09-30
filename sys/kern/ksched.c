@@ -30,7 +30,8 @@
  * SUCH DAMAGE.
  */
 
-/* ksched: Soft real time scheduling based on "rtprio". */
+/* ksched: Soft real time scheduling based on "rtprio".
+ */
 
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
@@ -50,7 +51,8 @@ __FBSDID("$FreeBSD$");
 
 FEATURE(kposix_priority_scheduling, "POSIX P1003.1B realtime extensions");
 
-/* ksched: Real-time extension to support POSIX priority scheduling. */
+/* ksched: Real-time extension to support POSIX priority scheduling.
+ */
 
 struct ksched {
 	struct timespec rr_interval;
@@ -59,21 +61,21 @@ struct ksched {
 int
 ksched_attach(struct ksched **p)
 {
-	struct ksched *ksched;
+	struct ksched *ksched= p31b_malloc(sizeof(*ksched));
 
-	ksched = malloc(sizeof(*ksched), M_P31B, M_WAITOK);
 	ksched->rr_interval.tv_sec = 0;
 	ksched->rr_interval.tv_nsec = 1000000000L / hz * sched_rr_interval();
+
 	*p = ksched;
-	return (0);
+	return 0;
 }
 
 int
 ksched_detach(struct ksched *ks)
 {
+	p31b_free(ks);
 
-	free(ks, M_P31B);
-	return (0);
+	return 0;
 }
 
 /*
@@ -106,39 +108,47 @@ static __inline int
 getscheduler(struct ksched *ksched, struct thread *td, int *policy)
 {
 	struct rtprio rtp;
-	int e;
+	int e = 0;
 
-	e = 0;
 	pri_to_rtp(td, &rtp);
-	switch (rtp.type) {
-	case RTP_PRIO_FIFO:
+	switch (rtp.type)
+	{
+		case RTP_PRIO_FIFO:
 		*policy = SCHED_FIFO;
 		break;
-	case RTP_PRIO_REALTIME:
+
+		case RTP_PRIO_REALTIME:
 		*policy = SCHED_RR;
 		break;
-	default:
+
+		default:
 		*policy = SCHED_OTHER;
 		break;
 	}
-	return (e);
+
+	return e;
 }
 
 int
 ksched_setparam(struct ksched *ksched,
     struct thread *td, const struct sched_param *param)
 {
-	int e, policy;
+	int policy;
+	int e;
 
 	e = getscheduler(ksched, td, &policy);
+
 	if (e == 0)
-		e = ksched_setscheduler(ksched, td, policy, param);
-	return (e);
+	{
+			e = ksched_setscheduler(ksched, td, policy, param);
+	}
+
+	return e;
 }
 
 int
-ksched_getparam(struct ksched *ksched, struct thread *td,
-    struct sched_param *param)
+ksched_getparam(struct ksched *ksched,
+    struct thread *td, struct sched_param *param)
 {
 	struct rtprio rtp;
 
@@ -149,14 +159,13 @@ ksched_getparam(struct ksched *ksched, struct thread *td,
 		if (PRI_MIN_TIMESHARE < rtp.prio) 
 			/*
 		 	 * The interactive score has it to min realtime
-			 * so we must show max (64 most likely).
+			 * so we must show max (64 most likely
 			 */ 
-			param->sched_priority = PRI_MAX_TIMESHARE -
-			    PRI_MIN_TIMESHARE;
+			param->sched_priority = (PRI_MAX_TIMESHARE - PRI_MIN_TIMESHARE);
 		else
 			param->sched_priority = tsprio_to_p4prio(rtp.prio);
 	}
-	return (0);
+	return 0;
 }
 
 /*
@@ -167,106 +176,117 @@ ksched_getparam(struct ksched *ksched, struct thread *td,
  *
  */
 int
-ksched_setscheduler(struct ksched *ksched, struct thread *td, int policy,
-    const struct sched_param *param)
+ksched_setscheduler(struct ksched *ksched,
+    struct thread *td, int policy, const struct sched_param *param)
 {
+	int e = 0;
 	struct rtprio rtp;
-	int e;
 
-	e = 0;
-	switch(policy) {
-	case SCHED_RR:
-	case SCHED_FIFO:
+	switch(policy)
+	{
+		case SCHED_RR:
+		case SCHED_FIFO:
+
 		if (param->sched_priority >= P1B_PRIO_MIN &&
-		    param->sched_priority <= P1B_PRIO_MAX) {
+		    param->sched_priority <= P1B_PRIO_MAX)
+		{
 			rtp.prio = p4prio_to_rtpprio(param->sched_priority);
-			rtp.type = (policy == SCHED_FIFO) ? RTP_PRIO_FIFO :
-			    RTP_PRIO_REALTIME;
+			rtp.type = (policy == SCHED_FIFO)
+				? RTP_PRIO_FIFO : RTP_PRIO_REALTIME;
+
 			rtp_to_pri(&rtp, td);
-		} else {
-			e = EPERM;
 		}
+		else
+			e = EPERM;
+
+
 		break;
-	case SCHED_OTHER:
-		if (param->sched_priority >= 0 && param->sched_priority <=
-		    (PRI_MAX_TIMESHARE - PRI_MIN_TIMESHARE)) {
+
+		case SCHED_OTHER:
+		if (param->sched_priority >= 0 &&
+			param->sched_priority <= (PRI_MAX_TIMESHARE - PRI_MIN_TIMESHARE)) {
 			rtp.type = RTP_PRIO_NORMAL;
 			rtp.prio = p4prio_to_tsprio(param->sched_priority);
 			rtp_to_pri(&rtp, td);
-		} else {
+		} else
 			e = EINVAL;
-		}
+
 		break;
-	default:
-		e = EINVAL;
-		break;
+		
+		default:
+			e = EINVAL;
+			break;
 	}
-	return (e);
+
+	return e;
 }
 
 int
 ksched_getscheduler(struct ksched *ksched, struct thread *td, int *policy)
 {
-
-	return (getscheduler(ksched, td, policy));
+	return getscheduler(ksched, td, policy);
 }
 
-/* ksched_yield: Yield the CPU. */
+/* ksched_yield: Yield the CPU.
+ */
 int
 ksched_yield(struct ksched *ksched)
 {
-
 	sched_relinquish(curthread);
-	return (0);
+	return 0;
 }
 
 int
 ksched_get_priority_max(struct ksched *ksched, int policy, int *prio)
 {
-	int e;
+	int e = 0;
 
-	e = 0;
-	switch (policy)	{
-	case SCHED_FIFO:
-	case SCHED_RR:
-		*prio = P1B_PRIO_MAX;
+	switch (policy)
+	{
+		case SCHED_FIFO:
+		case SCHED_RR:
+		*prio = RTP_PRIO_MAX;
 		break;
-	case SCHED_OTHER:
+
+		case SCHED_OTHER:
 		*prio = PRI_MAX_TIMESHARE - PRI_MIN_TIMESHARE;
 		break;
-	default:
+
+		default:
 		e = EINVAL;
-		break;
 	}
-	return (e);
+
+	return e;
 }
 
 int
 ksched_get_priority_min(struct ksched *ksched, int policy, int *prio)
 {
-	int e;
+	int e = 0;
 
-	e = 0;
-	switch (policy)	{
-	case SCHED_FIFO:
-	case SCHED_RR:
+	switch (policy)
+	{
+		case SCHED_FIFO:
+		case SCHED_RR:
 		*prio = P1B_PRIO_MIN;
 		break;
-	case SCHED_OTHER:
+
+		case SCHED_OTHER:
 		*prio = 0;
 		break;
-	default:
+
+		default:
 		e = EINVAL;
-		break;
 	}
-	return (e);
+
+	return e;
 }
 
 int
-ksched_rr_get_interval(struct ksched *ksched, struct thread *td,
-    struct timespec *timespec)
+ksched_rr_get_interval(struct ksched *ksched,
+   struct thread *td, struct timespec *timespec)
 {
-
 	*timespec = ksched->rr_interval;
-	return (0);
+
+	return 0;
 }

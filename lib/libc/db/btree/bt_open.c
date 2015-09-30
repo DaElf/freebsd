@@ -57,7 +57,6 @@ __FBSDID("$FreeBSD$");
 #include <string.h>
 #include <unistd.h>
 #include "un-namespace.h"
-#include "libc_private.h"
 
 #include <db.h>
 #include "btree.h"
@@ -402,10 +401,10 @@ tmp(void)
 	}
 
 	(void)sigfillset(&set);
-	(void)__libc_sigprocmask(SIG_BLOCK, &set, &oset);
+	(void)_sigprocmask(SIG_BLOCK, &set, &oset);
 	if ((fd = mkostemp(path, O_CLOEXEC)) != -1)
 		(void)unlink(path);
-	(void)__libc_sigprocmask(SIG_SETMASK, &oset, NULL);
+	(void)_sigprocmask(SIG_SETMASK, &oset, NULL);
 	return(fd);
 }
 

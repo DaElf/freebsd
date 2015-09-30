@@ -33,9 +33,6 @@
 #undef	h_errno
 extern int h_errno;
 
-int *__h_errno(void);
-void __h_errno_set(res_state res, int err);
-
 int *
 __h_errno(void)
 {

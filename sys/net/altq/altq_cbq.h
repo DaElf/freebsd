@@ -36,7 +36,6 @@
 
 #include <net/altq/altq.h>
 #include <net/altq/altq_rmclass.h>
-#include <net/altq/altq_codel.h>
 #include <net/altq/altq_red.h>
 #include <net/altq/altq_rio.h>
 
@@ -53,7 +52,6 @@ extern "C" {
 #define	CBQCLF_FLOWVALVE	0x0008	/* use flowvalve (aka penalty-box) */
 #define	CBQCLF_CLEARDSCP	0x0010  /* clear diffserv codepoint */
 #define	CBQCLF_BORROW		0x0020  /* borrow from parent */
-#define	CBQCLF_CODEL		0x0040	/* use CoDel */
 
 /* class flags only for root class */
 #define	CBQCLF_WRR		0x0100	/* weighted-round robin */
@@ -93,10 +91,9 @@ typedef struct _cbq_class_stats_ {
 	int		qcnt;		/* # packets in queue */
 	int		avgidle;
 
-	/* codel, red and rio related info */
+	/* red and rio related info */
 	int		qtype;
 	struct redstats	red[3];
-	struct codel_stats codel;
 } class_stats_t;
 
 #ifdef ALTQ3_COMPAT

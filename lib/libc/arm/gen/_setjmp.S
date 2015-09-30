@@ -157,5 +157,3 @@ botch:
 	b	.
 #endif
 END(_longjmp)
-
-	.section .note.GNU-stack,"",%progbits

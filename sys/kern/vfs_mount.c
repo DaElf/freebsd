@@ -1359,8 +1359,6 @@ dounmount(struct mount *mp, int flags, struct thread *td)
 		vput(coveredvp);
 	}
 	vfs_event_signal(NULL, VQ_UNMOUNT, 0);
-	if (mp == rootdevmp)
-		rootdevmp = NULL;
 	vfs_mount_destroy(mp);
 	return (0);
 }

@@ -379,8 +379,6 @@
 		};
 
 		bsc0 {
-			#address-cells = <1>;
-			#size-cells = <0>;
 			compatible = "broadcom,bcm2835-bsc",
 				     "broadcom,bcm2708-bsc";
 			reg = <0x205000 0x20>;
@@ -389,8 +387,6 @@
 		};
 
 		bsc1 {
-			#address-cells = <1>;
-			#size-cells = <0>;
 			compatible = "broadcom,bcm2835-bsc",
 				     "broadcom,bcm2708-bsc";
 			reg = <0x804000 0x20>;

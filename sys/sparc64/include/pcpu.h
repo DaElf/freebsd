@@ -51,7 +51,6 @@ struct pmap;
 	struct	intr_request *pc_irfree;				\
 	struct	pmap *pc_pmap;						\
 	vm_offset_t pc_addr;						\
-	vm_offset_t pc_qmap_addr;					\
 	u_long	pc_tickref;						\
 	u_long	pc_tickadj;						\
 	u_long	pc_tickincrement;					\
@@ -62,7 +61,7 @@ struct pmap;
 	u_int	pc_tlb_ctx;						\
 	u_int	pc_tlb_ctx_max;						\
 	u_int	pc_tlb_ctx_min;						\
-	char	__pad[397]
+	char	__pad[405]
 
 #ifdef _KERNEL
 

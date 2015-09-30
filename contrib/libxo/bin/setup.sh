@@ -11,8 +11,6 @@ if [ ! -f configure ]; then
     vers=`autoreconf --version | head -1`
     echo "Using" $vers
 
-    mkdir -p m4
-
     autoreconf --install
 
     if [ ! -f configure ]; then

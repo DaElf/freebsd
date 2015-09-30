@@ -145,7 +145,8 @@ Action
 %%
 
 static void
-_nsaddsrctomap(const char *elem)
+_nsaddsrctomap(elem)
+	const char *elem;
 {
 	int		i, lineno;
 	extern int	_nsyylineno;

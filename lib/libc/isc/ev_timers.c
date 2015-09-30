@@ -117,7 +117,7 @@ evCmpTime(struct timespec a, struct timespec b) {
 }
 
 struct timespec
-evNowTime(void) {
+evNowTime() {
 	struct timeval now;
 #ifdef CLOCK_REALTIME
 	struct timespec tsnow;
@@ -136,7 +136,7 @@ evNowTime(void) {
 }
 
 struct timespec
-evUTCTime(void) {
+evUTCTime() {
 	struct timeval now;
 #ifdef CLOCK_REALTIME
 	struct timespec tsnow;

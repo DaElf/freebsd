@@ -60,8 +60,6 @@
 		
 	.file		"crti.asm"
 
-	.section .note.GNU-stack,"",%progbits
-
 	.section	".init"
 	.align 2
 	.global	_init

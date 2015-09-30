@@ -21,6 +21,8 @@ PSEUDO+= _clock_gettime.o _gettimeofday.o
 
 # Sources common to both syscall interfaces:
 SRCS+=	\
+	stack_protector.c \
+	stack_protector_compat.c \
 	__error.c \
 	interposing_table.c
 
@@ -90,6 +92,8 @@ ASM+=$(_asm)
 .endif
 .endfor
 
+OBJS+=	${ASM} ${PSEUDO}
+
 SASM=	${ASM:S/.o/.S/}
 
 SPSEUDO= ${PSEUDO:S/.o/.S/}
@@ -102,7 +106,7 @@ SYM_MAPS+=	${LIBC_SRCTOP}/sys/Symbol.map
 CLEANFILES+=	${SASM} ${SPSEUDO}
 
 .if ${MACHINE_CPUARCH} == "amd64" || ${MACHINE_CPUARCH} == "i386" || \
-    ${MACHINE_CPUARCH} == "powerpc" || ${MACHINE_ARCH:Marmv6*}
+    ${MACHINE_CPUARCH} == "powerpc"
 NOTE_GNU_STACK='\t.section .note.GNU-stack,"",%%progbits\n'
 .else
 NOTE_GNU_STACK=''

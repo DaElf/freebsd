@@ -37,7 +37,8 @@ __FBSDID("$FreeBSD$");
 #include <unistd.h>
 
 int
-isatty(int fd)
+isatty(fd)
+	int fd;
 {
 	int retval;
 	struct termios t;

@@ -50,7 +50,8 @@ __FBSDID("$FreeBSD$");
  * return a pointer into a directory
  */
 long
-telldir(DIR *dirp)
+telldir(dirp)
+	DIR *dirp;
 {
 	struct ddloc *lp;
 	long idx;
@@ -85,7 +86,9 @@ telldir(DIR *dirp)
  * Only values returned by "telldir" should be passed to seekdir.
  */
 void
-_seekdir(DIR *dirp, long loc)
+_seekdir(dirp, loc)
+	DIR *dirp;
+	long loc;
 {
 	struct ddloc *lp;
 	struct dirent *dp;
@@ -149,7 +152,8 @@ _fixtelldir(DIR *dirp, long oldseek, long oldloc)
  * Reclaim memory for telldir cookies which weren't used.
  */
 void
-_reclaim_telldir(DIR *dirp)
+_reclaim_telldir(dirp)
+	DIR *dirp;
 {
 	struct ddloc *lp;
 	struct ddloc *templp;

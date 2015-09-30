@@ -1607,8 +1607,7 @@ compat_redispatch(struct compat_state *st, enum nss_lookup_type how,
 		{ NULL, NULL, NULL }
 	};
 	void		*discard;
-	int		 rv, e;
-	unsigned int	 i;
+	int		 rv, e, i;
 
 	for (i = 0; i < sizeof(dtab)/sizeof(dtab[0]) - 1; i++)
 		dtab[i].mdata = (void *)lookup_how;
@@ -1703,7 +1702,7 @@ compat_setpwent(void *retval, void *mdata, va_list ap)
 	int			 rv, stayopen;
 
 #define set_setent(x, y) do {	 				\
-	unsigned int i;						\
+	int i;							\
 								\
 	for (i = 0; i < (sizeof(x)/sizeof(x[0])) - 1; i++)	\
 		x[i].mdata = (void *)y;				\

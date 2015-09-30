@@ -4,7 +4,7 @@
 #
 
 # PROVIDE: automount
-# REQUIRE: nfsclient automountd
+# REQUIRE: nfsclient
 # KEYWORD: nojail shutdown
 
 . /etc/rc.subr

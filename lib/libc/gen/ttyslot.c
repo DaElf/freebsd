@@ -33,8 +33,6 @@ static char sccsid[] = "@(#)ttyslot.c	8.1 (Berkeley) 6/4/93";
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-int __ttyslot(void);
-
 int
 __ttyslot(void)
 {

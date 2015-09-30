@@ -36,7 +36,3 @@ uninstall-hook:
 	    rm ${DESTDIR}${XO_SHAREDIR}/$$file ; done
 	rmdir ${DESTDIR}${XO_SHAREDIR}/external
 	rm -f ${DESTDIR}${bindir}/xohtml
-
-install-data-hook:
-	for file in ${man_MANS}; do \
-	    cat ../libxo/add.man >> ${DESTDIR}${man1dir}/$$file ; done

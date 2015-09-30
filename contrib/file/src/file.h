@@ -27,7 +27,7 @@
  */
 /*
  * file.h - definitions for file(1) program
- * @(#)$File: file.h,v 1.172 2015/09/11 17:24:09 christos Exp $
+ * @(#)$File: file.h,v 1.168 2015/04/09 20:01:41 christos Exp $
  */
 
 #ifndef __file_h__
@@ -44,11 +44,9 @@
     #define SIZE_T_FORMAT ""
   #endif
   #define INT64_T_FORMAT "I64"
-  #define INTMAX_T_FORMAT "I64"
 #else
   #define SIZE_T_FORMAT "z"
   #define INT64_T_FORMAT "ll"
-  #define INTMAX_T_FORMAT "j"
 #endif
 
 #include <stdio.h>	/* Include that here, to make sure __P gets defined */
@@ -302,15 +300,15 @@ struct magic {
 #define num_mask _u._mask
 #define str_range _u._s._count
 #define str_flags _u._s._flags
-	/* Words 9-24 */
+	/* Words 9-16 */
 	union VALUETYPE value;	/* either number or string */
-	/* Words 25-40 */
+	/* Words 17-32 */
 	char desc[MAXDESC];	/* description */
-	/* Words 41-60 */
+	/* Words 33-52 */
 	char mimetype[MAXMIME]; /* MIME type */
-	/* Words 61-62 */
+	/* Words 53-54 */
 	char apple[8];		/* APPLE CREATOR/TYPE */
-	/* Words 63-78 */
+	/* Words 55-63 */
 	char ext[64];		/* Popular extensions */
 };
 
@@ -415,13 +413,11 @@ struct magic_set {
 	uint16_t elf_shnum_max;
 	uint16_t elf_phnum_max;
 	uint16_t elf_notes_max;
-	uint16_t regex_max;
 #define	FILE_INDIR_MAX			15
 #define	FILE_NAME_MAX			30
 #define	FILE_ELF_SHNUM_MAX		32768
-#define	FILE_ELF_PHNUM_MAX		2048
+#define	FILE_ELF_PHNUM_MAX		128
 #define	FILE_ELF_NOTES_MAX		256
-#define	FILE_REGEX_MAX			8192
 };
 
 /* Type for Unicode characters */

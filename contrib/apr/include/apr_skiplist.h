@@ -40,9 +40,7 @@ extern "C" {
 /**
  * apr_skiplist_compare is the function type that must be implemented 
  * per object type that is used in a skip list for comparisons to maintain
- * order. A value <0 indicates placement after this node; a value of 0
- * indicates collision with this exact node; a value >0 indicates placement
- * before this node.
+ * order
  * */
 typedef int (*apr_skiplist_compare) (void *, void *);
 
@@ -173,8 +171,7 @@ APR_DECLARE(void *) apr_skiplist_next(apr_skiplist *sl, apr_skiplistnode **iter)
 APR_DECLARE(void *) apr_skiplist_previous(apr_skiplist *sl, apr_skiplistnode **iter);
 
 /**
- * Insert an element into the skip list using the specified comparison function
- * if it does not already exist.
+ * Insert an element into the skip list using the specified comparison function.
  * @param sl The skip list
  * @param data The element to insert
  * @param comp The comparison function to use for placement into the skip list
@@ -183,8 +180,7 @@ APR_DECLARE(apr_skiplistnode *) apr_skiplist_insert_compare(apr_skiplist *sl,
                                           void *data, apr_skiplist_compare comp);
 
 /**
- * Insert an element into the skip list using the existing comparison function
- * if it does not already exist (as determined by the comparison function)
+ * Insert an element into the skip list using the existing comparison function.
  * @param sl The skip list
  * @param data The element to insert
  * @remark If no comparison function has been set for the skip list, the element
@@ -194,7 +190,7 @@ APR_DECLARE(apr_skiplistnode *) apr_skiplist_insert(apr_skiplist* sl, void *data
 
 /**
  * Remove an element from the skip list using the specified comparison function for
- * locating the element. In the case of duplicates, the 1st entry will be removed.
+ * locating the element.
  * @param sl The skip list
  * @param data The element to remove
  * @param myfree A function to be called for each removed element
@@ -207,7 +203,7 @@ APR_DECLARE(int) apr_skiplist_remove_compare(apr_skiplist *sl, void *data,
 
 /**
  * Remove an element from the skip list using the existing comparison function for
- * locating the element. In the case of duplicates, the 1st entry will be removed.
+ * locating the element.
  * @param sl The skip list
  * @param data The element to remove
  * @param myfree A function to be called for each removed element
@@ -233,7 +229,7 @@ APR_DECLARE(void) apr_skiplist_remove_all(apr_skiplist *sl, apr_skiplist_freefun
 APR_DECLARE(void) apr_skiplist_destroy(apr_skiplist *sl, apr_skiplist_freefunc myfree);
 
 /**
- * Return the first element in the skip list, removing the element from the skip list.
+ * Return the first element in the skip list, leaving the element in the skip list.
  * @param sl The skip list
  * @param myfree A function to be called for the removed element
  * @remark NULL will be returned if there are no elements

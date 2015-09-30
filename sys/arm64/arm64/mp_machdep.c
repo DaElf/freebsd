@@ -94,6 +94,8 @@ void init_secondary(uint64_t);
 
 uint8_t secondary_stacks[MAXCPU - 1][PAGE_SIZE * KSTACK_PAGES] __aligned(16);
 
+/* # of Applications processors */
+volatile int mp_naps;
 /* Set to 1 once we're ready to let the APs out of the pen. */
 volatile int aps_ready = 0;
 
@@ -190,7 +192,7 @@ release_aps(void *dummy __unused)
 		DELAY(1000);
 	}
 
-	printf("APs not started\n");
+	printf("AP's not started\n");
 }
 SYSINIT(start_aps, SI_SUB_SMP, SI_ORDER_FIRST, release_aps, NULL);
 
@@ -208,6 +210,16 @@ init_secondary(uint64_t cpu)
 	__asm __volatile(
 	    "mov x18, %0 \n"
 	    "msr tpidr_el1, %0" :: "r"(pcpup));
+
+	/*
+	 * pcpu_init() updates queue, so it should not be executed in parallel
+	 * on several cores
+	 */
+	while(mp_naps < (cpu - 1))
+		;
+
+	/* Signal our startup to BSP */
+	atomic_add_rel_32(&mp_naps, 1);
 
 	/* Spin until the BSP releases the APs */
 	while (!aps_ready)
@@ -352,6 +364,7 @@ cpu_init_fdt(u_int id, phandle_t node, u_int addr_size, pcell_t *reg)
 	if (id == 0)
 		return (1);
 
+	CPU_SET(id, &all_cpus);
 
 	pcpup = &__pcpu[id];
 	pcpu_init(pcpup, id, sizeof(struct pcpu));
@@ -370,17 +383,8 @@ cpu_init_fdt(u_int id, phandle_t node, u_int addr_size, pcell_t *reg)
 	pa = pmap_extract(kernel_pmap, (vm_offset_t)mpentry);
 
 	err = psci_cpu_on(target_cpu, pa, id);
-	if (err != PSCI_RETVAL_SUCCESS) {
-		/* Panic here if INVARIANTS are enabled */
-		KASSERT(0, ("Failed to start CPU %u (%lx)\n", id, target_cpu));
-
-		pcpu_destroy(pcpup);
-		kmem_free(kernel_arena, (vm_offset_t)dpcpu[id - 1], DPCPU_SIZE);
-		dpcpu[id - 1] = NULL;
-		/* Notify the user that the CPU failed to start */
-		printf("Failed to start CPU %u (%lx)\n", id, target_cpu);
-	} else
-		CPU_SET(id, &all_cpus);
+	if (err != PSCI_RETVAL_SUCCESS)
+		printf("Failed to start CPU %u\n", id);
 
 	return (1);
 }

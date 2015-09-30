@@ -769,7 +769,7 @@ main(int argc, char **argv)
 				ev->ev_count = -1;
 
 			if (option == 'S' || option == 's')
-				ev->ev_cpu = CPU_FFS(&cpumask) - 1;
+				ev->ev_cpu = CPU_FFS(&cpumask);
 			else
 				ev->ev_cpu = PMC_CPU_ANY;
 

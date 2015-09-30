@@ -169,9 +169,21 @@ AcpiSetFirmwareWakingVector (
 
     ACPI_FUNCTION_TRACE (AcpiSetFirmwareWakingVector);
 
-    if (AcpiGbl_FACS)
+    /* If Hardware Reduced flag is set, there is no FACS */
+
+    if (AcpiGbl_ReducedHardware)
     {
-        (void) AcpiHwSetFirmwareWakingVector (AcpiGbl_FACS,
+        return_ACPI_STATUS (AE_OK);
+    }
+
+    if (AcpiGbl_Facs32)
+    {
+        (void) AcpiHwSetFirmwareWakingVector (AcpiGbl_Facs32,
+                    PhysicalAddress, PhysicalAddress64);
+    }
+    if (AcpiGbl_Facs64)
+    {
+        (void) AcpiHwSetFirmwareWakingVector (AcpiGbl_Facs64,
                     PhysicalAddress, PhysicalAddress64);
     }
 

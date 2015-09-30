@@ -72,7 +72,7 @@ struct pixel {
 
 #define NCOLS	80
 #define NROWS	24
-static struct pixel buffer[NCOLS][NROWS];
+struct pixel buffer[NCOLS][NROWS];
 
 static int ptfd;
 

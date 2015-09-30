@@ -1,6 +1,5 @@
 # $FreeBSD$
 
-ELF_SCR_EXT=	x xbn xc xd xdc xdw xn xr xs xsc xsw xu xw
 .include "../Makefile.inc0"
 .include <src.opts.mk>
 
@@ -46,14 +45,11 @@ LDADD=	${DPADD}
 CLEANDIRS+=	ldscripts
 CLEANFILES+=	ldemul-list.h stringify.sed
 
-FILES=		${LDSCRIPTS:S|^|ldscripts/|}
-FILESDIR=	${SCRIPTDIR}
-
 HOST=		${TARGET_TUPLE}
 LIBSEARCHPATH=	\"${TOOLS_PREFIX}/lib\":\"${TOOLS_PREFIX}/usr/lib\"
+ELF_SCR_EXT=	x xbn xc xd xdc xdw xn xr xs xsc xsw xu xw
 .for ext in ${ELF_SCR_EXT}
 LDSCRIPTS+=	${NATIVE_EMULATION}.${ext}
-ldscripts/${NATIVE_EMULATION}.${ext}: e${NATIVE_EMULATION}.c
 .endfor
 
 EMXFR=
@@ -69,6 +65,10 @@ ldemul-list.h:
 
 stringify.sed:
 	ln -sf ${SRCDIR}/ld/emultempl/astring.sed ${.TARGET}
+
+afterinstall:
+	${INSTALL} -o ${LIBOWN} -g ${LIBGRP} -m ${LIBMODE} \
+	    ${LDSCRIPTS:S|^|ldscripts/|} ${DESTDIR}${SCRIPTDIR}
 
 GENDIRDEPS_FILTER.host+= Nusr.bin/yacc
 

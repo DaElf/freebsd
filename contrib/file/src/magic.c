@@ -33,7 +33,7 @@
 #include "file.h"
 
 #ifndef	lint
-FILE_RCSID("@(#)$File: magic.c,v 1.95 2015/09/11 17:24:09 christos Exp $")
+FILE_RCSID("@(#)$File: magic.c,v 1.93 2015/04/15 23:47:58 christos Exp $")
 #endif	/* lint */
 
 #include "magic.h"
@@ -136,14 +136,6 @@ _w32_get_magic_relative_to(char **hmagicpath, HINSTANCE module)
 		goto out;
 
 	PathRemoveFileSpecA(dllpath);
-
-	if (module) {
-		char exepath[MAX_PATH];
-		GetModuleFileNameA(NULL, exepath, MAX_PATH);
-		PathRemoveFileSpecA(exepath);
-		if (stricmp(exepath, dllpath) == 0)
-			goto out;
-	}
 
 	sp = strlen(dllpath);
 	if (sp > 3 && stricmp(&dllpath[sp - 3], "bin") == 0) {
@@ -603,9 +595,6 @@ magic_setparam(struct magic_set *ms, int param, const void *val)
 	case MAGIC_PARAM_ELF_NOTES_MAX:
 		ms->elf_notes_max = (uint16_t)*(const size_t *)val;
 		return 0;
-	case MAGIC_PARAM_REGEX_MAX:
-		ms->elf_notes_max = (uint16_t)*(const size_t *)val;
-		return 0;
 	default:
 		errno = EINVAL;
 		return -1;
@@ -630,9 +619,6 @@ magic_getparam(struct magic_set *ms, int param, void *val)
 		return 0;
 	case MAGIC_PARAM_ELF_NOTES_MAX:
 		*(size_t *)val = ms->elf_notes_max;
-		return 0;
-	case MAGIC_PARAM_REGEX_MAX:
-		*(size_t *)val = ms->regex_max;
 		return 0;
 	default:
 		errno = EINVAL;

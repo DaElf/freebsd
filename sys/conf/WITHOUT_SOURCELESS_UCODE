@@ -20,7 +20,6 @@ nodevice	cp
 nodevice	ctau
 nodevice	ipwfw
 nodevice	iwifw
-nodevice	iwmfw
 nodevice	iwnfw
 nodevice	wpifw
 

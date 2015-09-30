@@ -112,8 +112,12 @@ void
 
 int
 sctp_process_data(struct mbuf **, int, int *, int,
+    struct sockaddr *src, struct sockaddr *dst,
+    struct sctphdr *,
     struct sctp_inpcb *, struct sctp_tcb *,
-    struct sctp_nets *, uint32_t *);
+    struct sctp_nets *, uint32_t *,
+    uint8_t, uint32_t,
+    uint32_t, uint16_t);
 
 void sctp_slide_mapping_arrays(struct sctp_tcb *stcb);
 

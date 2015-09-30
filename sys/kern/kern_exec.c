@@ -100,11 +100,6 @@ SDT_PROBE_DEFINE1(proc, kernel, , exec__success, "char *");
 
 MALLOC_DEFINE(M_PARGS, "proc-args", "Process arguments");
 
-int coredump_pack_fileinfo = 1;
-SYSCTL_INT(_kern, OID_AUTO, coredump_pack_fileinfo, CTLFLAG_RWTUN,
-    &coredump_pack_fileinfo, 0,
-    "Enable file path packing in 'procstat -f' coredump notes");
-
 static int sysctl_kern_ps_strings(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_usrstack(SYSCTL_HANDLER_ARGS);
 static int sysctl_kern_stackprot(SYSCTL_HANDLER_ARGS);
@@ -418,7 +413,7 @@ do_execve(td, args, mac_p)
 		    | AUDITVNODE1, UIO_SYSSPACE, args->fname, td);
 	}
 
-	SDT_PROBE1(proc, kernel, , exec, args->fname);
+	SDT_PROBE(proc, kernel, , exec, args->fname, 0, 0, 0, 0 );
 
 interpret:
 	if (args->fname != NULL) {
@@ -566,10 +561,6 @@ interpret:
 		vn_lock(imgp->vp, LK_SHARED | LK_RETRY);
 		goto exec_fail_dealloc;
 	}
-
-	/* ABI enforces the use of Capsicum. Switch into capabilities mode. */
-	if (SV_PROC_FLAG(p, SV_CAPSICUM))
-		sys_cap_enter(td, NULL);
 
 	/*
 	 * Copy out strings (args and env) and initialize stack base
@@ -846,7 +837,7 @@ interpret:
 
 	vfs_mark_atime(imgp->vp, td->td_ucred);
 
-	SDT_PROBE1(proc, kernel, , exec__success, args->fname);
+	SDT_PROBE(proc, kernel, , exec__success, args->fname, 0, 0, 0, 0);
 
 	VOP_UNLOCK(imgp->vp, 0);
 done1:
@@ -918,7 +909,7 @@ exec_fail:
 	p->p_flag &= ~P_INEXEC;
 	PROC_UNLOCK(p);
 
-	SDT_PROBE1(proc, kernel, , exec__failure, error);
+	SDT_PROBE(proc, kernel, , exec__failure, error, 0, 0, 0, 0);
 
 done2:
 #ifdef MAC

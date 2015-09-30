@@ -162,7 +162,7 @@ g_nop_access(struct g_provider *pp, int dr, int dw, int de)
 static int
 g_nop_create(struct gctl_req *req, struct g_class *mp, struct g_provider *pp,
     int ioerror, u_int rfailprob, u_int wfailprob, off_t offset, off_t size,
-    u_int secsize, u_int stripesize, u_int stripeoffset)
+    u_int secsize)
 {
 	struct g_nop_softc *sc;
 	struct g_geom *gp;
@@ -208,18 +208,6 @@ g_nop_create(struct gctl_req *req, struct g_class *mp, struct g_provider *pp,
 		return (EINVAL);
 	}
 	size -= size % secsize;
-	if ((stripesize % pp->sectorsize) != 0) {
-		gctl_error(req, "Invalid stripesize for provider %s.", pp->name);
-		return (EINVAL);
-	}
-	if ((stripeoffset % pp->sectorsize) != 0) {
-		gctl_error(req, "Invalid stripeoffset for provider %s.", pp->name);
-		return (EINVAL);
-	}
-	if (stripesize != 0 && stripeoffset >= stripesize) {
-		gctl_error(req, "stripeoffset is too big.");
-		return (EINVAL);
-	}
 	snprintf(name, sizeof(name), "%s%s", pp->name, G_NOP_SUFFIX);
 	LIST_FOREACH(gp, &mp->geom, geom) {
 		if (strcmp(gp->name, name) == 0) {
@@ -231,8 +219,6 @@ g_nop_create(struct gctl_req *req, struct g_class *mp, struct g_provider *pp,
 	sc = g_malloc(sizeof(*sc), M_WAITOK | M_ZERO);
 	sc->sc_offset = offset;
 	sc->sc_explicitsize = explicitsize;
-	sc->sc_stripesize = stripesize;
-	sc->sc_stripeoffset = stripeoffset;
 	sc->sc_error = ioerror;
 	sc->sc_rfailprob = rfailprob;
 	sc->sc_wfailprob = wfailprob;
@@ -252,8 +238,6 @@ g_nop_create(struct gctl_req *req, struct g_class *mp, struct g_provider *pp,
 	newpp->flags |= G_PF_DIRECT_SEND | G_PF_DIRECT_RECEIVE;
 	newpp->mediasize = size;
 	newpp->sectorsize = secsize;
-	newpp->stripesize = stripesize;
-	newpp->stripeoffset = stripeoffset;
 
 	cp = g_new_consumer(gp);
 	cp->flags |= G_CF_DIRECT_SEND | G_CF_DIRECT_RECEIVE;
@@ -320,8 +304,7 @@ static void
 g_nop_ctl_create(struct gctl_req *req, struct g_class *mp)
 {
 	struct g_provider *pp;
-	intmax_t *error, *rfailprob, *wfailprob, *offset, *secsize, *size,
-	    *stripesize, *stripeoffset;
+	intmax_t *error, *rfailprob, *wfailprob, *offset, *secsize, *size;
 	const char *name;
 	char param[16];
 	int i, *nargs;
@@ -387,24 +370,6 @@ g_nop_ctl_create(struct gctl_req *req, struct g_class *mp)
 		gctl_error(req, "Invalid '%s' argument", "secsize");
 		return;
 	}
-	stripesize = gctl_get_paraml(req, "stripesize", sizeof(*stripesize));
-	if (stripesize == NULL) {
-		gctl_error(req, "No '%s' argument", "stripesize");
-		return;
-	}
-	if (*stripesize < 0) {
-		gctl_error(req, "Invalid '%s' argument", "stripesize");
-		return;
-	}
-	stripeoffset = gctl_get_paraml(req, "stripeoffset", sizeof(*stripeoffset));
-	if (stripeoffset == NULL) {
-		gctl_error(req, "No '%s' argument", "stripeoffset");
-		return;
-	}
-	if (*stripeoffset < 0) {
-		gctl_error(req, "Invalid '%s' argument", "stripeoffset");
-		return;
-	}
 
 	for (i = 0; i < *nargs; i++) {
 		snprintf(param, sizeof(param), "arg%d", i);
@@ -425,8 +390,7 @@ g_nop_ctl_create(struct gctl_req *req, struct g_class *mp)
 		    *error == -1 ? EIO : (int)*error,
 		    *rfailprob == -1 ? 0 : (u_int)*rfailprob,
 		    *wfailprob == -1 ? 0 : (u_int)*wfailprob,
-		    (off_t)*offset, (off_t)*size, (u_int)*secsize,
-		    (u_int)*stripesize, (u_int)*stripeoffset) != 0) {
+		    (off_t)*offset, (off_t)*size, (u_int)*secsize) != 0) {
 			return;
 		}
 	}

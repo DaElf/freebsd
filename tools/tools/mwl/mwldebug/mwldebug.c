@@ -33,19 +33,21 @@
  * mwldebug [-i interface] flags
  * (default interface is mwl0).
  */
-
+#include <sys/types.h>
 #include <sys/param.h>
 #include <sys/file.h>
 #include <sys/ioctl.h>
 #include <sys/socket.h>
 #include <sys/sysctl.h>
 
-#include <ctype.h>
-#include <err.h>
-#include <getopt.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <ctype.h>
+#include <getopt.h>
 #include <string.h>
+#include <err.h>
+
+#define	N(a)	(sizeof(a)/sizeof(a[0]))
 
 const char *progname;
 
@@ -98,7 +100,7 @@ getflag(const char *name, int len)
 {
 	int i;
 
-	for (i = 0; i < nitems(flags); i++)
+	for (i = 0; i < N(flags); i++)
 		if (strncasecmp(flags[i].name, name, len) == 0)
 			return flags[i].bit;
 	return 0;
@@ -110,7 +112,7 @@ getflagname(u_int flag)
 {
 	int i;
 
-	for (i = 0; i < nitems(flags); i++)
+	for (i = 0; i < N(flags); i++)
 		if (flags[i].bit == flag)
 			return flags[i].name;
 	return "???";
@@ -124,7 +126,7 @@ usage(void)
 
 	fprintf(stderr, "usage: %s [-i device] [flags]\n", progname);
 	fprintf(stderr, "where flags are:\n");
-	for (i = 0; i < nitems(flags); i++)
+	for (i = 0; i < N(flags); i++)
 		printf("%s\n", flags[i].name);
 	exit(-1);
 }
@@ -200,7 +202,7 @@ main(int argc, char *argv[])
 	} else
 		printf("%s: 0x%x", oid, debug);
 	sep = "<";
-	for (i = 0; i < nitems(flags); i++)
+	for (i = 0; i < N(flags); i++)
 		if (debug & flags[i].bit) {
 			printf("%s%s", sep, flags[i].name);
 			sep = ",";

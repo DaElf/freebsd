@@ -455,7 +455,7 @@ _setnetdnsent(int stayopen)
 }
 
 void
-_endnetdnsent(void)
+_endnetdnsent()
 {
 	res_state statp;
 

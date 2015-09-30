@@ -53,7 +53,6 @@ __FBSDID("$FreeBSD$");
 #include <stdio.h>
 #endif
 #include "un-namespace.h"
-#include "libc_private.h"
 
 #define	SET_LEN	6		/* initial # of bitcmd struct to malloc */
 #define	SET_LEN_INCR 4		/* # of bitcmd structs to add as needed */
@@ -365,9 +364,9 @@ getumask(void)
 	 * handler, protect them as best we can.
 	 */
 	sigfillset(&sigset);
-	(void)__libc_sigprocmask(SIG_BLOCK, &sigset, &sigoset);
+	(void)_sigprocmask(SIG_BLOCK, &sigset, &sigoset);
 	(void)umask(mask = umask(0));
-	(void)__libc_sigprocmask(SIG_SETMASK, &sigoset, NULL);
+	(void)_sigprocmask(SIG_SETMASK, &sigoset, NULL);
 	return (mask);
 }
 

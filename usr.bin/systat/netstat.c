@@ -85,7 +85,7 @@ static char *inetname(struct sockaddr *);
 static void inetprint(struct sockaddr *, const char *);
 
 #define	streq(a,b)	(strcmp(a,b)==0)
-#define	YMAX(w)		(getmaxy(w)-2)
+#define	YMAX(w)		((w)->_maxy-1)
 
 WINDOW *
 opennetstat(void)

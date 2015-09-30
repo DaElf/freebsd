@@ -32,7 +32,6 @@
  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  POSSIBILITY OF SUCH DAMAGE.
 '''
-from __future__ import print_function
 import unbound
 import time
 
@@ -40,9 +39,9 @@ ctx = unbound.ub_ctx()
 ctx.resolvconf("/etc/resolv.conf")
 
 def call_back(my_data,status,result):
-    print("Call_back:", sorted(my_data))
+    print("Call_back:", my_data)
     if status == 0 and result.havedata:
-        print("Result:", sorted(result.data.address_list))
+        print("Result:", result.data.address_list)
         my_data['done_flag'] = True
 
 

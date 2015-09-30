@@ -15,7 +15,3 @@ install-exec-hook:
 
 uninstall-hook:
 	rm -f ${DESTDIR}${bindir}/xolint
-
-install-data-hook:
-	for file in ${man_MANS}; do \
-	    cat ../libxo/add.man >> ${DESTDIR}${man1dir}/$$file ; done

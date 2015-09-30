@@ -14,13 +14,15 @@
 #
 # $FreeBSD$
 
-.PATH:	${.CURDIR}/../../usr.sbin/rtsold
+SRCDIR=	${.CURDIR}/../../usr.sbin/rtsold
+
+.PATH:	${SRCDIR}
 
 PROG=	rtsol
 SRCS=	rtsold.c rtsol.c if.c probe.c dump.c rtsock.c
 MAN=
 
 WARNS?=	3
-CFLAGS+= -DHAVE_ARC4RANDOM -DSMALL
+CFLAGS+= -DHAVE_ARC4RANDOM -DHAVE_POLL_H -DSMALL
 
 .include <bsd.prog.mk>

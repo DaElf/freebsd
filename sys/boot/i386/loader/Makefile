@@ -110,7 +110,12 @@ FILESMODE_${LOADER}= ${BINMODE} -b
 .include	"${.CURDIR}/../../forth/Makefile.inc"
 FILES+=	pcibios.4th
 
-FILES+=	loader.rc menu.rc
+.if !exists(${DESTDIR}/boot/loader.rc)
+FILES+=	loader.rc
+.endif
+.if !exists(${DESTDIR}/boot/menu.rc)
+FILES+= menu.rc
+.endif
 .endif
 
 # XXX crt0.o needs to be first for pxeboot(8) to work

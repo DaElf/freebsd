@@ -44,8 +44,6 @@ kinfo_getfile(pid_t pid, int *cntp)
 	eb = buf + len;
 	while (bp < eb) {
 		kf = (struct kinfo_file *)(uintptr_t)bp;
-		if (kf->kf_structsize == 0)
-			break;
 		bp += kf->kf_structsize;
 		cnt++;
 	}
@@ -61,8 +59,6 @@ kinfo_getfile(pid_t pid, int *cntp)
 	/* Pass 2: unpack */
 	while (bp < eb) {
 		kf = (struct kinfo_file *)(uintptr_t)bp;
-		if (kf->kf_structsize == 0)
-			break;
 		/* Copy/expand into pre-zeroed buffer */
 		memcpy(kp, kf, kf->kf_structsize);
 		/* Advance to next packed record */

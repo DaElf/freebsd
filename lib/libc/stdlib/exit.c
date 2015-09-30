@@ -56,7 +56,8 @@ int	__isthreaded	= 0;
  * Exit, flushing stdio buffers if necessary.
  */
 void
-exit(int status)
+exit(status)
+	int status;
 {
 	/* Ensure that the auto-initialization routine is linked in: */
 	extern int _thread_autoinit_dummy_decl;

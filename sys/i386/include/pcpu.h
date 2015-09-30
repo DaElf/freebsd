@@ -58,8 +58,7 @@
 	int	pc_private_tss;		/* Flag indicating private tss*/\
 	u_int	pc_cmci_mask;		/* MCx banks for CMCI */	\
 	u_int	pc_vcpu_id;		/* Xen vCPU ID */		\
-	vm_offset_t pc_qmap_addr;	/* KVA for temporary mappings */\
-	char	__pad[229]
+	char	__pad[233]
 
 #ifdef _KERNEL
 

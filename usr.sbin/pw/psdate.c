@@ -29,11 +29,12 @@ static const char rcsid[] =
   "$FreeBSD$";
 #endif /* not lint */
 
-#include <ctype.h>
-#include <err.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <ctype.h>
 #include <xlocale.h>
+#include <err.h>
 
 #include "psdate.h"
 

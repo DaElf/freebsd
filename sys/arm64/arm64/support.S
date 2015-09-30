@@ -221,7 +221,7 @@ END(suswintr)
 ENTRY(setjmp)
 	/* Store the stack pointer */
 	mov	x8, sp
-	str	x8, [x0], #8
+	str	x8, [x0]
 
 	/* Store the general purpose registers and lr */
 	stp	x19, x20, [x0], #16

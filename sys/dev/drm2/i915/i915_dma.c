@@ -1,6 +1,6 @@
 /* i915_dma.c -- DMA support for the I915 -*- linux-c -*-
  */
-/*
+/*-
  * Copyright 2003 Tungsten Graphics, Inc., Cedar Park, Texas.
  * All Rights Reserved.
  *
@@ -47,12 +47,6 @@ __FBSDID("$FreeBSD$");
 #define ADVANCE_LP_RING() \
 	intel_ring_advance(LP_RING(dev_priv))
 
-/**
- * Lock test for when it's just for synchronization of ring access.
- *
- * In that case, we don't need to do it when GEM is initialized as nobody else
- * has access to the ring.
- */
 #define RING_LOCK_TEST_WITH_RETURN(dev, file) do {			\
 	if (LP_RING(dev->dev_private)->obj == NULL)			\
 		LOCK_TEST_WITH_RETURN(dev, file);			\
@@ -185,6 +179,7 @@ static int i915_dma_cleanup(struct drm_device * dev)
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	int i;
 
+
 	/* Make sure interrupts are disabled here because the uninstall ioctl
 	 * may not have been called from userspace and after dev_private
 	 * is freed, it's too late.
@@ -213,7 +208,7 @@ static int i915_initialize(struct drm_device * dev, drm_i915_init_t * init)
 	master_priv->sarea = drm_getsarea(dev);
 	if (master_priv->sarea) {
 		master_priv->sarea_priv = (drm_i915_sarea_t *)
-			((u8 *)master_priv->sarea->handle + init->sarea_priv_offset);
+		    ((u8 *)master_priv->sarea->handle + init->sarea_priv_offset);
 	} else {
 		DRM_DEBUG_DRIVER("sarea not found assuming DRI2 userspace\n");
 	}
@@ -314,7 +309,7 @@ static int i915_dma_init(struct drm_device *dev, void *data,
  * instruction detected will be given a size of zero, which is a
  * signal to abort the rest of the buffer.
  */
-static int validate_cmd(int cmd)
+static int do_validate_cmd(int cmd)
 {
 	switch (((cmd >> 29) & 0x7)) {
 	case 0x0:
@@ -372,7 +367,17 @@ static int validate_cmd(int cmd)
 	return 0;
 }
 
-static int i915_emit_cmds(struct drm_device * dev, int *buffer, int dwords)
+static int validate_cmd(int cmd)
+{
+	int ret = do_validate_cmd(cmd);
+
+/*	printk("validate_cmd( %x ): %d\n", cmd, ret); */
+
+	return ret;
+}
+
+static int i915_emit_cmds(struct drm_device *dev, int __user *buffer,
+			  int dwords)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 	int i;
@@ -410,16 +415,28 @@ static int i915_emit_cmds(struct drm_device * dev, int *buffer, int dwords)
 	return 0;
 }
 
-int
-i915_emit_box(struct drm_device *dev,
-	      struct drm_clip_rect *box,
-	      int DR1, int DR4)
+int i915_emit_box(struct drm_device * dev,
+		  struct drm_clip_rect *boxes,
+		  int i, int DR1, int DR4)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
+	struct drm_clip_rect box;
+
+	if (DRM_COPY_FROM_USER_UNCHECKED(&box, &boxes[i], sizeof(box))) {
+		return -EFAULT;
+	}
+
+	return (i915_emit_box_p(dev, &box, DR1, DR4));
+}
+
+int
+i915_emit_box_p(struct drm_device *dev, struct drm_clip_rect *box,
+    int DR1, int DR4)
+{
+	drm_i915_private_t *dev_priv = dev->dev_private;
 	int ret;
 
-	if (box->y2 <= box->y1 || box->x2 <= box->x1 ||
-	    box->y2 <= 0 || box->x2 <= 0) {
+	if (box->y2 <= box->y1 || box->x2 <= box->x1 || box->y2 <= 0 ||
+	    box->x2 <= 0) {
 		DRM_ERROR("Bad box %d,%d..%d,%d\n",
 			  box->x1, box->y1, box->x2, box->y2);
 		return -EINVAL;
@@ -427,8 +444,8 @@ i915_emit_box(struct drm_device *dev,
 
 	if (INTEL_INFO(dev)->gen >= 4) {
 		ret = BEGIN_LP_RING(4);
-		if (ret)
-			return ret;
+		if (ret != 0)
+			return (ret);
 
 		OUT_RING(GFX_OP_DRAWRECT_INFO_I965);
 		OUT_RING((box->x1 & 0xffff) | (box->y1 << 16));
@@ -436,8 +453,8 @@ i915_emit_box(struct drm_device *dev,
 		OUT_RING(DR4);
 	} else {
 		ret = BEGIN_LP_RING(6);
-		if (ret)
-			return ret;
+		if (ret != 0)
+			return (ret);
 
 		OUT_RING(GFX_OP_DRAWRECT_INFO);
 		OUT_RING(DR1);
@@ -475,9 +492,7 @@ static void i915_emit_breadcrumb(struct drm_device *dev)
 }
 
 static int i915_dispatch_cmdbuffer(struct drm_device * dev,
-				   drm_i915_cmdbuffer_t *cmd,
-				   struct drm_clip_rect *cliprects,
-				   void *cmdbuf)
+    drm_i915_cmdbuffer_t * cmd, struct drm_clip_rect *cliprects, void *cmdbuf)
 {
 	int nbox = cmd->num_cliprects;
 	int i = 0, count, ret;
@@ -493,8 +508,8 @@ static int i915_dispatch_cmdbuffer(struct drm_device * dev,
 
 	for (i = 0; i < count; i++) {
 		if (i < nbox) {
-			ret = i915_emit_box(dev, &cliprects[i],
-					    cmd->DR1, cmd->DR4);
+			ret = i915_emit_box_p(dev, &cmd->cliprects[i],
+			    cmd->DR1, cmd->DR4);
 			if (ret)
 				return ret;
 		}
@@ -508,11 +523,11 @@ static int i915_dispatch_cmdbuffer(struct drm_device * dev,
 	return 0;
 }
 
-static int i915_dispatch_batchbuffer(struct drm_device * dev,
-				     drm_i915_batchbuffer_t * batch,
-				     struct drm_clip_rect *cliprects)
+static int
+i915_dispatch_batchbuffer(struct drm_device * dev,
+    drm_i915_batchbuffer_t * batch, struct drm_clip_rect *cliprects)
 {
-	struct drm_i915_private *dev_priv = dev->dev_private;
+	drm_i915_private_t *dev_priv = dev->dev_private;
 	int nbox = batch->num_cliprects;
 	int i, count, ret;
 
@@ -527,18 +542,19 @@ static int i915_dispatch_batchbuffer(struct drm_device * dev,
 	i915_kernel_lost_context(dev);
 
 	count = nbox ? nbox : 1;
+
 	for (i = 0; i < count; i++) {
 		if (i < nbox) {
-			ret = i915_emit_box(dev, &cliprects[i],
-					    batch->DR1, batch->DR4);
+			int ret = i915_emit_box_p(dev, &cliprects[i],
+			    batch->DR1, batch->DR4);
 			if (ret)
 				return ret;
 		}
 
 		if (!IS_I830(dev) && !IS_845G(dev)) {
 			ret = BEGIN_LP_RING(2);
-			if (ret)
-				return ret;
+			if (ret != 0)
+				return (ret);
 
 			if (INTEL_INFO(dev)->gen >= 4) {
 				OUT_RING(MI_BATCH_BUFFER_START | (2 << 6) |
@@ -550,8 +566,8 @@ static int i915_dispatch_batchbuffer(struct drm_device * dev,
 			}
 		} else {
 			ret = BEGIN_LP_RING(4);
-			if (ret)
-				return ret;
+			if (ret != 0)
+				return (ret);
 
 			OUT_RING(MI_BATCH_BUFFER);
 			OUT_RING(batch->start | MI_BATCH_NON_SECURE);
@@ -586,7 +602,6 @@ static int i915_dispatch_flip(struct drm_device * dev)
 	ret = BEGIN_LP_RING(10);
 	if (ret)
 		return ret;
-
 	OUT_RING(MI_FLUSH | MI_READ_FLUSH);
 	OUT_RING(0);
 
@@ -620,7 +635,8 @@ static int i915_dispatch_flip(struct drm_device * dev)
 	return 0;
 }
 
-static int i915_quiescent(struct drm_device *dev)
+static int
+i915_quiescent(struct drm_device *dev)
 {
 	struct intel_ring_buffer *ring = LP_RING(dev->dev_private);
 
@@ -628,8 +644,8 @@ static int i915_quiescent(struct drm_device *dev)
 	return (intel_wait_ring_idle(ring));
 }
 
-static int i915_flush_ioctl(struct drm_device *dev, void *data,
-			    struct drm_file *file_priv)
+static int
+i915_flush_ioctl(struct drm_device *dev, void *data, struct drm_file *file_priv)
 {
 	int ret;
 
@@ -1116,7 +1132,7 @@ i915_load_modeset_init(struct drm_device *dev)
 	intel_modeset_init(dev);
 
 	ret = i915_gem_init(dev);
-	if (ret)
+	if (ret != 0)
 		goto cleanup_gem_stolen;
 
 	intel_modeset_gem_init(dev);
@@ -1136,7 +1152,7 @@ i915_load_modeset_init(struct drm_device *dev)
 	/* We're off and running w/KMS */
 	dev_priv->mm.suspended = 0;
 
-	return 0;
+	return (0);
 
 cleanup_gem:
 	DRM_LOCK(dev);
@@ -1323,18 +1339,8 @@ intel_teardown_mchbar(struct drm_device *dev)
 	}
 }
 
-/**
- * i915_driver_load - setup chip and create an initial config
- * @dev: DRM device
- * @flags: startup flags
- *
- * The driver load routine has to do several things:
- *   - drive output discovery via intel_modeset_init()
- *   - initialize the memory manager
- *   - allocate initial config memory
- *   - setup the DRM framebuffer with the allocated memory
- */
-int i915_driver_load(struct drm_device *dev, unsigned long flags)
+int
+i915_driver_load(struct drm_device *dev, unsigned long flags)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	const struct intel_device_info *info;
@@ -1469,7 +1475,8 @@ out_gem_unload:
 	return (ret);
 }
 
-int i915_driver_unload(struct drm_device *dev)
+int
+i915_driver_unload(struct drm_device *dev)
 {
 	struct drm_i915_private *dev_priv = dev->dev_private;
 	int ret;
@@ -1539,10 +1546,11 @@ int i915_driver_unload(struct drm_device *dev)
 	mtx_destroy(&dev_priv->rps_lock);
 	free(dev->dev_private, DRM_MEM_DRIVER);
 
-	return 0;
+	return (0);
 }
 
-int i915_driver_open(struct drm_device *dev, struct drm_file *file)
+int
+i915_driver_open(struct drm_device *dev, struct drm_file *file_priv)
 {
 	struct drm_i915_file_private *i915_file_priv;
 
@@ -1551,35 +1559,19 @@ int i915_driver_open(struct drm_device *dev, struct drm_file *file)
 
 	mtx_init(&i915_file_priv->mm.lck, "915fp", NULL, MTX_DEF);
 	INIT_LIST_HEAD(&i915_file_priv->mm.request_list);
-	file->driver_priv = i915_file_priv;
+	file_priv->driver_priv = i915_file_priv;
 
 	drm_gem_names_init(&i915_file_priv->context_idr);
 
-	return 0;
+	return (0);
 }
 
-/**
- * i915_driver_lastclose - clean up after all DRM clients have exited
- * @dev: DRM device
- *
- * Take care of cleaning up after all DRM clients have exited.  In the
- * mode setting case, we want to restore the kernel's initial mode (just
- * in case the last client left us in a bad state).
- *
- * Additionally, in the non-mode setting case, we'll tear down the GTT
- * and DMA structures, since the kernel won't be using them, and clea
- * up any GEM state.
- */
-void i915_driver_lastclose(struct drm_device * dev)
+void
+i915_driver_lastclose(struct drm_device * dev)
 {
 	drm_i915_private_t *dev_priv = dev->dev_private;
 
-	/* On gen6+ we refuse to init without kms enabled, but then the drm core
-	 * goes right around and calls lastclose. Check for this and don't clean
-	 * up anything. */
-	if (!dev_priv)
-		return;
-	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
+	if (!dev_priv || drm_core_check_feature(dev, DRIVER_MODESET)) {
 #if 1
 		KIB_NOTYET();
 #else
@@ -1588,14 +1580,13 @@ void i915_driver_lastclose(struct drm_device * dev)
 #endif
 		return;
 	}
-
 	i915_gem_lastclose(dev);
-
 	i915_dma_cleanup(dev);
 }
 
 void i915_driver_preclose(struct drm_device * dev, struct drm_file *file_priv)
 {
+
 	i915_gem_context_close(dev, file_priv);
 	i915_gem_release(dev, file_priv);
 }

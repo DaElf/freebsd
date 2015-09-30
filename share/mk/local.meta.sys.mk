@@ -7,31 +7,29 @@
 # we need this until there is an alternative
 MK_INSTALL_AS_USER= yes
 
-_default_makeobjdir=$${.CURDIR:S,^$${SRCTOP},$${OBJTOP},}
-
 .if empty(OBJROOT) || ${.MAKE.LEVEL} == 0
-.if defined(MAKEOBJDIRPREFIX)
+.if !make(showconfig)
+.if defined(MAKEOBJDIRPREFIX) && exists(${MAKEOBJDIRPREFIX})
+.warning MAKEOBJDIRPREFIX not supported; setting MAKEOBJDIR...
 # put things approximately where they want
-OBJROOT:=${MAKEOBJDIRPREFIX}${SRCTOP}/
-MAKEOBJDIRPREFIX=
-.export MAKEOBJDIRPREFIX
-.endif
-.if empty(MAKEOBJDIR)
+OBJROOT:=${MAKEOBJDIRPREFIX}${SRCTOP:S,/src,,}/
 # OBJTOP set below
-MAKEOBJDIR=${_default_makeobjdir}
+MAKEOBJDIR=$${.CURDIR:S,$${SRCTOP},$${OBJTOP},}
+MAKEOBJDIRPREFIX=
 # export but do not track
-.export-env MAKEOBJDIR
-# Expand for our own use
-MAKEOBJDIR:= ${MAKEOBJDIR}
+.export-env MAKEOBJDIRPREFIX MAKEOBJDIR
+# now for our own use
+MAKEOBJDIR= ${.CURDIR:S,${SRCTOP},${OBJTOP},}
+.endif
 .endif
 .if !empty(SB)
 SB_OBJROOT ?= ${SB}/obj/
 # this is what we use below
 OBJROOT ?= ${SB_OBJROOT}
 .endif
-OBJROOT ?= /usr/obj${SRCTOP}/
+OBJROOT ?= ${SRCTOP:H}/obj/
 .if ${OBJROOT:M*/} != ""
-OBJROOT:= ${OBJROOT:H:tA}/
+OBJROOT:= ${OBJROOT:tA}/
 .else
 OBJROOT:= ${OBJROOT:H:tA}/${OBJROOT:T}
 .endif
@@ -43,9 +41,8 @@ OBJROOT:= ${OBJROOT:H:tA}/${OBJROOT:T}
 .endif
 
 # from src/Makefile (for universe)
-TARGET_ARCHES_arm?=     arm armeb armv6 armv6hf
-TARGET_ARCHES_arm64?=   aarch64
-TARGET_ARCHES_mips?=    mipsel mips mips64el mips64 mipsn32 mipsn32el
+TARGET_ARCHES_arm?=     arm armeb armv6 armv6eb
+TARGET_ARCHES_mips?=    mipsel mips mips64el mips64 mipsn32
 TARGET_ARCHES_powerpc?= powerpc powerpc64
 TARGET_ARCHES_pc98?=    i386
 
@@ -54,7 +51,7 @@ BOOT_MACHINE_DIR.amd64 = boot/i386
 MACHINE_ARCH.host = ${_HOST_ARCH}
 
 # the list of machines we support
-ALL_MACHINE_LIST?= amd64 arm arm64 i386 ia64 mips pc98 powerpc sparc64
+ALL_MACHINE_LIST?= amd64 arm i386 ia64 mips pc98 powerpc sparc64
 .for m in ${ALL_MACHINE_LIST:O:u}
 MACHINE_ARCH_LIST.$m?= ${TARGET_ARCHES_${m}:U$m}
 MACHINE_ARCH.$m?= ${MACHINE_ARCH_LIST.$m:[1]}
@@ -106,10 +103,10 @@ TARGET_SPEC = ${TARGET_SPEC_VARS:@v@${$v:U}@:ts,}
 TARGET_OBJ_SPEC:= ${TARGET_SPEC:S;,;.;g}
 OBJTOP:= ${OBJROOT}${TARGET_OBJ_SPEC}
 
-.if defined(MAKEOBJDIR)
-.if ${MAKEOBJDIR:M*/*} == ""
-.error Cannot use MAKEOBJDIR=${MAKEOBJDIR}${.newline}Unset MAKEOBJDIR to get default:  MAKEOBJDIR='${_default_makeobjdir}'
-.endif
+.if ${.CURDIR} == ${SRCTOP}
+RELDIR = .
+.elif ${.CURDIR:M${SRCTOP}/*}
+RELDIR := ${.CURDIR:S,${SRCTOP}/,,}
 .endif
 
 HOST_OBJTOP ?= ${OBJROOT}${HOST_TARGET}
@@ -159,7 +156,7 @@ STAGE_SYMLINKS_DIR= ${STAGE_OBJTOP}
 
 LDFLAGS_LAST+= -Wl,-rpath-link -Wl,${STAGE_LIBDIR}
 .if ${MK_SYSROOT} == "yes"
-SYSROOT?= ${STAGE_OBJTOP}
+SYSROOT?= ${STAGE_OBJTOP}/
 .else
 LDFLAGS_LAST+= -L${STAGE_LIBDIR}
 .endif
@@ -186,12 +183,6 @@ UPDATE_DEPENDFILE= NO
 # define the list of places that contain files we are responsible for
 .MAKE.META.BAILIWICK = ${SB} ${OBJROOT} ${STAGE_ROOT}
 
-.if defined(CCACHE_DIR)
-CCACHE_DIR := ${CCACHE_DIR:tA}
-.MAKE.META.IGNORE_PATHS += ${CCACHE_DIR}
-.export CCACHE_DIR
-.endif
-
 CSU_DIR.${MACHINE_ARCH} ?= csu/${MACHINE_ARCH}
 CSU_DIR := ${CSU_DIR.${MACHINE_ARCH}}
 
@@ -208,7 +199,6 @@ TOOLSDIR?= ${HOST_OBJTOP}/tools
 .elif defined(STAGE_HOST_OBJTOP) && exists(${STAGE_HOST_OBJTOP}/usr/bin)
 TOOLSDIR?= ${STAGE_HOST_OBJTOP}
 .endif
-.if !empty(TOOLSDIR)
 .if ${.MAKE.LEVEL} == 0 && exists(${TOOLSDIR}/usr/bin)
 PATH:= ${PATH:S,:, ,g:@d@${exists(${TOOLSDIR}$d):?${TOOLSDIR}$d:}@:ts:}:${PATH}
 .export PATH
@@ -217,7 +207,6 @@ HOST_CC?= ${TOOLSDIR}/usr/bin/cc
 CC?= ${TOOLSDIR}/usr/bin/cc
 CXX?= ${TOOLSDIR}/usr/bin/c++
 .export HOST_CC CC CXX
-.endif
 .endif
 .endif
 

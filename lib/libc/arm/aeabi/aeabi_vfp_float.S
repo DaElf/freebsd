@@ -188,4 +188,3 @@ AEABI_ENTRY(fsub)
 	RET
 AEABI_END(fsub)
 
-	.section .note.GNU-stack,"",%progbits

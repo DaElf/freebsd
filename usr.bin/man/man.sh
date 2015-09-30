@@ -315,11 +315,7 @@ man_display_page() {
 		mandoc_args="-O width=${use_width}"
 	fi
 	testline="mandoc -Tlint -Wunsupp 2>/dev/null"
-	if [ -n "$tflag" ]; then
-		pipeline="mandoc -Tps $mandoc_args"
-	else
-		pipeline="mandoc $mandoc_args | $MANPAGER"
-	fi
+	pipeline="mandoc $mandoc_args | $MANPAGER"
 
 	if ! eval "$cattool $manpage | $testline" ;then
 		if which -s groff; then

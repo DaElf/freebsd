@@ -413,8 +413,8 @@ printtrap(u_int vector, struct trapframe *frame, int isfatal, int user)
 	case EXC_DTMISS:
 		printf("   virtual address = 0x%" PRIxPTR "\n", frame->dar);
 #ifdef AIM
-		printf("   dsisr           = 0x%lx\n",
-		    (u_long)frame->cpu.aim.dsisr);
+		printf("   dsisr           = 0x%" PRIxPTR "\n",
+		    frame->cpu.aim.dsisr);
 #endif
 		break;
 	case EXC_ISE:
@@ -429,7 +429,7 @@ printtrap(u_int vector, struct trapframe *frame, int isfatal, int user)
 			printf("    msssr0         = 0x%lx\n",
 			    (u_long)mfspr(SPR_MSSSR0));
 #elif defined(BOOKE)
-		printf("   mcsr           = 0x%lx\n", (u_long)mfspr(SPR_MCSR));
+		printf("    mcsr           = 0x%lx\n", (u_long)mfspr(SPR_MCSR));
 #endif
 		break;
 	}
@@ -438,7 +438,7 @@ printtrap(u_int vector, struct trapframe *frame, int isfatal, int user)
 	    frame->cpu.booke.esr);
 #endif
 	printf("   srr0            = 0x%" PRIxPTR "\n", frame->srr0);
-	printf("   srr1            = 0x%lx\n", (u_long)frame->srr1);
+	printf("   srr1            = 0x%" PRIxPTR "\n", frame->srr1);
 	printf("   lr              = 0x%" PRIxPTR "\n", frame->lr);
 	printf("   curthread       = %p\n", curthread);
 	if (curthread != NULL)
@@ -704,6 +704,9 @@ trap_pfault(struct trapframe *frame, int user)
 #else
 		if ((eva >> ADDR_SR_SHFT) == (USER_ADDR >> ADDR_SR_SHFT)) {
 #endif
+			if (p->p_vmspace == NULL)
+				return (SIGSEGV);
+
 			map = &p->p_vmspace->vm_map;
 
 #ifdef AIM
@@ -717,11 +720,31 @@ trap_pfault(struct trapframe *frame, int user)
 	}
 	va = trunc_page(eva);
 
-	/* Fault in the page. */
-	rv = vm_fault(map, va, ftype, VM_FAULT_NORMAL);
-	/*
-	 * XXXDTRACE: add dtrace_doubletrap_func here?
-	 */
+	if (map != kernel_map) {
+		/*
+		 * Keep swapout from messing with us during this
+		 *	critical time.
+		 */
+		PROC_LOCK(p);
+		++p->p_lock;
+		PROC_UNLOCK(p);
+
+		/* Fault in the user page: */
+		rv = vm_fault(map, va, ftype, VM_FAULT_NORMAL);
+
+		PROC_LOCK(p);
+		--p->p_lock;
+		PROC_UNLOCK(p);
+		/*
+		 * XXXDTRACE: add dtrace_doubletrap_func here?
+		 */
+	} else {
+		/*
+		 * Don't have to worry about process locking or stacks in the
+		 * kernel.
+		 */
+		rv = vm_fault(map, va, ftype, VM_FAULT_NORMAL);
+	}
 
 	if (rv == KERN_SUCCESS)
 		return (0);
@@ -792,7 +815,7 @@ db_trap_glue(struct trapframe *frame)
 	    && (frame->exc == EXC_TRC || frame->exc == EXC_RUNMODETRC
 #ifdef AIM
 		|| (frame->exc == EXC_PGM
-		    && (frame->srr1 & EXC_PGM_TRAP))
+		    && (frame->srr1 & 0x20000))
 #else
 		|| (frame->exc == EXC_DEBUG)
 #endif
@@ -804,7 +827,7 @@ db_trap_glue(struct trapframe *frame)
 		if (*(uint32_t *)frame->srr0 == EXC_DTRACE)
 			return (0);
 #ifdef AIM
-		if (type == EXC_PGM && (frame->srr1 & EXC_PGM_TRAP)) {
+		if (type == EXC_PGM && (frame->srr1 & 0x20000)) {
 #else
 		if (frame->cpu.booke.esr & ESR_PTR) {
 #endif

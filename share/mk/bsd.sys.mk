@@ -186,6 +186,7 @@ staging stage_libs stage_files stage_as stage_links stage_symlinks:
 .else
 # allow targets like beforeinstall to be leveraged
 DESTDIR= ${STAGE_OBJTOP}
+_SHLIBDIRPREFIX= ${STAGE_OBJTOP}
 
 .if commands(beforeinstall)
 .if !empty(_LIBS) || ${MK_STAGING_PROG} != "no"

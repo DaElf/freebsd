@@ -71,6 +71,7 @@ vm_offset_t ccsrbar_va;
 static int cpu, maxcpu;
 
 static int mpc85xx_probe(platform_t);
+static int mpc85xx_attach(platform_t);
 static void mpc85xx_mem_regions(platform_t, struct mem_region *phys,
     int *physsz, struct mem_region *avail, int *availsz);
 static u_long mpc85xx_timebase_freq(platform_t, struct cpuref *cpuref);
@@ -97,7 +98,11 @@ static platform_method_t mpc85xx_methods[] = {
 	PLATFORMMETHOD_END
 };
 
-DEFINE_CLASS_0(mpc85xx, mpc85xx_platform, mpc85xx_methods, 0);
+static platform_def_t mpc85xx_platform = {
+	"mpc85xx",
+	mpc85xx_methods,
+	0
+};
 
 PLATFORM_DEF(mpc85xx_platform);
 
@@ -112,7 +117,7 @@ mpc85xx_probe(platform_t plat)
 	return (ENXIO);
 }
 
-int
+static int
 mpc85xx_attach(platform_t plat)
 {
 	phandle_t cpus, child, ccsr;

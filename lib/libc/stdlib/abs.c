@@ -36,7 +36,8 @@ __FBSDID("$FreeBSD$");
 #include <stdlib.h>
 
 int
-abs(int j)
+abs(j)
+	int j;
 {
 	return(j < 0 ? -j : j);
 }

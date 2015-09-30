@@ -42,7 +42,9 @@ __FBSDID("$FreeBSD$");
 #include "libc_private.h"
 
 int
-sigvec(int signo, struct sigvec *sv, struct sigvec *osv)
+sigvec(signo, sv, osv)
+	int signo;
+	struct sigvec *sv, *osv;
 {
 	struct sigaction sa, osa;
 	struct sigaction *sap, *osap;
@@ -57,7 +59,7 @@ sigvec(int signo, struct sigvec *sv, struct sigvec *osv)
 	} else
 		sap = NULL;
 	osap = osv != NULL ? &osa : NULL;
-	ret = __libc_sigaction(signo, sap, osap);
+	ret = _sigaction(signo, sap, osap);
 	if (ret == 0 && osv != NULL) {
 		osv->sv_handler = osa.sa_handler;
 		osv->sv_flags = osa.sa_flags ^ SV_INTERRUPT;
@@ -67,28 +69,30 @@ sigvec(int signo, struct sigvec *sv, struct sigvec *osv)
 }
 
 int
-sigsetmask(int mask)
+sigsetmask(mask)
+	int mask;
 {
 	sigset_t set, oset;
 	int n;
 
 	sigemptyset(&set);
 	set.__bits[0] = mask;
-	n = __libc_sigprocmask(SIG_SETMASK, &set, &oset);
+	n = _sigprocmask(SIG_SETMASK, &set, &oset);
 	if (n)
 		return (n);
 	return (oset.__bits[0]);
 }
 
 int
-sigblock(int mask)
+sigblock(mask)
+	int mask;
 {
 	sigset_t set, oset;
 	int n;
 
 	sigemptyset(&set);
 	set.__bits[0] = mask;
-	n = __libc_sigprocmask(SIG_BLOCK, &set, &oset);
+	n = _sigprocmask(SIG_BLOCK, &set, &oset);
 	if (n)
 		return (n);
 	return (oset.__bits[0]);
@@ -101,7 +105,7 @@ sigpause(int mask)
 
 	sigemptyset(&set);
 	set.__bits[0] = mask;
-	return (__libc_sigsuspend(&set));
+	return (_sigsuspend(&set));
 }
 
 int
@@ -109,11 +113,11 @@ xsi_sigpause(int sig)
 {
 	sigset_t set;
 
-	if (__libc_sigprocmask(SIG_BLOCK, NULL, &set) == -1)
+	if (_sigprocmask(SIG_BLOCK, NULL, &set) == -1)
 		return (-1);
 	if (sigdelset(&set, sig) == -1)
 		return (-1);
-	return (__libc_sigsuspend(&set));
+	return (_sigsuspend(&set));
 }
 
 int
@@ -124,7 +128,7 @@ sighold(int sig)
 	sigemptyset(&set);
 	if (sigaddset(&set, sig) == -1)
 		return (-1);
-	return (__libc_sigprocmask(SIG_BLOCK, &set, NULL));
+	return (_sigprocmask(SIG_BLOCK, &set, NULL));
 }
 
 int
@@ -134,7 +138,7 @@ sigignore(int sig)
 
 	bzero(&sa, sizeof(sa));
 	sa.sa_handler = SIG_IGN;
-	return (__libc_sigaction(sig, &sa, NULL));
+	return (_sigaction(sig, &sa, NULL));
 }
 
 int
@@ -145,7 +149,7 @@ sigrelse(int sig)
 	sigemptyset(&set);
 	if (sigaddset(&set, sig) == -1)
 		return (-1);
-	return (__libc_sigprocmask(SIG_UNBLOCK, &set, NULL));
+	return (_sigprocmask(SIG_UNBLOCK, &set, NULL));
 }
 
 void
@@ -157,26 +161,26 @@ void
 	sigemptyset(&set);
 	if (sigaddset(&set, sig) == -1)
 		return (SIG_ERR);
-	if (__libc_sigprocmask(SIG_BLOCK, NULL, &pset) == -1)
+	if (_sigprocmask(SIG_BLOCK, NULL, &pset) == -1)
 		return (SIG_ERR);
 	if ((__sighandler_t *)disp == SIG_HOLD) {
-		if (__libc_sigprocmask(SIG_BLOCK, &set, &pset) == -1)
+		if (_sigprocmask(SIG_BLOCK, &set, &pset) == -1)
 			return (SIG_ERR);
 		if (sigismember(&pset, sig))
 			return (SIG_HOLD);
 		else {
-			if (__libc_sigaction(sig, NULL, &psa) == -1)
+			if (_sigaction(sig, NULL, &psa) == -1)
 				return (SIG_ERR);
 			return (psa.sa_handler);
 		}
 	} else {
-		if (__libc_sigprocmask(SIG_UNBLOCK, &set, &pset) == -1)
+		if (_sigprocmask(SIG_UNBLOCK, &set, &pset) == -1)
 			return (SIG_ERR);
 	}
 
 	bzero(&sa, sizeof(sa));
 	sa.sa_handler = disp;
-	if (__libc_sigaction(sig, &sa, &psa) == -1)
+	if (_sigaction(sig, &sa, &psa) == -1)
 		return (SIG_ERR);
 	if (sigismember(&pset, sig))
 		return (SIG_HOLD);

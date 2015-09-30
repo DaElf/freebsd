@@ -1,7 +1,5 @@
-/*	$OpenBSD: ypcat.c,v 1.16 2015/02/08 23:40:35 deraadt Exp $ */
-
 /*
- * Copyright (c) 1992, 1993, 1996 Theo de Raadt <deraadt@theos.com>
+ * Copyright (c) 1992/3 Theo de Raadt <deraadt@fsa.ca>
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -12,6 +10,9 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
+ * 3. The name of the author may not be used to endorse or promote
+ *    products derived from this software without specific prior written
+ *    permission.
  *
  * THIS SOFTWARE IS PROVIDED BY THE AUTHOR ``AS IS'' AND ANY EXPRESS
  * OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
@@ -34,17 +35,17 @@ __FBSDID("$FreeBSD$");
 #include <sys/types.h>
 #include <sys/socket.h>
 
+#include <rpc/rpc.h>
+#include <rpc/xdr.h>
+#include <rpcsvc/yp_prot.h>
+#include <rpcsvc/ypclnt.h>
+
 #include <ctype.h>
 #include <err.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
-
-#include <rpc/rpc.h>
-#include <rpc/xdr.h>
-#include <rpcsvc/yp.h>
-#include <rpcsvc/ypclnt.h>
 
 static const struct ypalias {
 	char *alias, *name;
@@ -67,14 +68,13 @@ static void
 usage(void)
 {
 	fprintf(stderr, "%s\n%s\n",
-	    "usage: ypcat [-kt] [-d domainname] mapname",
-	    "       ypcat -x");
+		"usage: ypcat [-kt] [-d domainname] mapname",
+		"       ypcat -x");
 	exit(1);
 }
 
 static int
-printit(u_long instatus, char *inkey, int inkeylen, char *inval, int invallen,
-    void *indata)
+printit(unsigned long instatus, char *inkey, int inkeylen, char *inval, int invallen, void *dummy __unused)
 {
 	if (instatus != YP_TRUE)
 		return (instatus);
@@ -87,27 +87,31 @@ printit(u_long instatus, char *inkey, int inkeylen, char *inval, int invallen,
 int
 main(int argc, char *argv[])
 {
-	char *domain = NULL, *inmap;
+	char *domainname = NULL;
 	struct ypall_callback ypcb;
-	int c, notrans, r;
+	char *inmap;
+	int notrans;
+	int c, r;
 	u_int i;
 
 	notrans = key = 0;
+
 	while ((c = getopt(argc, argv, "xd:kt")) != -1)
 		switch (c) {
 		case 'x':
-			for (i = 0; i < nitems(ypaliases); i++)
+			for (i = 0; i<sizeof ypaliases/sizeof ypaliases[0]; i++)
 				printf("Use \"%s\" for \"%s\"\n",
-				    ypaliases[i].alias, ypaliases[i].name);
+					ypaliases[i].alias,
+					ypaliases[i].name);
 			exit(0);
 		case 'd':
-			domain = optarg;
+			domainname = optarg;
 			break;
 		case 't':
-			notrans = 1;
+			notrans++;
 			break;
 		case 'k':
-			key = 1;
+			key++;
 			break;
 		default:
 			usage();
@@ -116,27 +120,24 @@ main(int argc, char *argv[])
 	if (optind + 1 != argc)
 		usage();
 
-	if (domain == NULL)
-		yp_get_default_domain(&domain);
+	if (!domainname)
+		yp_get_default_domain(&domainname);
 
 	inmap = argv[optind];
-	if (notrans == 0) {
-		for (i = 0; i < nitems(ypaliases); i++)
-			if (strcmp(inmap, ypaliases[i].alias) == 0)
-				inmap = ypaliases[i].name;
-	}
+	for (i = 0; (!notrans) && i<sizeof ypaliases/sizeof ypaliases[0]; i++)
+		if (strcmp(inmap, ypaliases[i].alias) == 0)
+			inmap = ypaliases[i].name;
 	ypcb.foreach = printit;
 	ypcb.data = NULL;
 
-	r = yp_all(domain, inmap, &ypcb);
+	r = yp_all(domainname, inmap, &ypcb);
 	switch (r) {
 	case 0:
 		break;
 	case YPERR_YPBIND:
 		errx(1, "not running ypbind");
 	default:
-		errx(1, "no such map %s. Reason: %s",
-		    inmap, yperr_string(r));
+		errx(1, "no such map %s. reason: %s", inmap, yperr_string(r));
 	}
 	exit(0);
 }

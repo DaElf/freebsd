@@ -42,147 +42,168 @@ __FBSDID("$FreeBSD$");
 
 #undef iswalnum
 int
-iswalnum(wint_t wc)
+iswalnum(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_A|_CTYPE_D));
 }
 
 #undef iswalpha
 int
-iswalpha(wint_t wc)
+iswalpha(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_A));
 }
 
 #undef iswascii
 int
-iswascii(wint_t wc)
+iswascii(wc)
+	wint_t wc;
 {
 	return ((wc & ~0x7F) == 0);
 }
 
 #undef iswblank
 int
-iswblank(wint_t wc)
+iswblank(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_B));
 }
 
 #undef iswcntrl
 int
-iswcntrl(wint_t wc)
+iswcntrl(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_C));
 }
 
 #undef iswdigit
 int
-iswdigit(wint_t wc)
+iswdigit(wc)
+	wint_t wc;
 {
 	return (__isctype(wc, _CTYPE_D));
 }
 
 #undef iswgraph
 int
-iswgraph(wint_t wc)
+iswgraph(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_G));
 }
 
 #undef iswhexnumber 
 int
-iswhexnumber(wint_t wc)
+iswhexnumber(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_X));
 }
 
 #undef iswideogram
 int
-iswideogram(wint_t wc)
+iswideogram(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_I));
 }
 
 #undef iswlower
 int
-iswlower(wint_t wc)
+iswlower(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_L));
 }
 
 #undef iswnumber
 int
-iswnumber(wint_t wc)
+iswnumber(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_D));
 }
 
 #undef iswphonogram	
 int
-iswphonogram(wint_t wc)
+iswphonogram(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_Q));
 }
 
 #undef iswprint
 int
-iswprint(wint_t wc)
+iswprint(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_R));
 }
 
 #undef iswpunct
 int
-iswpunct(wint_t wc)
+iswpunct(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_P));
 }
 
 #undef iswrune
 int
-iswrune(wint_t wc)
+iswrune(wc)
+	wint_t wc;
 {
 	return (__istype(wc, 0xFFFFFF00L));
 }
 
 #undef iswspace
 int
-iswspace(wint_t wc)
+iswspace(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_S));
 }
 
 #undef iswspecial
 int
-iswspecial(wint_t wc)
+iswspecial(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_T));
 }
 
 #undef iswupper
 int
-iswupper(wint_t wc)
+iswupper(wc)
+	wint_t wc;
 {
 	return (__istype(wc, _CTYPE_U));
 }
 
 #undef iswxdigit
 int
-iswxdigit(wint_t wc)
+iswxdigit(wc)
+	wint_t wc;
 {
 	return (__isctype(wc, _CTYPE_X));
 }
 
 #undef towlower
 wint_t
-towlower(wint_t wc)
+towlower(wc)
+	wint_t wc;
 {
         return (__tolower(wc));
 }
 
 #undef towupper
 wint_t
-towupper(wint_t wc)
+towupper(wc)
+	wint_t wc;
 {
         return (__toupper(wc));
 }

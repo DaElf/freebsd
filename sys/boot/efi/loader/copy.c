@@ -38,10 +38,10 @@ __FBSDID("$FreeBSD$");
 #include <efilib.h>
 
 #ifndef EFI_STAGING_SIZE
-#define	EFI_STAGING_SIZE	48
+#define	EFI_STAGING_SIZE	32
 #endif
 
-#define	STAGE_PAGES	EFI_SIZE_TO_PAGES((EFI_STAGING_SIZE) * 1024 * 1024)
+#define	STAGE_PAGES	((EFI_STAGING_SIZE) * 1024 * 1024 / 4096)
 
 EFI_PHYSICAL_ADDRESS	staging, staging_end;
 int			stage_offset_set = 0;
@@ -59,7 +59,7 @@ efi_copy_init(void)
 		    (unsigned long)(status & EFI_ERROR_MASK));
 		return (status);
 	}
-	staging_end = staging + STAGE_PAGES * EFI_PAGE_SIZE;
+	staging_end = staging + STAGE_PAGES * 4096;
 
 #if defined(__aarch64__) || defined(__arm__)
 	/*
@@ -132,7 +132,7 @@ efi_copy_finish(void)
 
 	src = (uint64_t *)staging;
 	dst = (uint64_t *)(staging - stage_offset);
-	last = (uint64_t *)staging_end;
+	last = (uint64_t *)(staging + STAGE_PAGES * EFI_PAGE_SIZE);
 
 	while (src < last)
 		*dst++ = *src++;

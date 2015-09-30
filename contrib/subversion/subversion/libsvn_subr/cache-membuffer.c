@@ -101,21 +101,6 @@
  * on their hash key.
  */
 
-/* APR's read-write lock implementation on Windows is horribly inefficient.
- * Even with very low contention a runtime overhead of 35% percent has been
- * measured for 'svn-bench null-export' over ra_serf.
- *
- * Use a simple mutex on Windows.  Because there is one mutex per segment,
- * large machines should (and usually can) be configured with large caches
- * such that read contention is kept low.  This is basically the situation
- * we head before 1.8.
- */
-#ifdef WIN32
-#  define USE_SIMPLE_MUTEX 1
-#else
-#  define USE_SIMPLE_MUTEX 0
-#endif
-
 /* A 16-way associative cache seems to be a good compromise between
  * performance (worst-case lookups) and efficiency-loss due to collisions.
  *
@@ -480,15 +465,11 @@ struct svn_membuffer_t
    * the cache's creator doesn't feel the cache needs to be
    * thread-safe.
    */
-#  if USE_SIMPLE_MUTEX
-  svn_mutex__t *lock;
-#  else
   apr_thread_rwlock_t *lock;
-#  endif
 
   /* If set, write access will wait until they get exclusive access.
    * Otherwise, they will become no-ops if the segment is currently
-   * read-locked.  Only used when LOCK is an r/w lock.
+   * read-locked.
    */
   svn_boolean_t allow_blocking_writes;
 #endif
@@ -508,16 +489,12 @@ static svn_error_t *
 read_lock_cache(svn_membuffer_t *cache)
 {
 #if APR_HAS_THREADS
-#  if USE_SIMPLE_MUTEX
-  return svn_mutex__lock(cache->lock);
-#  else
   if (cache->lock)
   {
     apr_status_t status = apr_thread_rwlock_rdlock(cache->lock);
     if (status)
       return svn_error_wrap_apr(status, _("Can't lock cache mutex"));
   }
-#  endif
 #endif
   return SVN_NO_ERROR;
 }
@@ -528,12 +505,6 @@ static svn_error_t *
 write_lock_cache(svn_membuffer_t *cache, svn_boolean_t *success)
 {
 #if APR_HAS_THREADS
-#  if USE_SIMPLE_MUTEX
-
-  return svn_mutex__lock(cache->lock);
-
-#  else
-
   if (cache->lock)
     {
       apr_status_t status;
@@ -555,8 +526,6 @@ write_lock_cache(svn_membuffer_t *cache, svn_boolean_t *success)
         return svn_error_wrap_apr(status,
                                   _("Can't write-lock cache mutex"));
     }
-
-#  endif
 #endif
   return SVN_NO_ERROR;
 }
@@ -568,18 +537,10 @@ static svn_error_t *
 force_write_lock_cache(svn_membuffer_t *cache)
 {
 #if APR_HAS_THREADS
-#  if USE_SIMPLE_MUTEX
-
-  return svn_mutex__lock(cache->lock);
-
-#  else
-
   apr_status_t status = apr_thread_rwlock_wrlock(cache->lock);
   if (status)
     return svn_error_wrap_apr(status,
                               _("Can't write-lock cache mutex"));
-
-#  endif
 #endif
   return SVN_NO_ERROR;
 }
@@ -591,12 +552,6 @@ static svn_error_t *
 unlock_cache(svn_membuffer_t *cache, svn_error_t *err)
 {
 #if APR_HAS_THREADS
-#  if USE_SIMPLE_MUTEX
-
-  return svn_mutex__unlock(cache->lock, err);
-
-#  else
-
   if (cache->lock)
   {
     apr_status_t status = apr_thread_rwlock_unlock(cache->lock);
@@ -606,8 +561,6 @@ unlock_cache(svn_membuffer_t *cache, svn_error_t *err)
     if (status)
       return svn_error_wrap_apr(status, _("Can't unlock cache mutex"));
   }
-
-#  endif
 #endif
   return err;
 }
@@ -1337,12 +1290,6 @@ svn_cache__membuffer_cache_create(svn_membuffer_t **cache,
        * the cache's creator doesn't feel the cache needs to be
        * thread-safe.
        */
-#  if USE_SIMPLE_MUTEX
-
-      SVN_ERR(svn_mutex__init(&c[seg].lock, thread_safe, pool));
-
-#  else
-
       c[seg].lock = NULL;
       if (thread_safe)
         {
@@ -1351,8 +1298,6 @@ svn_cache__membuffer_cache_create(svn_membuffer_t **cache,
           if (status)
             return svn_error_wrap_apr(status, _("Can't create cache mutex"));
         }
-
-#  endif
 
       /* Select the behavior of write operations.
        */

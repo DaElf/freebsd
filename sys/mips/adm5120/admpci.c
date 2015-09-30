@@ -181,7 +181,7 @@ admpci_attach(device_t dev)
 		panic("bus_space_map failed");
 	}
 
-	device_add_child(dev, "pci", -1);
+	device_add_child(dev, "pci", busno);
 	return (bus_generic_attach(dev));
 }
 

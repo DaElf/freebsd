@@ -1784,5 +1784,3 @@ ENTRY(memcpy)
 	bx	lr
 #endif	/* !_STANDALONE */
 END(memcpy)
-
-	.section .note.GNU-stack,"",%progbits

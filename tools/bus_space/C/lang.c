@@ -227,15 +227,8 @@ busdma_seg_get_size(busdma_seg_t seg)
 }
 
 int
-busdma_sync(busdma_md_t md, int op)
+busdma_sync(busdma_md_t md, int op, bus_addr_t base, bus_size_t size)
 {
 
-	return (bd_sync(md, op, 0UL, ~0UL));
-}
-
-int
-busdma_sync_range(busdma_md_t md, int op, bus_size_t ofs, bus_size_t len)
-{
-
-	return (bd_sync(md, op, ofs, len));
+	return (bd_sync(md, op, base, size));
 }

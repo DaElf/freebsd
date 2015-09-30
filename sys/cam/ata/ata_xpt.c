@@ -1090,8 +1090,7 @@ notsata:
 
 		periph_qual = SID_QUAL(inq_buf);
 
-		if (periph_qual != SID_QUAL_LU_CONNECTED &&
-		    periph_qual != SID_QUAL_LU_OFFLINE)
+		if (periph_qual != SID_QUAL_LU_CONNECTED)
 			break;
 
 		/*

@@ -240,7 +240,7 @@ ofw_pci_attach(device_t dev)
 			return (error);
 	}
 
-	device_add_child(dev, "pci", -1);
+	device_add_child(dev, "pci", device_get_unit(dev));
 	return (bus_generic_attach(dev));
 }
 

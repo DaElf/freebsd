@@ -1,4 +1,6 @@
-/* List definitions. */
+/*
+ * List definitions.
+ */
 #define	ql_head(a_type)							\
 struct {								\
 	a_type *qlh_first;						\

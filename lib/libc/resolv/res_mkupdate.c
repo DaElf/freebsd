@@ -973,7 +973,7 @@ struct valuelist {
 static struct valuelist *servicelist, *protolist;
 
 static void
-res_buildservicelist(void) {
+res_buildservicelist() {
 	struct servent *sp;
 	struct valuelist *slp;
 

@@ -43,7 +43,7 @@ __FBSDID("$FreeBSD$");
 #endif
 
 int
-fdt_flash_fill_slices(device_t dev, struct flash_slice *slices, int *slices_num)
+flash_fill_slices(device_t dev, struct flash_slice *slices, int *slices_num)
 {
 	char *slice_name;
 	phandle_t dt_node, dt_child;

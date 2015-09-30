@@ -4611,7 +4611,7 @@ allocate_tls_offset(Obj_Entry *obj)
 	return true;
     }
 
-    if (tls_last_offset == 0)
+    if (obj->tlsindex == 1)
 	off = calculate_first_tls_offset(obj->tlssize, obj->tlsalign);
     else
 	off = calculate_tls_offset(tls_last_offset, tls_last_size,

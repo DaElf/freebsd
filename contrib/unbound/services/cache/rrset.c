@@ -40,7 +40,7 @@
  */
 #include "config.h"
 #include "services/cache/rrset.h"
-#include "sldns/rrdef.h"
+#include "ldns/rrdef.h"
 #include "util/storage/slabhash.h"
 #include "util/config_file.h"
 #include "util/data/packed_rrset.h"
@@ -304,11 +304,10 @@ rrset_array_unlock_touch(struct rrset_cache* r, struct regional* scratch,
 {
 	hashvalue_t* h;
 	size_t i;
-	if(count > RR_COUNT_MAX || !(h = (hashvalue_t*)regional_alloc(scratch, 
-		sizeof(hashvalue_t)*count))) {
+	if(!(h = (hashvalue_t*)regional_alloc(scratch, 
+		sizeof(hashvalue_t)*count)))
 		log_warn("rrset LRU: memory allocation failed");
-		h = NULL;
-	} else 	/* store hash values */
+	else 	/* store hash values */
 		for(i=0; i<count; i++)
 			h[i] = ref[i].key->entry.hash;
 	/* unlock */

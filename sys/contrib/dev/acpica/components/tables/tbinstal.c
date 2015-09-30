@@ -108,9 +108,9 @@ AcpiTbCompareTables (
  *
  * FUNCTION:    AcpiTbInstallTableWithOverride
  *
- * PARAMETERS:  NewTableDesc            - New table descriptor to install
+ * PARAMETERS:  TableIndex              - Index into root table array
+ *              NewTableDesc            - New table descriptor to install
  *              Override                - Whether override should be performed
- *              TableIndex              - Where the table index is returned
  *
  * RETURN:      None
  *
@@ -123,16 +123,12 @@ AcpiTbCompareTables (
 
 void
 AcpiTbInstallTableWithOverride (
+    UINT32                  TableIndex,
     ACPI_TABLE_DESC         *NewTableDesc,
-    BOOLEAN                 Override,
-    UINT32                  *TableIndex)
+    BOOLEAN                 Override)
 {
-    UINT32                  i;
-    ACPI_STATUS             Status;
 
-
-    Status = AcpiTbGetNextTableDescriptor (&i, NULL);
-    if (ACPI_FAILURE (Status))
+    if (TableIndex >= AcpiGbl_RootTableList.CurrentTableCount)
     {
         return;
     }
@@ -149,18 +145,14 @@ AcpiTbInstallTableWithOverride (
         AcpiTbOverrideTable (NewTableDesc);
     }
 
-    AcpiTbInitTableDescriptor (&AcpiGbl_RootTableList.Tables[i],
+    AcpiTbInitTableDescriptor (&AcpiGbl_RootTableList.Tables[TableIndex],
         NewTableDesc->Address, NewTableDesc->Flags, NewTableDesc->Pointer);
 
     AcpiTbPrintTableHeader (NewTableDesc->Address, NewTableDesc->Pointer);
 
-    /* This synchronizes AcpiGbl_DsdtIndex */
-
-    *TableIndex = i;
-
     /* Set the global integer width (based upon revision of the DSDT) */
 
-    if (i == AcpiGbl_DsdtIndex)
+    if (TableIndex == ACPI_TABLE_INDEX_DSDT)
     {
         AcpiUtSetIntegerWidth (NewTableDesc->Pointer->Revision);
     }
@@ -174,7 +166,7 @@ AcpiTbInstallTableWithOverride (
  * PARAMETERS:  Address                 - Physical address of DSDT or FACS
  *              Signature               - Table signature, NULL if no need to
  *                                        match
- *              TableIndex              - Where the table index is returned
+ *              TableIndex              - Index into root table array
  *
  * RETURN:      Status
  *
@@ -187,7 +179,7 @@ ACPI_STATUS
 AcpiTbInstallFixedTable (
     ACPI_PHYSICAL_ADDRESS   Address,
     char                    *Signature,
-    UINT32                  *TableIndex)
+    UINT32                  TableIndex)
 {
     ACPI_TABLE_DESC         NewTableDesc;
     ACPI_STATUS             Status;
@@ -222,9 +214,7 @@ AcpiTbInstallFixedTable (
         goto ReleaseAndExit;
     }
 
-    /* Add the table to the global root table list */
-
-    AcpiTbInstallTableWithOverride (&NewTableDesc, TRUE, TableIndex);
+    AcpiTbInstallTableWithOverride (TableIndex, &NewTableDesc, TRUE);
 
 ReleaseAndExit:
 
@@ -385,7 +375,14 @@ AcpiTbInstallStandardTable (
 
     /* Add the table to the global root table list */
 
-    AcpiTbInstallTableWithOverride (&NewTableDesc, Override, TableIndex);
+    Status = AcpiTbGetNextTableDescriptor (&i, NULL);
+    if (ACPI_FAILURE (Status))
+    {
+        goto ReleaseAndExit;
+    }
+
+    *TableIndex = i;
+    AcpiTbInstallTableWithOverride (i, &NewTableDesc, Override);
 
 ReleaseAndExit:
 

@@ -181,5 +181,3 @@ ENTRY(memcmp)
 	RET
 #endif
 END(memcmp)
-
-	.section .note.GNU-stack,"",%progbits

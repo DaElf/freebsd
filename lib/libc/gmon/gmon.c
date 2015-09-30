@@ -68,10 +68,11 @@ static int	s_scale;
 
 void	moncontrol(int);
 static int hertz(void);
-void	_mcleanup(void);
 
 void
-monstartup(u_long lowpc, u_long highpc)
+monstartup(lowpc, highpc)
+	u_long lowpc;
+	u_long highpc;
 {
 	int o;
 	char *cp;
@@ -217,7 +218,8 @@ _mcleanup(void)
  *	all the data structures are ready.
  */
 void
-moncontrol(int mode)
+moncontrol(mode)
+	int mode;
 {
 	struct gmonparam *p = &_gmonparam;
 
@@ -237,7 +239,7 @@ moncontrol(int mode)
  * if something goes wrong, we return 0, an impossible hertz.
  */
 static int
-hertz(void)
+hertz()
 {
 	struct itimerval tim;
 

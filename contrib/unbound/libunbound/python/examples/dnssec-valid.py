@@ -32,7 +32,6 @@
  ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE
  POSSIBILITY OF SUCH DAMAGE.
 '''
-from __future__ import print_function
 import os
 from unbound import ub_ctx,RR_TYPE_A,RR_CLASS_IN
 
@@ -49,7 +48,7 @@ if os.path.isfile("keys"):
 status, result = ctx.resolve("www.nic.cz", RR_TYPE_A, RR_CLASS_IN)
 if status == 0 and result.havedata:
 
-    print("Result:", sorted(result.data.address_list))
+    print("Result:", result.data.address_list)
 
     if result.secure:
         print("Result is secure")

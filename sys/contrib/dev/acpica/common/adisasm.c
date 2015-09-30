@@ -133,7 +133,7 @@ AcpiDsMethodDataInitArgs (
 
 
 static ACPI_TABLE_DESC      LocalTables[1];
-static ACPI_PARSE_OBJECT    *AcpiGbl_ParseOpRoot;
+ACPI_PARSE_OBJECT    *AcpiGbl_ParseOpRoot;
 
 
 /*******************************************************************************
@@ -187,6 +187,7 @@ AdInitialize (
     AcpiGbl_RootTableList.CurrentTableCount = 0;
     AcpiGbl_RootTableList.Tables = LocalTables;
 
+    AcpiGbl_PreviousOp = NULL;
     return (Status);
 }
 
@@ -316,7 +317,7 @@ AdAmlDisassemble (
             return (Status);
         }
 
-        if (!AcpiGbl_DmOpt_Disasm)
+        if (!AcpiGbl_DbOpt_Disasm)
         {
             return (AE_OK);
         }
@@ -505,7 +506,7 @@ AdAmlDisassemble (
 
         /* Optional displays */
 
-        if (AcpiGbl_DmOpt_Disasm)
+        if (AcpiGbl_DbOpt_Disasm)
         {
             /* This is the real disassembly */
 
@@ -741,7 +742,7 @@ AdDisplayTables (
         return (AE_NOT_EXIST);
     }
 
-    if (!AcpiGbl_DmOpt_Listing)
+    if (!AcpiGbl_DbOpt_Verbose)
     {
         AdCreateTableHeader (Filename, Table);
     }
@@ -749,7 +750,7 @@ AdDisplayTables (
     AcpiDmDisassemble (NULL, AcpiGbl_ParseOpRoot, ACPI_UINT32_MAX);
     MpEmitMappingInfo ();
 
-    if (AcpiGbl_DmOpt_Listing)
+    if (AcpiGbl_DbOpt_Verbose)
     {
         AcpiOsPrintf ("\n\nTable Header:\n");
         AcpiUtDebugDumpBuffer ((UINT8 *) Table, sizeof (ACPI_TABLE_HEADER),

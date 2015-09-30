@@ -1,4 +1,4 @@
-/*	$OpenBSD: socks.c,v 1.21 2015/03/26 21:19:51 tobias Exp $	*/
+/*	$OpenBSD: socks.c,v 1.20 2012/03/08 09:56:28 espie Exp $	*/
 
 /*
  * Copyright (c) 1999 Niklas Hallqvist.  All rights reserved.
@@ -308,8 +308,8 @@ socks_connect(const char *host, const char *port,
 		}
 
 		/* Terminate headers */
-		if ((cnt = atomicio(vwrite, proxyfd, "\r\n", 2)) != 2)
-			err(1, "write failed (%zu/2)", cnt);
+		if ((r = atomicio(vwrite, proxyfd, "\r\n", 2)) != 2)
+			err(1, "write failed (2/%d)", r);
 
 		/* Read status reply */
 		proxy_read_line(proxyfd, buf, sizeof(buf));

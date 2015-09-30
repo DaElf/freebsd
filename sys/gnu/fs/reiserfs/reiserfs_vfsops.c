@@ -960,8 +960,8 @@ uint32_t find_hash_out(struct reiserfs_mount *rmp)
 		    key.on_disk_key.k_objectid, key.on_disk_key.k_dir_id);
 		retval = search_by_entry_key(sbi, &key, &path, &de);
 		if (retval == IO_ERROR) {
-			hash = UNSET_HASH;
-			break;
+			pathrelse(&path);
+			return (UNSET_HASH);
 		}
 		if (retval == NAME_NOT_FOUND)
 			de.de_entry_num--;
@@ -1022,7 +1022,6 @@ uint32_t find_hash_out(struct reiserfs_mount *rmp)
 		}
 	} while (0);
 
-	free(ip, M_REISERFSNODE);
 	pathrelse(&path);
 	return (hash);
 }

@@ -68,8 +68,6 @@
 	
 	.file		"crtn.asm"
 
-	.section .note.GNU-stack,"",%progbits
-
 	.section	".init"
 	;;
 	FUNC_END

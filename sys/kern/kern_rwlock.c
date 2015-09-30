@@ -268,7 +268,7 @@ _rw_wlock_cookie(volatile uintptr_t *c, const char *file, int line)
 	__rw_wlock(rw, curthread, file, line);
 	LOCK_LOG_LOCK("WLOCK", &rw->lock_object, 0, rw->rw_recurse, file, line);
 	WITNESS_LOCK(&rw->lock_object, LOP_EXCLUSIVE, file, line);
-	TD_LOCKS_INC(curthread);
+	curthread->td_locks++;
 }
 
 int
@@ -303,7 +303,7 @@ __rw_try_wlock(volatile uintptr_t *c, const char *file, int line)
 		if (!rw_recursed(rw))
 			LOCKSTAT_PROFILE_OBTAIN_RWLOCK_SUCCESS(rw__acquire,
 			    rw, 0, 0, file, line, LOCKSTAT_WRITER);
-		TD_LOCKS_INC(curthread);
+		curthread->td_locks++;
 	}
 	return (rval);
 }
@@ -325,9 +325,8 @@ _rw_wunlock_cookie(volatile uintptr_t *c, const char *file, int line)
 	LOCK_LOG_LOCK("WUNLOCK", &rw->lock_object, 0, rw->rw_recurse, file,
 	    line);
 	__rw_wunlock(rw, curthread, file, line);
-	TD_LOCKS_DEC(curthread);
+	curthread->td_locks--;
 }
-
 /*
  * Determines whether a new reader can acquire a lock.  Succeeds if the
  * reader already owns a read lock and the lock is locked for read to
@@ -566,7 +565,7 @@ __rw_rlock(volatile uintptr_t *c, const char *file, int line)
 	    waittime, file, line, LOCKSTAT_READER);
 	LOCK_LOG_LOCK("RLOCK", &rw->lock_object, 0, 0, file, line);
 	WITNESS_LOCK(&rw->lock_object, 0, file, line);
-	TD_LOCKS_INC(curthread);
+	curthread->td_locks++;
 	curthread->td_rw_rlocks++;
 }
 
@@ -597,7 +596,7 @@ __rw_try_rlock(volatile uintptr_t *c, const char *file, int line)
 			WITNESS_LOCK(&rw->lock_object, LOP_TRYLOCK, file, line);
 			LOCKSTAT_PROFILE_OBTAIN_RWLOCK_SUCCESS(rw__acquire,
 			    rw, 0, 0, file, line, LOCKSTAT_READER);
-			TD_LOCKS_INC(curthread);
+			curthread->td_locks++;
 			curthread->td_rw_rlocks++;
 			return (1);
 		}
@@ -715,7 +714,7 @@ _rw_runlock_cookie(volatile uintptr_t *c, const char *file, int line)
 		break;
 	}
 	LOCKSTAT_PROFILE_RELEASE_RWLOCK(rw__release, rw, LOCKSTAT_READER);
-	TD_LOCKS_DEC(curthread);
+	curthread->td_locks--;
 	curthread->td_rw_rlocks--;
 }
 

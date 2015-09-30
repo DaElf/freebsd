@@ -10,9 +10,6 @@ __<bsd.files.mk>__:
 FILESGROUPS?=	FILES
 
 .for group in ${FILESGROUPS}
-# Add in foo.yes and remove duplicates from all the groups
-${${group}}:= ${${group}} ${${group}.yes}
-${${group}}:= ${${group}:O:u}
 buildfiles: ${${group}}
 .endfor
 
@@ -47,12 +44,10 @@ ${group}NAME_${file:T}?=	${${group}NAME}
 ${group}NAME_${file:T}?=	${file:T}
 .endif
 .if !make(buildincludes)
-STAGE_AS_SETS+=	${file:T}
+STAGE_AS_SETS+=	${group}
 .endif
 STAGE_AS_${file:T}= ${${group}NAME_${file:T}}
-# XXX {group}OWN,GRP,MODE
-STAGE_DIR.${file:T}= ${STAGE_OBJTOP}${${group}DIR_${file:T}}
-stage_as.${file:T}: ${file}
+stage_as.${group}: ${file}
 
 installfiles-${group}: _${group}INS_${file:T}
 _${group}INS_${file:T}: ${file}

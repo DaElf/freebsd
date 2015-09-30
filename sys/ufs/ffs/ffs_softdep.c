@@ -923,7 +923,8 @@ static	int journal_unsuspend(struct ufsmount *ump);
 static	void softdep_prelink(struct vnode *, struct vnode *);
 static	void add_to_journal(struct worklist *);
 static	void remove_from_journal(struct worklist *);
-static	bool softdep_excess_items(struct ufsmount *, int);
+static	bool softdep_excess_inodes(struct ufsmount *);
+static	bool softdep_excess_dirrem(struct ufsmount *);
 static	void softdep_process_journal(struct mount *, struct worklist *, int);
 static	struct jremref *newjremref(struct dirrem *, struct inode *,
 	    struct inode *ip, off_t, nlink_t);
@@ -2211,7 +2212,7 @@ inodedep_lookup(mp, inum, flags, inodedeppp)
 	 * responsible for more than our share of that usage and
 	 * we are not in a rush, request some inodedep cleanup.
 	 */
-	if (softdep_excess_items(ump, D_INODEDEP))
+	if (softdep_excess_inodes(ump))
 		schedule_cleanup(mp);
 	else
 		FREE_LOCK(ump);
@@ -2306,12 +2307,7 @@ newblk_lookup(mp, newblkno, flags, newblkpp)
 		return (1);
 	if ((flags & DEPALLOC) == 0)
 		return (0);
-	if (softdep_excess_items(ump, D_NEWBLK) ||
-	    softdep_excess_items(ump, D_ALLOCDIRECT) ||
-	    softdep_excess_items(ump, D_ALLOCINDIR))
-		schedule_cleanup(mp);
-	else
-		FREE_LOCK(ump);
+	FREE_LOCK(ump);
 	newblk = malloc(sizeof(union allblk), M_NEWBLK,
 	    M_SOFTDEP_FLAGS | M_ZERO);
 	workitem_alloc(&newblk->nb_list, D_NEWBLK, mp);
@@ -2410,11 +2406,7 @@ softdep_initialize()
 {
 
 	TAILQ_INIT(&softdepmounts);
-#ifdef __LP64__
 	max_softdeps = desiredvnodes * 4;
-#else
-	max_softdeps = desiredvnodes * 2;
-#endif
 
 	/* initialise bioops hack */
 	bioops.io_start = softdep_disk_io_initiation;
@@ -9114,7 +9106,7 @@ newdirrem(bp, dp, ip, isrmdir, prevdirremp)
 	 * the number of freefile and freeblks structures.
 	 */
 	ACQUIRE_LOCK(ip->i_ump);
-	if (!IS_SNAPSHOT(ip) && softdep_excess_items(ip->i_ump, D_DIRREM))
+	if (!IS_SNAPSHOT(ip) && softdep_excess_dirrem(ip->i_ump))
 		schedule_cleanup(ITOV(dp)->v_mount);
 	else
 		FREE_LOCK(ip->i_ump);
@@ -13252,12 +13244,20 @@ retry:
 }
 
 static bool
-softdep_excess_items(struct ufsmount *ump, int item)
+softdep_excess_inodes(struct ufsmount *ump)
 {
 
-	KASSERT(item >= 0 && item < D_LAST, ("item %d", item));
-	return (dep_current[item] > max_softdeps &&
-	    ump->softdep_curdeps[item] > max_softdeps /
+	return (dep_current[D_INODEDEP] > max_softdeps &&
+	    ump->softdep_curdeps[D_INODEDEP] > max_softdeps /
+	    stat_flush_threads);
+}
+
+static bool
+softdep_excess_dirrem(struct ufsmount *ump)
+{
+
+	return (dep_current[D_DIRREM] > max_softdeps / 2 &&
+	    ump->softdep_curdeps[D_DIRREM] > (max_softdeps / 2) /
 	    stat_flush_threads);
 }
 
@@ -13313,25 +13313,15 @@ softdep_ast_cleanup_proc(void)
 		for (;;) {
 			req = false;
 			ACQUIRE_LOCK(ump);
-			if (softdep_excess_items(ump, D_INODEDEP)) {
+			if (softdep_excess_inodes(ump)) {
 				req = true;
 				request_cleanup(mp, FLUSH_INODES);
 			}
-			if (softdep_excess_items(ump, D_DIRREM)) {
+			if (softdep_excess_dirrem(ump)) {
 				req = true;
 				request_cleanup(mp, FLUSH_BLOCKS);
 			}
 			FREE_LOCK(ump);
-			if (softdep_excess_items(ump, D_NEWBLK) ||
-			    softdep_excess_items(ump, D_ALLOCDIRECT) ||
-			    softdep_excess_items(ump, D_ALLOCINDIR)) {
-				error = vn_start_write(NULL, &mp, V_WAIT);
-				if (error == 0) {
-					req = true;
-					VFS_SYNC(mp, MNT_WAIT);
-					vn_finished_write(mp);
-				}
-			}
 			if ((td->td_pflags & TDP_KTHREAD) != 0 || !req)
 				break;
 		}

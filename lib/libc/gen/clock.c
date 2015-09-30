@@ -45,7 +45,7 @@ __FBSDID("$FreeBSD$");
 			 + (r).tv_usec / (1000000 / CLOCKS_PER_SEC))
 
 clock_t
-clock(void)
+clock()
 {
 	struct rusage ru;
 

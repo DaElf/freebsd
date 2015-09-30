@@ -44,7 +44,9 @@ __FBSDID("$FreeBSD$");
 #include "un-namespace.h"
 
 void
-psignal(unsigned int sig, const char *s)
+psignal(sig, s)
+	unsigned int sig;
+	const char *s;
 {
 	const char *c;
 

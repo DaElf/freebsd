@@ -40,7 +40,8 @@ __FBSDID("$FreeBSD$");
 #include <unistd.h>
 
 unsigned int
-alarm(unsigned int secs)
+alarm(secs)
+	unsigned int secs;
 {
 	struct itimerval it, oitv;
 	struct itimerval *itp = &it;

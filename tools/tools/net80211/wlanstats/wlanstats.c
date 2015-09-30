@@ -32,25 +32,23 @@
 /*
  * net80211 statistics class.
  */
-
-#include <sys/param.h>
+#include <sys/types.h>
 #include <sys/file.h>
 #include <sys/sockio.h>
 #include <sys/socket.h>
-
 #include <net/if.h>
 #include <net/if_dl.h>
 #include <net/if_media.h>
 #include <net/if_var.h>
 #include <net/ethernet.h>
 
-#include <err.h>
-#include <ifaddrs.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <string.h>
 #include <unistd.h>
+#include <err.h>
+#include <ifaddrs.h>
 
 #include "../../../../sys/net80211/ieee80211_ioctl.h"
 
@@ -560,6 +558,7 @@ wlan_update_tot(struct bsdstat *sf)
 void
 setreason(char b[], size_t bs, int v)
 {
+#define	N(a)	(sizeof(a)/sizeof(a[0]))
     static const char *reasons[] = {
 	[IEEE80211_REASON_UNSPECIFIED]		= "unspecified",
 	[IEEE80211_REASON_AUTH_EXPIRE]		= "auth expire",
@@ -585,15 +584,17 @@ setreason(char b[], size_t bs, int v)
 	[IEEE80211_REASON_802_1X_AUTH_FAILED]	= "802.1x auth failed",
 	[IEEE80211_REASON_CIPHER_SUITE_REJECTED]= "cipher suite rejected",
     };
-    if (v < nitems(reasons) && reasons[v] != NULL)
+    if (v < N(reasons) && reasons[v] != NULL)
 	    snprintf(b, bs, "%s (%u)", reasons[v], v);
     else
 	    snprintf(b, bs, "%u", v);
+#undef N
 }
 
 void
 setstatus(char b[], size_t bs, int v)
 {
+#define	N(a)	(sizeof(a)/sizeof(a[0]))
     static const char *status[] = {
 	[IEEE80211_STATUS_SUCCESS]		= "success",
 	[IEEE80211_STATUS_UNSPECIFIED]		= "unspecified",
@@ -622,10 +623,11 @@ setstatus(char b[], size_t bs, int v)
 	[IEEE80211_STATUS_INVALID_RSN_IE_CAP]	= "invalid rsn ie cap",
 	[IEEE80211_STATUS_CIPHER_SUITE_REJECTED]= "cipher suite rejected",
     };
-    if (v < nitems(status) && status[v] != NULL)
+    if (v < N(status) && status[v] != NULL)
 	    snprintf(b, bs, "%s (%u)", status[v], v);
     else
 	    snprintf(b, bs, "%u", v);
+#undef N
 }
 
 static int
@@ -997,12 +999,12 @@ BSDSTAT_DEFINE_BOUNCE(wlanstatfoo)
 struct wlanstatfoo *
 wlanstats_new(const char *ifname, const char *fmtstring)
 {
+#define	N(a)	(sizeof(a) / sizeof(a[0]))
 	struct wlanstatfoo_p *wf;
 
 	wf = calloc(1, sizeof(struct wlanstatfoo_p));
 	if (wf != NULL) {
-		bsdstat_init(&wf->base.base, "wlanstats", wlanstats,
-		    nitems(wlanstats));
+		bsdstat_init(&wf->base.base, "wlanstats", wlanstats, N(wlanstats));
 		/* override base methods */
 		wf->base.base.collect_cur = wlan_collect_cur;
 		wf->base.base.collect_tot = wlan_collect_tot;
@@ -1028,4 +1030,5 @@ wlanstats_new(const char *ifname, const char *fmtstring)
 		wf->base.setfmt(&wf->base, fmtstring);
 	}
 	return &wf->base;
+#undef N
 }

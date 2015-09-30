@@ -68,7 +68,6 @@ __FBSDID("$FreeBSD$");
 #include <resolv.h>
 #include <ctype.h>
 #include <syslog.h>
-#include "netdb_private.h"
 
 typedef union {
 	int32_t al;

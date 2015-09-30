@@ -124,7 +124,6 @@ g_dev_fini(struct g_class *mp)
 {
 
 	freeenv(dumpdev);
-	dumpdev = NULL;
 }
 
 static int
@@ -153,16 +152,10 @@ g_dev_setdumpdev(struct cdev *dev, struct thread *td)
 static void
 init_dumpdev(struct cdev *dev)
 {
-	const char *devprefix = "/dev/", *devname;
-	size_t len;
 
 	if (dumpdev == NULL)
 		return;
-	len = strlen(devprefix);
-	devname = devtoname(dev);
-	if (strcmp(devname, dumpdev) != 0 &&
-	   (strncmp(dumpdev, devprefix, len) != 0 ||
-	    strcmp(devname, dumpdev + len) != 0))
+	if (strcmp(devtoname(dev), dumpdev) != 0)
 		return;
 	if (g_dev_setdumpdev(dev, curthread) == 0) {
 		freeenv(dumpdev);
@@ -365,13 +358,6 @@ g_dev_open(struct cdev *dev, int flags, int fmt, struct thread *td)
 #else
 	e = 0;
 #endif
-
-	/*
-	 * This happens on attempt to open a device node with O_EXEC.
-	 */
-	if (r + w + e == 0)
-		return (EINVAL);
-
 	if (w) {
 		/*
 		 * When running in very secure mode, do not allow
@@ -415,20 +401,6 @@ g_dev_close(struct cdev *dev, int flags, int fmt, struct thread *td)
 #else
 	e = 0;
 #endif
-
-	/*
-	 * The vgonel(9) - caused by eg. forced unmount of devfs - calls
-	 * VOP_CLOSE(9) on devfs vnode without any FREAD or FWRITE flags,
-	 * which would result in zero deltas, which in turn would cause
-	 * panic in g_access(9).
-	 *
-	 * Note that we cannot zero the counters (ie. do "r = cp->acr"
-	 * etc) instead, because the consumer might be opened in another
-	 * devfs instance.
-	 */
-	if (r + w + e == 0)
-		return (EINVAL);
-
 	sc = cp->private;
 	mtx_lock(&sc->sc_mtx);
 	sc->sc_open += r + w + e;

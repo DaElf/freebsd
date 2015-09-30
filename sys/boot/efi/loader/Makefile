@@ -12,6 +12,7 @@ MK_SSP=		no
 PROG=		loader.sym
 INTERNALPROG=
 
+.PATH: ${.CURDIR}/../../efi/loader
 # architecture-specific loader code
 SRCS=	autoload.c \
 	bootinfo.c \
@@ -72,13 +73,13 @@ CFLAGS+=	-DEFI_STAGING_SIZE=${EFI_STAGING_SIZE}
 .include	"${.CURDIR}/../../common/Makefile.inc"
 CFLAGS+=	-I${.CURDIR}/../../common
 
-FILES+=	loader.efi
+FILES=	loader.efi
 FILESMODE_loader.efi=	${BINMODE}
 
 LDSCRIPT=	${.CURDIR}/arch/${MACHINE}/ldscript.${MACHINE}
 LDFLAGS+=	-Wl,-T${LDSCRIPT} -Wl,-Bsymbolic -shared
 
-CLEANFILES+=	vers.c loader.efi
+CLEANFILES=	vers.c loader.efi
 
 NEWVERSWHAT=	"EFI loader" ${MACHINE}
 
@@ -96,7 +97,7 @@ EFI_TARGET=	efi-app-ia32
 EFI_TARGET=	binary
 .endif
 
-loader.efi: ${PROG}
+loader.efi: loader.sym
 	if [ `${OBJDUMP} -t ${.ALLSRC} | fgrep '*UND*' | wc -l` != 0 ]; then \
 		${OBJDUMP} -t ${.ALLSRC} | fgrep '*UND*'; \
 		exit 1; \

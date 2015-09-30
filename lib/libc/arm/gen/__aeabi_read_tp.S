@@ -45,4 +45,3 @@ END(__aeabi_read_tp)
 	.word ARM_TP_ADDRESS
 #endif
 
-	.section .note.GNU-stack,"",%progbits

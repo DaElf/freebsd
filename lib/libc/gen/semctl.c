@@ -39,7 +39,6 @@ __FBSDID("$FreeBSD$");
 
 int	__semctl(int semid, int semnum, int cmd, union semun *arg);
 int	freebsd7___semctl(int semid, int semnum, int cmd, union semun_old *arg);
-int	freebsd7_semctl(int semid, int semnum, int cmd, ...);
 
 int
 semctl(int semid, int semnum, int cmd, ...)

@@ -46,10 +46,10 @@
 #include <contrib/dev/acpica/include/acdebug.h>
 #include <contrib/dev/acpica/include/acnamesp.h>
 
+#ifdef ACPI_DEBUGGER
 
 #define _COMPONENT          ACPI_CA_DEBUGGER
         ACPI_MODULE_NAME    ("dbstats")
-
 
 /* Local prototypes */
 
@@ -127,8 +127,7 @@ AcpiDbListInfo (
     if (List->MaxDepth > 0)
     {
         AcpiOsPrintf (
-            "    Cache: [Depth    MaxD Avail  Size]                "
-            "%8.2X %8.2X %8.2X %8.2X\n",
+            "    Cache: [Depth    MaxD Avail  Size]                %8.2X %8.2X %8.2X %8.2X\n",
             List->CurrentDepth,
             List->MaxDepth,
             List->MaxDepth - List->CurrentDepth,
@@ -139,8 +138,7 @@ AcpiDbListInfo (
     if (List->MaxDepth > 0)
     {
         AcpiOsPrintf (
-            "    Cache: [Requests Hits Misses ObjSize]             "
-            "%8.2X %8.2X %8.2X %8.2X\n",
+            "    Cache: [Requests Hits Misses ObjSize]             %8.2X %8.2X %8.2X %8.2X\n",
             List->Requests,
             List->Hits,
             List->Requests - List->Hits,
@@ -152,8 +150,7 @@ AcpiDbListInfo (
     if (List->ObjectSize)
     {
         AcpiOsPrintf (
-            "    Mem:   [Alloc    Free Max    CurSize Outstanding] "
-            "%8.2X %8.2X %8.2X %8.2X %8.2X\n",
+            "    Mem:   [Alloc    Free Max    CurSize Outstanding] %8.2X %8.2X %8.2X %8.2X %8.2X\n",
             List->TotalAllocated,
             List->TotalFreed,
             List->MaxOccupied,
@@ -163,8 +160,7 @@ AcpiDbListInfo (
     else
     {
         AcpiOsPrintf (
-            "    Mem:   [Alloc Free Max CurSize Outstanding Total] "
-            "%8.2X %8.2X %8.2X %8.2X %8.2X %8.2X\n",
+            "    Mem:   [Alloc Free Max CurSize Outstanding Total] %8.2X %8.2X %8.2X %8.2X %8.2X %8.2X\n",
             List->TotalAllocated,
             List->TotalFreed,
             List->MaxOccupied,
@@ -378,7 +374,7 @@ AcpiDbCountNamespaceObjects (
     }
 
     (void) AcpiNsWalkNamespace (ACPI_TYPE_ANY, ACPI_ROOT_OBJECT,
-        ACPI_UINT32_MAX, FALSE, AcpiDbClassifyOneObject, NULL, NULL, NULL);
+                ACPI_UINT32_MAX, FALSE, AcpiDbClassifyOneObject, NULL, NULL, NULL);
 }
 
 
@@ -536,8 +532,7 @@ AcpiDbDisplayStatistics (
     case CMD_STAT_STACK:
 #if defined(ACPI_DEBUG_OUTPUT)
 
-        Temp = (UINT32) ACPI_PTR_DIFF (
-            AcpiGbl_EntryStackPointer, AcpiGbl_LowestStackPointer);
+        Temp = (UINT32) ACPI_PTR_DIFF (AcpiGbl_EntryStackPointer, AcpiGbl_LowestStackPointer);
 
         AcpiOsPrintf ("\nSubsystem Stack Usage:\n\n");
         AcpiOsPrintf ("Entry Stack Pointer          %p\n", AcpiGbl_EntryStackPointer);
@@ -555,3 +550,5 @@ AcpiDbDisplayStatistics (
     AcpiOsPrintf ("\n");
     return (AE_OK);
 }
+
+#endif /* ACPI_DEBUGGER  */

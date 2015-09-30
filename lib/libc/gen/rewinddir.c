@@ -45,7 +45,8 @@ __FBSDID("$FreeBSD$");
 #include "telldir.h"
 
 void
-rewinddir(DIR *dirp)
+rewinddir(dirp)
+	DIR *dirp;
 {
 
 	if (__isthreaded)

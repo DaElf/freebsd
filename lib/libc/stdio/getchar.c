@@ -49,7 +49,7 @@ __FBSDID("$FreeBSD$");
 #undef getchar_unlocked
 
 int
-getchar(void)
+getchar()
 {
 	int retval;
 	FLOCKFILE(stdin);

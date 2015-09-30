@@ -33,7 +33,9 @@ __FBSDID("$FreeBSD$");
 #include <sys/ipc.h>
 
 key_t
-ftok(const char *path, int id)
+ftok(path, id)
+	const char *path;
+	int id;
 {
 	struct stat st;
 

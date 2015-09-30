@@ -517,14 +517,14 @@ image_copyout_memory(int fd, size_t size, void *ptr)
 	return (0);
 }
 
-int
-image_copyout_zeroes(int fd, size_t count)
+static int
+image_copyout_zeroes(int fd, size_t size)
 {
 	static uint8_t *zeroes = NULL;
 	size_t sz;
 	int error;
 
-	if (lseek(fd, (off_t)count, SEEK_CUR) != -1)
+	if (lseek(fd, (off_t)size, SEEK_CUR) != -1)
 		return (0);
 
 	/*
@@ -537,12 +537,12 @@ image_copyout_zeroes(int fd, size_t count)
 			return (ENOMEM);
 	}
 
-	while (count > 0) {
-		sz = (count > secsz) ? secsz : count;
+	while (size > 0) {
+		sz = (size > secsz) ? secsz : size;
 		error = image_copyout_memory(fd, sz, zeroes);
 		if (error)
 			return (error);
-		count -= sz;
+		size -= sz;
 	}
 	return (0);
 }

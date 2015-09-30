@@ -90,11 +90,11 @@ struct cache_entry {
 static struct cache_entry *authdes_cache/* [AUTHDES_CACHESZ] */;
 static short *authdes_lru/* [AUTHDES_CACHESZ] */;
 
-static void cache_init(void);	/* initialize the cache */
-static short cache_spot(des_block *, char *, struct timeval *); /* find an entry in the cache */
-static void cache_ref(short sid);	/* note that sid was ref'd */
+static void cache_init();	/* initialize the cache */
+static short cache_spot();	/* find an entry in the cache */
+static void cache_ref(/*short sid*/);	/* note that sid was ref'd */
 
-static void invalidate(char *);	/* invalidate entry in cache */
+static void invalidate();	/* invalidate entry in cache */
 
 /*
  * cache statistics 
@@ -109,7 +109,9 @@ static struct {
  * Service side authenticator for AUTH_DES
  */
 enum auth_stat
-_svcauth_des(struct svc_req *rqst, struct rpc_msg *msg)
+_svcauth_des(rqst, msg)
+	struct svc_req *rqst;
+	struct rpc_msg *msg;
 {
 
 	long *ixdr;
@@ -353,7 +355,7 @@ _svcauth_des(struct svc_req *rqst, struct rpc_msg *msg)
  * Initialize the cache
  */
 static void
-cache_init(void)
+cache_init()
 {
 	int i;
 
@@ -376,7 +378,7 @@ cache_init(void)
  * Find the lru victim
  */
 static short
-cache_victim(void)
+cache_victim()
 {
 	return (authdes_lru[AUTHDES_CACHESZ-1]);
 }
@@ -385,7 +387,8 @@ cache_victim(void)
  * Note that sid was referenced
  */
 static void
-cache_ref(short sid)
+cache_ref(sid)
+	short sid;
 {
 	int i;
 	short curr;
@@ -407,7 +410,10 @@ cache_ref(short sid)
  * return the spot in the cache.
  */
 static short
-cache_spot(des_block *key, char *name, struct timeval *timestamp)
+cache_spot(key, name, timestamp)
+	des_block *key;
+	char *name;
+	struct timeval *timestamp;
 {
 	struct cache_entry *cp;
 	int i;
@@ -455,8 +461,12 @@ struct bsdcred {
  * the credential.
  */
 int
-authdes_getucred(struct authdes_cred *adc, uid_t *uid, gid_t *gid,
-    int *grouplen, gid_t *groups)
+authdes_getucred(adc, uid, gid, grouplen, groups)
+	struct authdes_cred *adc;
+	uid_t *uid;
+	gid_t *gid;
+	int *grouplen;
+	gid_t *groups;
 {
 	unsigned sid;
 	int i;
@@ -515,7 +525,8 @@ authdes_getucred(struct authdes_cred *adc, uid_t *uid, gid_t *gid,
 }
 
 static void
-invalidate(char *cred)
+invalidate(cred)
+	char *cred;
 {
 	if (cred == NULL) {
 		return;

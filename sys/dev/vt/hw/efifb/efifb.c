@@ -51,6 +51,7 @@ __FBSDID("$FreeBSD$");
 
 static vd_init_t vt_efifb_init;
 static vd_probe_t vt_efifb_probe;
+static void vt_efifb_remap(void *efifb_data);
 
 static struct vt_driver vt_efifb_driver = {
 	.vd_name = "efifb",
@@ -69,6 +70,8 @@ static struct vt_driver vt_efifb_driver = {
 
 static struct fb_info local_info;
 VT_DRIVER_DECLARE(vt_efifb, vt_efifb_driver);
+
+SYSINIT(efifb_remap, SI_SUB_KMEM, SI_ORDER_ANY, vt_efifb_remap, &local_info);
 
 static int
 vt_efifb_probe(struct vt_device *vd)
@@ -96,6 +99,7 @@ vt_efifb_probe(struct vt_device *vd)
 static int
 vt_efifb_init(struct vt_device *vd)
 {
+	int		depth, d;
 	struct fb_info	*info;
 	struct efi_fb	*efifb;
 	caddr_t		kmdp;
@@ -115,13 +119,16 @@ vt_efifb_init(struct vt_device *vd)
 	info->fb_height = efifb->fb_height;
 	info->fb_width = efifb->fb_width;
 
-	info->fb_depth = fls(efifb->fb_mask_red | efifb->fb_mask_green |
-	    efifb->fb_mask_blue | efifb->fb_mask_reserved);
-	/* Round to a multiple of the bits in a byte. */
-	info->fb_bpp = (info->fb_depth + NBBY - 1) & ~(NBBY - 1);
+	depth = fls(efifb->fb_mask_red);
+	d = fls(efifb->fb_mask_green);
+	depth = d > depth ? d : depth;
+	d = fls(efifb->fb_mask_blue);
+	depth = d > depth ? d : depth;
+	d = fls(efifb->fb_mask_reserved);
+	depth = d > depth ? d : depth;
+	info->fb_depth = depth;
 
-	/* Stride in bytes, not pixels */
-	info->fb_stride = efifb->fb_stride * (info->fb_bpp / NBBY);
+	info->fb_stride = efifb->fb_stride * (depth / 8);
 
 	vt_generate_cons_palette(info->fb_cmap, COLOR_FORMAT_RGB,
 	    efifb->fb_mask_red, ffs(efifb->fb_mask_red) - 1,
@@ -130,10 +137,42 @@ vt_efifb_init(struct vt_device *vd)
 
 	info->fb_size = info->fb_height * info->fb_stride;
 	info->fb_pbase = efifb->fb_addr;
-	info->fb_vbase = (intptr_t)pmap_mapdev_attr(info->fb_pbase,
-	    info->fb_size, VM_MEMATTR_WRITE_COMBINING);
+	/*
+	 * Use the direct map as a crutch until pmap is available. Once pmap
+	 * is online, the framebuffer will be remapped by vt_efifb_remap()
+	 * using pmap_mapdev_attr().
+	 */
+	info->fb_vbase = PHYS_TO_DMAP(efifb->fb_addr);
+
+	/* Get pixel storage size. */
+	info->fb_bpp = info->fb_stride / info->fb_width * 8;
+
+	/*
+	 * Early FB driver work with static window buffer, so reduce to minimal
+	 * size, buffer or screen.
+	 */
+	info->fb_width = MIN(info->fb_width, VT_FB_DEFAULT_WIDTH);
+	info->fb_height = MIN(info->fb_height, VT_FB_DEFAULT_HEIGHT);
 
 	vt_fb_init(vd);
 
 	return (CN_INTERNAL);
+}
+
+static void
+vt_efifb_remap(void *xinfo)
+{
+	struct fb_info *info = xinfo;
+
+	if (info->fb_pbase == 0)
+		return;
+
+	/*
+	 * Remap as write-combining. This massively improves performance and
+	 * happens very early in kernel initialization, when everything is
+	 * still single-threaded and interrupts are off, so replacing the
+	 * mapping address is safe.
+	 */
+	info->fb_vbase = (intptr_t)pmap_mapdev_attr(info->fb_pbase,
+	    info->fb_size, VM_MEMATTR_WRITE_COMBINING);
 }

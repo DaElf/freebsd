@@ -158,7 +158,6 @@ SUBDIR=	\
 	${_iir} \
 	imgact_binmisc \
 	${_io} \
-	${_ioat} \
         ${_ipoib} \
 	${_ipdivert} \
 	${_ipfilter} \
@@ -175,8 +174,6 @@ SUBDIR=	\
 	${_ispfw} \
 	${_iwi} \
 	${_iwifw} \
-	${_iwm} \
-	${_iwmfw} \
 	${_iwn} \
 	${_iwnfw} \
 	${_ix} \
@@ -270,9 +267,6 @@ SUBDIR=	\
 	${_nxge} \
 	${_opensolaris} \
 	oce \
-	otus \
-	otusfw \
-	ow \
 	${_padlock} \
 	${_padlock_rng} \
 	patm \
@@ -300,9 +294,6 @@ SUBDIR=	\
 	${_qlxgbe} \
 	ral \
 	${_ralfw} \
-	${_random_fortuna} \
-	${_random_yarrow} \
-	${_random_other} \
 	rc4 \
 	${_rdma} \
 	${_rdrand_rng} \
@@ -405,9 +396,6 @@ _autofs=	autofs
 .if exists(${.CURDIR}/../opencrypto)
 _crypto=	crypto
 _cryptodev=	cryptodev
-_random_fortuna=random_fortuna
-_random_yarrow=	random_yarrow
-_random_other=	random_other
 .endif
 .endif
 
@@ -587,18 +575,20 @@ _ida=		ida
 _iir=		iir
 _ipmi=		ipmi
 _ips=		ips
-_isci=		isci
 _ipw=		ipw
-_iwi=		iwi
-_iwm=		iwm
-_iwn=		iwn
-_ixgb=		ixgb
 .if ${MK_SOURCELESS_UCODE} != "no"
 _ipwfw=		ipwfw
+.endif
+_isci=		isci
+_iwi=		iwi
+.if ${MK_SOURCELESS_UCODE} != "no"
 _iwifw=		iwifw
-_iwmfw=		iwmfw
+.endif
+_iwn=		iwn
+.if ${MK_SOURCELESS_UCODE} != "no"
 _iwnfw=		iwnfw
 .endif
+_ixgb=		ixgb
 .if ${MK_OFED} != "no" || defined(ALL_MODULES)
 _mlx4=		mlx4
 _mlx4ib=	mlx4ib
@@ -634,7 +624,6 @@ _x86bios=	x86bios
 
 .if ${MACHINE_CPUARCH} == "amd64"
 _cloudabi64=	cloudabi64
-_ioat=		ioat
 _ixl=		ixl
 _ixlv=		ixlv
 _linux64=	linux64

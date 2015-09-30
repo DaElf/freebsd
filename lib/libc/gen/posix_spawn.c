@@ -118,18 +118,15 @@ process_spawnattr(const posix_spawnattr_t sa)
 			return (errno);
 	}
 
-	/*
-	 * Set signal masks/defaults.
-	 * Use unwrapped syscall, libthr is in undefined state after vfork().
-	 */
+	/* Set signal masks/defaults */
 	if (sa->sa_flags & POSIX_SPAWN_SETSIGMASK) {
-		__sys_sigprocmask(SIG_SETMASK, &sa->sa_sigmask, NULL);
+		_sigprocmask(SIG_SETMASK, &sa->sa_sigmask, NULL);
 	}
 
 	if (sa->sa_flags & POSIX_SPAWN_SETSIGDEF) {
 		for (i = 1; i <= _SIG_MAXSIG; i++) {
 			if (sigismember(&sa->sa_sigdefault, i))
-				if (__sys_sigaction(i, &sigact, NULL) != 0)
+				if (_sigaction(i, &sigact, NULL) != 0)
 					return (errno);
 		}
 	}

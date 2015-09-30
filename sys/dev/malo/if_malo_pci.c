@@ -131,6 +131,7 @@ static int	malo_pci_detach(device_t);
 static int
 malo_pci_probe(device_t dev)
 {
+#define N(a)	(sizeof(a) / sizeof((a)[0]))
 	struct malo_product *mp;
 	uint16_t vendor, devid;
 	int i;
@@ -139,7 +140,7 @@ malo_pci_probe(device_t dev)
 	devid = pci_get_device(dev);
 	mp = malo_products;
 
-	for (i = 0; i < nitems(malo_products); i++, mp++) {
+	for (i = 0; i < N(malo_products); i++, mp++) {
 		if (vendor == mp->mp_vendorid && devid == mp->mp_deviceid) {
 			device_set_desc(dev, mp->mp_name);
 			return (BUS_PROBE_DEFAULT);
@@ -147,6 +148,7 @@ malo_pci_probe(device_t dev)
 	}
 
 	return (ENXIO);
+#undef N
 }
 
 static int

@@ -84,5 +84,3 @@ ENTRY(ffs)
 	RET
 #endif
 END(ffs)
-
-	.section .note.GNU-stack,"",%progbits

@@ -29,14 +29,12 @@
  * $FreeBSD$
  */
 
-#include <sys/param.h>
-
-#include <err.h>
-#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <signal.h>
 #include <strings.h>
 #include <unistd.h>
+#include <err.h>
 
 #include "npestats.h"
 
@@ -52,11 +50,13 @@ static struct {
 static const char *
 getfmt(const char *tag)
 {
+#define	N(a)	(sizeof(a)/sizeof(a[0]))
 	int i;
-	for (i = 0; i < nitems(tags); i++)
+	for (i = 0; i < N(tags); i++)
 		if (strcasecmp(tags[i].tag, tag) == 0)
 			return tags[i].fmt;
 	return tag;
+#undef N
 }
 
 static int signalled;

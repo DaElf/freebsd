@@ -31,7 +31,6 @@ __FBSDID("$FreeBSD$");
 #include <sys/filedesc.h>
 #include <sys/imgact.h>
 #include <sys/lock.h>
-#include <sys/module.h>
 #include <sys/mutex.h>
 #include <sys/proc.h>
 #include <sys/signalvar.h>
@@ -46,19 +45,14 @@ cloudabi_sys_proc_exec(struct thread *td,
     struct cloudabi_sys_proc_exec_args *uap)
 {
 	struct image_args args;
-	struct vmspace *oldvmspace;
 	int error;
 
-	error = pre_execve(td, &oldvmspace);
-	if (error != 0)
-		return (error);
 	error = exec_copyin_data_fds(td, &args, uap->data, uap->datalen,
 	    uap->fds, uap->fdslen);
 	if (error == 0) {
 		args.fd = uap->fd;
 		error = kern_execve(td, &args, NULL);
 	}
-	post_execve(td, error, oldvmspace);
 	return (error);
 }
 
@@ -79,7 +73,7 @@ cloudabi_sys_proc_fork(struct thread *td,
 	struct proc *p2;
 	int error, fd;
 
-	cap_rights_init(&fcaps.fc_rights, CAP_FSTAT, CAP_EVENT);
+	cap_rights_init(&fcaps.fc_rights, CAP_FSTAT, CAP_PDWAIT);
 	error = fork1(td, RFFDG | RFPROC | RFPROCDESC, 0, &p2, &fd, 0, &fcaps);
 	if (error != 0)
 		return (error);
@@ -139,5 +133,3 @@ cloudabi_sys_proc_raise(struct thread *td,
 	PROC_UNLOCK(p);
 	return (0);
 }
-
-MODULE_VERSION(cloudabi, 1);

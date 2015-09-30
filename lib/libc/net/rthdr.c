@@ -47,7 +47,8 @@ __FBSDID("$FreeBSD$");
  */
 
 size_t
-inet6_rthdr_space(int type, int seg)
+inet6_rthdr_space(type, seg)
+	int type, seg;
 {
 	switch (type) {
 	case IPV6_RTHDR_TYPE_0:
@@ -66,7 +67,9 @@ inet6_rthdr_space(int type, int seg)
 }
 
 struct cmsghdr *
-inet6_rthdr_init(void *bp, int type)
+inet6_rthdr_init(bp, type)
+	void *bp;
+	int type;
 {
 	struct cmsghdr *ch = (struct cmsghdr *)bp;
 	struct ip6_rthdr *rthdr;
@@ -95,7 +98,10 @@ inet6_rthdr_init(void *bp, int type)
 
 /* ARGSUSED */
 int
-inet6_rthdr_add(struct cmsghdr *cmsg, const struct in6_addr *addr, u_int flags)
+inet6_rthdr_add(cmsg, addr, flags)
+	struct cmsghdr *cmsg;
+	const struct in6_addr *addr;
+	u_int flags;
 {
 	struct ip6_rthdr *rthdr;
 
@@ -137,7 +143,9 @@ inet6_rthdr_add(struct cmsghdr *cmsg, const struct in6_addr *addr, u_int flags)
 
 /* ARGSUSED */
 int
-inet6_rthdr_lasthop(struct cmsghdr *cmsg, unsigned int flags)
+inet6_rthdr_lasthop(cmsg, flags)
+	struct cmsghdr *cmsg;
+	unsigned int flags;
 {
 	struct ip6_rthdr *rthdr;
 
@@ -175,7 +183,9 @@ inet6_rthdr_lasthop(struct cmsghdr *cmsg, unsigned int flags)
 
 #if 0
 int
-inet6_rthdr_reverse(const struct cmsghdr *in, struct cmsghdr *out)
+inet6_rthdr_reverse(in, out)
+	const struct cmsghdr *in;
+	struct cmsghdr *out;
 {
 
 	return (-1);
@@ -183,7 +193,8 @@ inet6_rthdr_reverse(const struct cmsghdr *in, struct cmsghdr *out)
 #endif
 
 int
-inet6_rthdr_segments(const struct cmsghdr *cmsg)
+inet6_rthdr_segments(cmsg)
+	const struct cmsghdr *cmsg;
 {
 	struct ip6_rthdr *rthdr;
 
@@ -206,7 +217,9 @@ inet6_rthdr_segments(const struct cmsghdr *cmsg)
 }
 
 struct in6_addr *
-inet6_rthdr_getaddr(struct cmsghdr *cmsg, int idx)
+inet6_rthdr_getaddr(cmsg, idx)
+	struct cmsghdr *cmsg;
+	int idx;
 {
 	struct ip6_rthdr *rthdr;
 
@@ -236,7 +249,9 @@ inet6_rthdr_getaddr(struct cmsghdr *cmsg, int idx)
 }
 
 int
-inet6_rthdr_getflags(const struct cmsghdr *cmsg, int idx)
+inet6_rthdr_getflags(cmsg, idx)
+	const struct cmsghdr *cmsg;
+	int idx;
 {
 	struct ip6_rthdr *rthdr;
 

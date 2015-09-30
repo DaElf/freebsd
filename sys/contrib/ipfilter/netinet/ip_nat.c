@@ -8075,13 +8075,13 @@ ipf_nat_rehash(softc, t, p)
 	 * the outbound lookup table and the hash chain length for each.
 	 */
 	KMALLOCS(newtab[0], nat_t **, newsize * sizeof(nat_t *));
-	if (newtab[0] == NULL) {
+	if (newtab == NULL) {
 		error = 60063;
 		goto badrehash;
 	}
 
 	KMALLOCS(newtab[1], nat_t **, newsize * sizeof(nat_t *));
-	if (newtab[1] == NULL) {
+	if (newtab == NULL) {
 		error = 60064;
 		goto badrehash;
 	}

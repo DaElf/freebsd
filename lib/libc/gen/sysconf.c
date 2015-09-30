@@ -69,7 +69,8 @@ __FBSDID("$FreeBSD$");
  * less useful than returning up-to-date values, however.
  */
 long
-sysconf(int name)
+sysconf(name)
+	int name;
 {
 	struct rlimit rl;
 	size_t len;

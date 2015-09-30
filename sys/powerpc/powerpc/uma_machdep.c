@@ -53,7 +53,6 @@ void *
 uma_small_alloc(uma_zone_t zone, vm_size_t bytes, u_int8_t *flags, int wait)
 {
 	void *va;
-	vm_paddr_t pa;
 	vm_page_t m;
 	int pflags;
 	
@@ -70,13 +69,7 @@ uma_small_alloc(uma_zone_t zone, vm_size_t bytes, u_int8_t *flags, int wait)
 			break;
 	}
 
-	pa = VM_PAGE_TO_PHYS(m);
-
-	/* On book-e sizeof(void *) < sizeof(vm_paddr_t) */
-	if ((vm_offset_t)pa != pa)
-		return (NULL);
-
-	va = (void *)(vm_offset_t)pa;
+	va = (void *) VM_PAGE_TO_PHYS(m);
 
 	if (!hw_direct_map)
 		pmap_kenter((vm_offset_t)va, VM_PAGE_TO_PHYS(m));

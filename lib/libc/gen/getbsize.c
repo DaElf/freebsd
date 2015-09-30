@@ -39,7 +39,9 @@ __FBSDID("$FreeBSD$");
 #include <string.h>
 
 char *
-getbsize(int *headerlenp, long *blocksizep)
+getbsize(headerlenp, blocksizep)
+	int *headerlenp;
+	long *blocksizep;
 {
 	static char header[20];
 	long n, max, mul, blocksize;

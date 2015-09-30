@@ -25,13 +25,8 @@
  *
  * $FreeBSD$
  */
-
-#include <sys/types.h>
-#include <sys/sysctl.h>
-
-#include <err.h>
 #include <stdio.h>
-
+#include <sys/types.h>
 #include "../../../sys/dev/ubsec/ubsecvar.h"
 
 /*
@@ -44,7 +39,7 @@ main(int argc, char *argv[])
 	size_t slen;
 
 	slen = sizeof (stats);
-	if (sysctlbyname("hw.ubsec.stats", &stats, &slen, NULL, 0) < 0)
+	if (sysctlbyname("hw.ubsec.stats", &stats, &slen, NULL, NULL) < 0)
 		err(1, "kern.ubsec_stats");
 
 	printf("input %llu bytes %u packets\n",

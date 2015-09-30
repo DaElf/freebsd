@@ -53,7 +53,9 @@ __FBSDID("$FreeBSD$");
 #include "un-namespace.h"
 
 int
-getrpcport(char *host, int prognum, int versnum, int proto)
+getrpcport(host, prognum, versnum, proto)
+	char *host;
+	int prognum, versnum, proto;
 {
 	struct sockaddr_in addr;
 	struct hostent *hp;

@@ -88,8 +88,14 @@ static bool_t rpc_wrap_bcast(char *, struct netbuf *, struct netconfig *);
  * A common clnt create routine
  */
 static CLIENT *
-clnt_com_create(struct sockaddr_in *raddr, rpcprog_t prog, rpcvers_t vers, int *sockp,
-    u_int sendsz, u_int recvsz, char *tp)
+clnt_com_create(raddr, prog, vers, sockp, sendsz, recvsz, tp)
+	struct sockaddr_in *raddr;
+	rpcprog_t prog;
+	rpcvers_t vers;
+	int *sockp;
+	u_int sendsz;
+	u_int recvsz;
+	char *tp;
 {
 	CLIENT *cl;
 	int madefd = FALSE;
@@ -158,8 +164,14 @@ err:	if (madefd == TRUE)
 }
 
 CLIENT *
-clntudp_bufcreate(struct sockaddr_in *raddr, u_long prog, u_long vers,
-    struct timeval wait, int *sockp, u_int sendsz, u_int recvsz)
+clntudp_bufcreate(raddr, prog, vers, wait, sockp, sendsz, recvsz)
+	struct sockaddr_in *raddr;
+	u_long prog;
+	u_long vers;
+	struct timeval wait;
+	int *sockp;
+	u_int sendsz;
+	u_int recvsz;
 {
 	CLIENT *cl;
 
@@ -173,8 +185,12 @@ clntudp_bufcreate(struct sockaddr_in *raddr, u_long prog, u_long vers,
 }
 
 CLIENT *
-clntudp_create(struct sockaddr_in *raddr, u_long program, u_long version,
-    struct timeval wait, int *sockp)
+clntudp_create(raddr, program, version, wait, sockp)
+	struct sockaddr_in *raddr;
+	u_long program;
+	u_long version;
+	struct timeval wait;
+	int *sockp;
 {
 
 	return clntudp_bufcreate(raddr, program, version, wait, sockp,
@@ -182,8 +198,13 @@ clntudp_create(struct sockaddr_in *raddr, u_long program, u_long version,
 }
 
 CLIENT *
-clnttcp_create(struct sockaddr_in *raddr, u_long prog, u_long vers, int *sockp,
-    u_int sendsz, u_int recvsz)
+clnttcp_create(raddr, prog, vers, sockp, sendsz, recvsz)
+	struct sockaddr_in *raddr;
+	u_long prog;
+	u_long vers;
+	int *sockp;
+	u_int sendsz;
+	u_int recvsz;
 {
 
 	return clnt_com_create(raddr, (rpcprog_t)prog, (rpcvers_t)vers, sockp,
@@ -191,7 +212,9 @@ clnttcp_create(struct sockaddr_in *raddr, u_long prog, u_long vers, int *sockp,
 }
 
 CLIENT *
-clntraw_create(u_long prog, u_long vers)
+clntraw_create(prog, vers)
+	u_long prog;
+	u_long vers;
 {
 
 	return clnt_raw_create((rpcprog_t)prog, (rpcvers_t)vers);
@@ -201,7 +224,11 @@ clntraw_create(u_long prog, u_long vers)
  * A common server create routine
  */
 static SVCXPRT *
-svc_com_create(int fd, u_int sendsize, u_int recvsize, char *netid)
+svc_com_create(fd, sendsize, recvsize, netid)
+	int fd;
+	u_int sendsize;
+	u_int recvsize;
+	char *netid;
 {
 	struct netconfig *nconf;
 	SVCXPRT *svc;
@@ -241,21 +268,29 @@ svc_com_create(int fd, u_int sendsize, u_int recvsize, char *netid)
 }
 
 SVCXPRT *
-svctcp_create(int fd, u_int sendsize, u_int recvsize)
+svctcp_create(fd, sendsize, recvsize)
+	int fd;
+	u_int sendsize;
+	u_int recvsize;
 {
 
 	return svc_com_create(fd, sendsize, recvsize, "tcp");
 }
 
 SVCXPRT *
-svcudp_bufcreate(int fd, u_int sendsz, u_int recvsz)
+svcudp_bufcreate(fd, sendsz, recvsz)
+	int fd;
+	u_int sendsz, recvsz;
 {
 
 	return svc_com_create(fd, sendsz, recvsz, "udp");
 }
 
 SVCXPRT *
-svcfd_create(int fd, u_int sendsize, u_int recvsize)
+svcfd_create(fd, sendsize, recvsize)
+	int fd;
+	u_int sendsize;
+	u_int recvsize;
 {
 
 	return svc_fd_create(fd, sendsize, recvsize);
@@ -263,21 +298,23 @@ svcfd_create(int fd, u_int sendsize, u_int recvsize)
 
 
 SVCXPRT *
-svcudp_create(int fd)
+svcudp_create(fd)
+	int fd;
 {
 
 	return svc_com_create(fd, UDPMSGSIZE, UDPMSGSIZE, "udp");
 }
 
 SVCXPRT *
-svcraw_create(void)
+svcraw_create()
 {
 
 	return svc_raw_create();
 }
 
 int
-get_myaddress(struct sockaddr_in *addr)
+get_myaddress(addr)
+	struct sockaddr_in *addr;
 {
 
 	memset((void *) addr, 0, sizeof(*addr));
@@ -291,8 +328,11 @@ get_myaddress(struct sockaddr_in *addr)
  * For connectionless "udp" transport. Obsoleted by rpc_call().
  */
 int
-callrpc(const char *host, int prognum, int versnum, int procnum,
-    xdrproc_t inproc, void *in, xdrproc_t outproc, void *out)
+callrpc(host, prognum, versnum, procnum, inproc, in, outproc, out)
+	const char *host;
+	int prognum, versnum, procnum;
+	xdrproc_t inproc, outproc;
+	void *in, *out;
 {
 
 	return (int)rpc_call(host, (rpcprog_t)prognum, (rpcvers_t)versnum,
@@ -303,9 +343,10 @@ callrpc(const char *host, int prognum, int versnum, int procnum,
  * For connectionless kind of transport. Obsoleted by rpc_reg()
  */
 int
-registerrpc(int prognum, int versnum, int procnum,
-    char *(*progname)(char [UDPMSGSIZE]),
-    xdrproc_t inproc, xdrproc_t outproc)
+registerrpc(prognum, versnum, procnum, progname, inproc, outproc)
+	int prognum, versnum, procnum;
+	char *(*progname)(char [UDPMSGSIZE]);
+	xdrproc_t inproc, outproc;
 {
 
 	return rpc_reg((rpcprog_t)prognum, (rpcvers_t)versnum,
@@ -333,12 +374,10 @@ clnt_broadcast_key_init(void)
  */
 /* ARGSUSED */
 static bool_t
-rpc_wrap_bcast(char *resultp, struct netbuf *addr, struct netconfig *nconf)
-/*
- *	char *resultp;		// results of the call
- *	struct netbuf *addr;	// address of the guy who responded
- *	struct netconfig *nconf; // Netconf of the transport
- */
+rpc_wrap_bcast(resultp, addr, nconf)
+	char *resultp;		/* results of the call */
+	struct netbuf *addr;	/* address of the guy who responded */
+	struct netconfig *nconf; /* Netconf of the transport */
 {
 	resultproc_t clnt_broadcast_result;
 
@@ -356,18 +395,15 @@ rpc_wrap_bcast(char *resultp, struct netbuf *addr, struct netconfig *nconf)
  * Broadcasts on UDP transport. Obsoleted by rpc_broadcast().
  */
 enum clnt_stat
-clnt_broadcast(u_long prog, u_long vers, u_long proc, xdrproc_t xargs,
-    void *argsp, xdrproc_t xresults, void *resultsp, resultproc_t eachresult)
-/*
- *	u_long		prog;		// program number
- *	u_long		vers;		// version number
- *	u_long		proc;		// procedure number
- *	xdrproc_t	xargs;		// xdr routine for args
- *	void	       *argsp;		// pointer to args
- *	xdrproc_t	xresults;	// xdr routine for results
- *	void	       *resultsp;	// pointer to results
- *	resultproc_t	eachresult;	// call with each result obtained
- */
+clnt_broadcast(prog, vers, proc, xargs, argsp, xresults, resultsp, eachresult)
+	u_long		prog;		/* program number */
+	u_long		vers;		/* version number */
+	u_long		proc;		/* procedure number */
+	xdrproc_t	xargs;		/* xdr routine for args */
+	void	       *argsp;		/* pointer to args */
+	xdrproc_t	xresults;	/* xdr routine for results */
+	void	       *resultsp;	/* pointer to results */
+	resultproc_t	eachresult;	/* call with each result obtained */
 {
 
 	if (thr_main())
@@ -386,14 +422,11 @@ clnt_broadcast(u_long prog, u_long vers, u_long proc, xdrproc_t xargs,
  * authdes_seccreate().
  */
 AUTH *
-authdes_create(char *servername, u_int window, struct sockaddr *syncaddr,
-    des_block *ckey)
-/*
- *	char *servername;		// network name of server
- *	u_int window;			// time to live
- *	struct sockaddr *syncaddr;	// optional hostaddr to sync with
- *	des_block *ckey;		// optional conversation key to use
- */
+authdes_create(servername, window, syncaddr, ckey)
+	char *servername;		/* network name of server */
+	u_int window;			/* time to live */
+	struct sockaddr *syncaddr;	/* optional hostaddr to sync with */
+	des_block *ckey;		/* optional conversation key to use */
 {
 	AUTH *dummy;
 	AUTH *nauth;
@@ -420,8 +453,13 @@ fallback:
  * Create a client handle for a unix connection. Obsoleted by clnt_vc_create()
  */
 CLIENT *
-clntunix_create(struct sockaddr_un *raddr, u_long prog, u_long vers, int *sockp,
-    u_int sendsz, u_int recvsz)
+clntunix_create(raddr, prog, vers, sockp, sendsz, recvsz)
+	struct sockaddr_un *raddr;
+	u_long prog;
+	u_long vers;
+	int *sockp;
+	u_int sendsz;
+	u_int recvsz;
 {
 	struct netbuf *svcaddr;
 	CLIENT *cl;
@@ -466,7 +504,11 @@ done:
  * Obsoleted by svc_vc_create().
  */
 SVCXPRT *
-svcunix_create(int sock, u_int sendsize, u_int recvsize, char *path)
+svcunix_create(sock, sendsize, recvsize, path)
+	int sock;
+	u_int sendsize;
+	u_int recvsize;
+	char *path;
 {
 	struct netconfig *nconf;
 	void *localhandle;
@@ -526,7 +568,10 @@ done:
  * descriptor as its first input. Obsoleted by svc_fd_create();
  */
 SVCXPRT *
-svcunixfd_create(int fd, u_int sendsize, u_int recvsize)
+svcunixfd_create(fd, sendsize, recvsize)
+	int fd;
+	u_int sendsize;
+	u_int recvsize;
 {
  	return (svc_fd_create(fd, sendsize, recvsize));
 }

@@ -102,7 +102,10 @@ static int	_local_initshells(void *, void *, va_list);
 
 /*ARGSUSED*/
 static int
-_local_initshells(void	*rv, void *cb_data, va_list ap)
+_local_initshells(rv, cb_data, ap)
+	void	*rv;
+	void	*cb_data;
+	va_list	 ap;
 {
 	char	*sp, *cp;
 	FILE	*fp;
@@ -136,7 +139,10 @@ static int	_dns_initshells(void *, void *, va_list);
 
 /*ARGSUSED*/
 static int
-_dns_initshells(void *rv, void *cb_data, va_list ap)
+_dns_initshells(rv, cb_data, ap)
+	void	*rv;
+	void	*cb_data;
+	va_list	 ap;
 {
 	char	  shellname[] = "shells-XXXXX";
 	int	  hsindex, hpi, r;
@@ -177,7 +183,10 @@ static int	_nis_initshells(void *, void *, va_list);
 
 /*ARGSUSED*/
 static int
-_nis_initshells(void *rv, void *cb_data, va_list ap)
+_nis_initshells(rv, cb_data, ap)
+	void	*rv;
+	void	*cb_data;
+	va_list	 ap;
 {
 	static char *ypdomain;
 	char	*key, *data;
@@ -230,7 +239,7 @@ _nis_initshells(void *rv, void *cb_data, va_list ap)
 #endif /* YP */
 
 static const char *const *
-initshells(void)
+initshells()
 {
 	static const ns_dtab dtab[] = {
 		NS_FILES_CB(_local_initshells, NULL)

@@ -1,7 +1,4 @@
 /* $FreeBSD$ */
-
-#include <sys/param.h>
-
 #include <stdio.h>
 #include <string.h>
 
@@ -22,6 +19,8 @@ static struct {
 	{ "sched", sched, 1 },
 	{ "yield", yield, 1 },
 };
+
+#define N(T) (sizeof (T)/ sizeof(T[0]))
 
 static int usage(int argc, char *argv[])
 {
@@ -48,14 +47,14 @@ int main(int argc, char *argv[])
 			" (my notes say \"because things detach\");\n"
 			"meanwhile do these individual tests and look"
 			" for a non-zero exit code:\n");
-		for (i = 0; i < nitems(tab); i++)
+		for (i = 0; i < N(tab); i++)
 			if (tab[i].works)
 				fprintf(stderr, "p1003_1b %s\n", tab[i].t);
 		return -1;
 #else
 		{
 			int r;
-			for (i = 0; i < nitems(tab); i++) {
+			for (i = 0; i < N(tab); i++) {
 				if (tab[i].works) {
 					if ( (r =
 					(*tab[i].f)(argc - 1, argv + 1)) ) {
@@ -71,7 +70,7 @@ int main(int argc, char *argv[])
 	}
 	
 	if (argc > 1) {
-		for (i = 0; i < nitems(tab); i++)
+		for (i = 0; i < N(tab); i++)
 			if (strcmp(tab[i].t, argv[1]) == 0)
 				return (*tab[i].f)(argc - 1, argv + 1);
 	}

@@ -130,6 +130,7 @@ main(int argc, char *argv[])
 {
 	struct partition *pp;
 	struct disklabel *lp;
+	struct partition oldpartition;
 	struct stat st;
 	char *cp, *special;
 	intmax_t reserved;
@@ -361,6 +362,7 @@ main(int argc, char *argv[])
 			pp = &lp->d_partitions[RAW_PART];
 		else
 			pp = &lp->d_partitions[*cp - 'a'];
+		oldpartition = *pp;
 		if (pp->p_size == 0)
 			errx(1, "%s: `%c' partition is unavailable",
 			    special, *cp);

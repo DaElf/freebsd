@@ -377,6 +377,7 @@ ar71xx_pci_probe(device_t dev)
 static int
 ar71xx_pci_attach(device_t dev)
 {
+	int busno = 0;
 	int rid = 0;
 	struct ar71xx_pci_softc *sc = device_get_softc(dev);
 
@@ -461,7 +462,7 @@ ar71xx_pci_attach(device_t dev)
 	ar71xx_pci_slot_fixup(dev, 0, 18, 0);
 #endif	/* AR71XX_ATH_EEPROM */
 
-	device_add_child(dev, "pci", -1);
+	device_add_child(dev, "pci", busno);
 	return (bus_generic_attach(dev));
 }
 

@@ -96,7 +96,7 @@ AcpiDsPrintNodePathname (
 
     Buffer.Length = ACPI_ALLOCATE_LOCAL_BUFFER;
 
-    Status = AcpiNsHandleToPathname (Node, &Buffer, TRUE);
+    Status = AcpiNsHandleToPathname (Node, &Buffer, FALSE);
     if (ACPI_SUCCESS (Status))
     {
         if (Message)

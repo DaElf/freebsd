@@ -168,7 +168,6 @@ elf_reloc_internal(linker_file_t lf, Elf_Addr relocbase, const void *data,
 	Elf_Size rtype, symidx;
 	const Elf_Rel *rel;
 	const Elf_Rela *rela;
-	int error;
 
 	switch (type) {
 	case ELF_RELOC_REL:
@@ -204,29 +203,29 @@ elf_reloc_internal(linker_file_t lf, Elf_Addr relocbase, const void *data,
 			break;
 
 		case R_X86_64_64:		/* S + A */
-			error = lookup(lf, symidx, 1, &addr);
+			addr = lookup(lf, symidx, 1);
 			val = addr + addend;
-			if (error != 0)
+			if (addr == 0)
 				return -1;
 			if (*where != val)
 				*where = val;
 			break;
 
 		case R_X86_64_PC32:	/* S + A - P */
-			error = lookup(lf, symidx, 1, &addr);
+			addr = lookup(lf, symidx, 1);
 			where32 = (Elf32_Addr *)where;
 			val32 = (Elf32_Addr)(addr + addend - (Elf_Addr)where);
-			if (error != 0)
+			if (addr == 0)
 				return -1;
 			if (*where32 != val32)
 				*where32 = val32;
 			break;
 
 		case R_X86_64_32S:	/* S + A sign extend */
-			error = lookup(lf, symidx, 1, &addr);
+			addr = lookup(lf, symidx, 1);
 			val32 = (Elf32_Addr)(addr + addend);
 			where32 = (Elf32_Addr *)where;
-			if (error != 0)
+			if (addr == 0)
 				return -1;
 			if (*where32 != val32)
 				*where32 = val32;
@@ -243,8 +242,8 @@ elf_reloc_internal(linker_file_t lf, Elf_Addr relocbase, const void *data,
 
 		case R_X86_64_GLOB_DAT:	/* S */
 		case R_X86_64_JMP_SLOT:	/* XXX need addend + offset */
-			error = lookup(lf, symidx, 1, &addr);
-			if (error != 0)
+			addr = lookup(lf, symidx, 1);
+			if (addr == 0)
 				return -1;
 			if (*where != addr)
 				*where = addr;

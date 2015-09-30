@@ -65,6 +65,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/stat.h>
 #include <errno.h>
 #include <glob.h>
+#include <paths.h>
 #include <stdio.h>
 #include <string.h>
 #include <syslog.h>
@@ -119,7 +120,7 @@ login_fbtab(char *tty, uid_t uid, gid_t gid)
 
 /* login_protect - protect one device entry */
 
-static void
+void
 login_protect(const char *table, char *pattern, int mask, uid_t uid, gid_t gid)
 {
     glob_t  gl;

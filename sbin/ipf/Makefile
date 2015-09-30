@@ -1,7 +1,8 @@
 #	$FreeBSD$
 
-SUBDIR=		libipf .WAIT
+#.WAIT
+SUBDIR=		libipf
 SUBDIR+=	ipf ipfs ipfstat ipftest ipmon ipnat ippool ipresend
-SUBDIR_PARALLEL=
+#SUBDIR+=	ipsend iptest rules
 
 .include <bsd.subdir.mk>

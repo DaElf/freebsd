@@ -1233,7 +1233,7 @@ bsde_delete_rule(int rulenum, size_t buflen, char *errstr)
 	name[len] = rulenum;
 	len++;
 
-	error = sysctl(name, len, NULL, NULL, &rule, 0);
+	error = sysctl(name, len, NULL, NULL, &rule, sizeof(rule));
 	if (error) {
 		len = snprintf(errstr, buflen, "%s.%d: %s", MIB ".rules",
 		    rulenum, strerror(errno));

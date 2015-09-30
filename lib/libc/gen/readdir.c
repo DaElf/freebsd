@@ -49,7 +49,9 @@ __FBSDID("$FreeBSD$");
  * get next entry in a directory.
  */
 struct dirent *
-_readdir_unlocked(DIR *dirp, int skip)
+_readdir_unlocked(dirp, skip)
+	DIR *dirp;
+	int skip;
 {
 	struct dirent *dp;
 	long initial_seek;
@@ -89,7 +91,8 @@ _readdir_unlocked(DIR *dirp, int skip)
 }
 
 struct dirent *
-readdir(DIR *dirp)
+readdir(dirp)
+	DIR *dirp;
 {
 	struct dirent	*dp;
 
@@ -104,7 +107,10 @@ readdir(DIR *dirp)
 }
 
 int
-readdir_r(DIR *dirp, struct dirent *entry, struct dirent **result)
+readdir_r(dirp, entry, result)
+	DIR *dirp;
+	struct dirent *entry;
+	struct dirent **result;
 {
 	struct dirent *dp;
 	int saved_errno;

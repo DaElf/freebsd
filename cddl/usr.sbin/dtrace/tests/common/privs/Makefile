@@ -8,7 +8,6 @@ TESTFILES= \
      tst.fds.ksh  \
      tst.func_access.ksh  \
      tst.getf.ksh  \
-     tst.kpriv.ksh  \
      tst.op_access.ksh  \
      tst.procpriv.ksh  \
      tst.providers.ksh  \

@@ -32,22 +32,20 @@
 /*
  * mwl statistics class.
  */
-
-#include <sys/param.h>
+#include <sys/types.h>
 #include <sys/file.h>
-#include <sys/ioctl.h>
 #include <sys/sockio.h>
 #include <sys/socket.h>
-
+#include <sys/ioctl.h>
 #include <net/if.h>
 #include <net/if_media.h>
 
-#include <err.h>
-#include <signal.h>
-#include <stdio.h>
 #include <stdlib.h>
+#include <stdio.h>
+#include <signal.h>
 #include <string.h>
 #include <unistd.h>
+#include <err.h>
 
 #include "../../../../sys/net80211/ieee80211_ioctl.h"
 #include "../../../../sys/net80211/ieee80211_radiotap.h"
@@ -546,12 +544,12 @@ BSDSTAT_DEFINE_BOUNCE(mwlstatfoo)
 struct mwlstatfoo *
 mwlstats_new(const char *ifname, const char *fmtstring)
 {
+#define	N(a)	(sizeof(a) / sizeof(a[0]))
 	struct mwlstatfoo_p *wf;
 
 	wf = calloc(1, sizeof(struct mwlstatfoo_p));
 	if (wf != NULL) {
-		bsdstat_init(&wf->base.base, "mwlstats", mwlstats,
-		    nitems(mwlstats));
+		bsdstat_init(&wf->base.base, "mwlstats", mwlstats, N(mwlstats));
 		/* override base methods */
 		wf->base.base.collect_cur = mwl_collect_cur;
 		wf->base.base.collect_tot = mwl_collect_tot;
@@ -576,4 +574,5 @@ mwlstats_new(const char *ifname, const char *fmtstring)
 		wf->base.setfmt(&wf->base, fmtstring);
 	}
 	return &wf->base;
+#undef N
 }

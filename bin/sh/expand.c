@@ -886,7 +886,7 @@ varvalue(const char *name, int quoted, int subtype, int flag)
 		num = backgndpidval();
 		break;
 	case '-':
-		for (i = 0 ; i < NSHORTOPTS ; i++) {
+		for (i = 0 ; i < NOPTS ; i++) {
 			if (optlist[i].val)
 				STPUTC(optlist[i].letter, expdest);
 		}
@@ -1464,11 +1464,21 @@ patmatch(const char *pattern, const char *string, int squoted)
 			bt_q = q;
 			break;
 		case '[': {
-			const char *savep, *saveq;
+			const char *endp;
 			int invert, found;
 			wchar_t chr;
 
-			savep = p, saveq = q;
+			endp = p;
+			if (*endp == '!' || *endp == '^')
+				endp++;
+			do {
+				while (*endp == CTLQUOTEMARK)
+					endp++;
+				if (*endp == 0)
+					goto dft;		/* no matching ] */
+				if (*endp == CTLESC)
+					endp++;
+			} while (*++endp != ']');
 			invert = 0;
 			if (*p == '!' || *p == '^') {
 				invert++;
@@ -1487,11 +1497,6 @@ patmatch(const char *pattern, const char *string, int squoted)
 				chr = (unsigned char)*q++;
 			c = *p++;
 			do {
-				if (c == '\0') {
-					p = savep, q = saveq;
-					c = '[';
-					goto dft;
-				}
 				if (c == CTLQUOTEMARK)
 					continue;
 				if (c == '[' && *p == ':') {

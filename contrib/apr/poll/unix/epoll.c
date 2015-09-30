@@ -104,22 +104,14 @@ static apr_status_t impl_pollset_create(apr_pollset_t *pollset,
 
 #ifndef HAVE_EPOLL_CREATE1
     {
-        int fd_flags;
+        int flags;
 
-        if ((fd_flags = fcntl(fd, F_GETFD)) == -1) {
-            rv = errno;
-            close(fd);
-            pollset->p = NULL;
-            return rv;
-        }
+        if ((flags = fcntl(fd, F_GETFD)) == -1)
+            return errno;
 
-        fd_flags |= FD_CLOEXEC;
-        if (fcntl(fd, F_SETFD, fd_flags) == -1) {
-            rv = errno;
-            close(fd);
-            pollset->p = NULL;
-            return rv;
-        }
+        flags |= FD_CLOEXEC;
+        if (fcntl(fd, F_SETFD, flags) == -1)
+            return errno;
     }
 #endif
 
@@ -130,13 +122,11 @@ static apr_status_t impl_pollset_create(apr_pollset_t *pollset,
         ((rv = apr_thread_mutex_create(&pollset->p->ring_lock,
                                        APR_THREAD_MUTEX_DEFAULT,
                                        p)) != APR_SUCCESS)) {
-        close(fd);
         pollset->p = NULL;
         return rv;
     }
 #else
     if (flags & APR_POLLSET_THREADSAFE) {
-        close(fd);
         pollset->p = NULL;
         return APR_ENOTIMPL;
     }
@@ -355,23 +345,14 @@ static apr_status_t impl_pollcb_create(apr_pollcb_t *pollcb,
 
 #ifndef HAVE_EPOLL_CREATE1
     {
-        int fd_flags;
-        apr_status_t rv;
+        int flags;
 
-        if ((fd_flags = fcntl(fd, F_GETFD)) == -1) {
-            rv = errno;
-            close(fd);
-            pollcb->fd = -1;
-            return rv;
-        }
+        if ((flags = fcntl(fd, F_GETFD)) == -1)
+            return errno;
 
-        fd_flags |= FD_CLOEXEC;
-        if (fcntl(fd, F_SETFD, fd_flags) == -1) {
-            rv = errno;
-            close(fd);
-            pollcb->fd = -1;
-            return rv;
-        }
+        flags |= FD_CLOEXEC;
+        if (fcntl(fd, F_SETFD, flags) == -1)
+            return errno;
     }
 #endif
     

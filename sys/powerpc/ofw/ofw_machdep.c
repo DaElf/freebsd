@@ -34,7 +34,6 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-#include "opt_platform.h"
 #include <sys/param.h>
 #include <sys/bus.h>
 #include <sys/systm.h>
@@ -48,7 +47,6 @@ __FBSDID("$FreeBSD$");
 
 #include <net/ethernet.h>
 
-#include <dev/fdt/fdt_common.h>
 #include <dev/ofw/openfirm.h>
 #include <dev/ofw/ofw_pci.h>
 #include <dev/ofw/ofw_bus.h>

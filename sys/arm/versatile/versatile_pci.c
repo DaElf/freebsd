@@ -266,7 +266,7 @@ versatile_pci_attach(device_t dev)
 		versatile_pci_conf_write_4((slot << 11) + PCIR_COMMAND, val);
 	}
 
-	device_add_child(dev, "pci", -1);
+	device_add_child(dev, "pci", 0);
 	return (bus_generic_attach(dev));
 }
 

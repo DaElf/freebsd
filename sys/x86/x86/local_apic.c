@@ -1657,10 +1657,9 @@ native_lapic_ipi_raw(register_t icrlo, u_int dest)
 	    ("%s: reserved bits set in ICR LO register", __func__));
 
 	/* Set destination in ICR HI register if it is being used. */
-	if (!x2apic_mode) {
-		saveintr = intr_disable();
+	saveintr = intr_disable();
+	if (!x2apic_mode)
 		icr = lapic_read_icr();
-	}
 
 	if ((icrlo & APIC_DEST_MASK) == APIC_DEST_DESTFLD) {
 		if (x2apic_mode) {
@@ -1683,8 +1682,7 @@ native_lapic_ipi_raw(register_t icrlo, u_int dest)
 		vlo |= icrlo;
 	}
 	lapic_write_icr(vhi, vlo);
-	if (!x2apic_mode)
-		intr_restore(saveintr);
+	intr_restore(saveintr);
 }
 
 #define	BEFORE_SPIN	50000
@@ -1703,10 +1701,11 @@ native_lapic_ipi_vectored(u_int vector, int dest)
 	icrlo = APIC_DESTMODE_PHY | APIC_TRIGMOD_EDGE | APIC_LEVEL_ASSERT;
 
 	/*
-	 * NMI IPIs are just fake vectors used to send a NMI.  Use special rules
-	 * regarding NMIs if passed, otherwise specify the vector.
+	 * IPI_STOP_HARD is just a "fake" vector used to send a NMI.
+	 * Use special rules regard NMI if passed, otherwise specify
+	 * the vector.
 	 */
-	if (vector >= IPI_NMI_FIRST)
+	if (vector == IPI_STOP_HARD)
 		icrlo |= APIC_DELMODE_NMI;
 	else
 		icrlo |= vector | APIC_DELMODE_FIXED;

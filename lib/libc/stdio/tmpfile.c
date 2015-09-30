@@ -46,10 +46,9 @@ __FBSDID("$FreeBSD$");
 #include <string.h>
 #include <paths.h>
 #include "un-namespace.h"
-#include "libc_private.h"
 
 FILE *
-tmpfile(void)
+tmpfile()
 {
 	sigset_t set, oset;
 	FILE *fp;
@@ -70,7 +69,7 @@ tmpfile(void)
 		return (NULL);
 
 	sigfillset(&set);
-	(void)__libc_sigprocmask(SIG_BLOCK, &set, &oset);
+	(void)_sigprocmask(SIG_BLOCK, &set, &oset);
 
 	fd = mkstemp(buf);
 	if (fd != -1)
@@ -78,7 +77,7 @@ tmpfile(void)
 
 	free(buf);
 
-	(void)__libc_sigprocmask(SIG_SETMASK, &oset, NULL);
+	(void)_sigprocmask(SIG_SETMASK, &oset, NULL);
 
 	if (fd == -1)
 		return (NULL);

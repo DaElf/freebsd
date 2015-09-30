@@ -32,10 +32,6 @@
 
 #include <sys/cdefs.h>
 
-#define	satosin(sa)	((struct sockaddr_in *)(sa))
-#define	satosin6(sa)	((struct sockaddr_in6 *)(sa))
-#define	sin6tosa(sin6)	((struct sockaddr *)(sin6))
-
 extern int	Aflag;	/* show addresses of protocol control block */
 extern int	aflag;	/* show all sockets (including servers) */
 extern int	bflag;	/* show i/f total bytes in/out */
@@ -63,12 +59,11 @@ extern int	unit;	/* unit number for above */
 
 extern int	live;	/* true if we are examining a live system */
 
-int	fetch_stats(const char *sysctlname, u_long addr, void *stats,
-	    size_t len, int (*kreadfn)(u_long, void *, size_t));
+struct nlist;
 int	kread(u_long addr, void *buf, size_t size);
 uint64_t kread_counter(u_long addr);
 int	kread_counters(u_long addr, void *buf, size_t size);
-void	kset_dpcpu(u_int);
+int	kresolve_list(struct nlist *);
 const char *plural(uintmax_t);
 const char *plurales(uintmax_t);
 const char *pluralies(uintmax_t);
@@ -111,6 +106,8 @@ void	mrt6_stats(void);
 struct sockaddr_in6;
 struct in6_addr;
 void in6_fillscopeid(struct sockaddr_in6 *);
+char *routename6(struct sockaddr_in6 *);
+const char *netname6(struct sockaddr_in6 *, struct in6_addr *);
 void	inet6print(const char *, struct in6_addr *, int, const char *, int);
 #endif /*INET6*/
 
@@ -120,26 +117,42 @@ void	pfkey_stats(u_long, const char *, int, int);
 
 void	mbpr(void *, u_long);
 
-void	netisr_stats(void);
+void	netisr_stats(void *);
 
 void	hostpr(u_long, u_long);
 void	impstats(u_long, u_long);
 
-void	intpr(void (*)(char *), int);
+void	intpr(int, void (*)(char *), int);
 
+void	pr_rthdr(int);
 void	pr_family(int);
 void	rt_stats(void);
 void	flowtable_stats(void);
 
-char	*routename(struct sockaddr *, int);
-const char *netname(struct sockaddr *, struct sockaddr *);
+char	*routename(in_addr_t);
+char	*netname(in_addr_t, in_addr_t);
+char	*ns_print(struct sockaddr *);
 void	routepr(int, int);
+
+void	nsprotopr(u_long, const char *, int, int);
+void	spp_stats(u_long, const char *, int, int);
+void	idp_stats(u_long, const char *, int, int);
+void	nserr_stats(u_long, const char *, int, int);
 
 #ifdef NETGRAPH
 void	netgraphprotopr(u_long, const char *, int, int);
 #endif
 
 void	unixpr(u_long, u_long, u_long, u_long, u_long, bool *);
+
+void	esis_stats(u_long, const char *, int, int);
+void	clnp_stats(u_long, const char *, int, int);
+void	cltp_stats(u_long, const char *, int, int);
+void	iso_protopr(u_long, const char *, int, int);
+void	iso_protopr1(u_long, int);
+void	tp_protopr(u_long, const char *, int, int);
+void	tp_inproto(u_long);
+void	tp_stats(caddr_t, caddr_t);
 
 void	mroutepr(void);
 void	mrt_stats(void);

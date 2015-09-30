@@ -4,7 +4,7 @@
 #
 
 # PROVIDE: autounmountd
-# REQUIRE: DAEMON
+# REQUIRE: nfsclient
 # KEYWORD: nojail
 
 . /etc/rc.subr

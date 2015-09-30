@@ -387,9 +387,11 @@ table_create(ipfw_obj_header *oh, int ac, char *av[])
 	ipfw_xtable_info xi;
 	int error, tcmd, val;
 	uint32_t fset, fclear;
+	size_t sz;
 	char *e, *p;
 	char tbuf[128];
 
+	sz = sizeof(tbuf);
 	memset(&xi, 0, sizeof(xi));
 
 	while (ac > 0) {
@@ -492,7 +494,10 @@ table_modify(ipfw_obj_header *oh, int ac, char *av[])
 {
 	ipfw_xtable_info xi;
 	int tcmd;
+	size_t sz;
+	char tbuf[128];
 
+	sz = sizeof(tbuf);
 	memset(&xi, 0, sizeof(xi));
 
 	while (ac > 0) {
@@ -925,7 +930,7 @@ table_modify_record(ipfw_obj_header *oh, int ac, char *av[], int add,
 			xi.vmask = vmask;
 			strlcpy(xi.tablename, oh->ntlv.name,
 			    sizeof(xi.tablename));
-			fprintf(stderr, "DEPRECATED: inserting data into "
+			fprintf(stderr, "DEPRECATED: inserting data info "
 			    "non-existent table %s. (auto-created)\n",
 			    xi.tablename);
 			table_do_create(oh, &xi);
@@ -1444,13 +1449,14 @@ tentry_fill_value(ipfw_obj_header *oh, ipfw_obj_tentry *tent, char *arg,
     uint8_t type, uint32_t vmask)
 {
 	struct addrinfo hints, *res;
-	uint32_t a4, flag, val;
+	uint32_t a4, flag, val, vm;
 	ipfw_table_value *v;
 	uint32_t i;
 	int dval;
 	char *comma, *e, *etype, *n, *p;
 
 	v = &tent->v.value;
+	vm = vmask;
 
 	/* Compat layer: keep old behavior for legacy value types */
 	if (vmask == IPFW_VTYPE_LEGACY) {

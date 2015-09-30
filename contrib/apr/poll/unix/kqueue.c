@@ -115,20 +115,12 @@ static apr_status_t impl_pollset_create(apr_pollset_t *pollset,
     {
         int flags;
 
-        if ((flags = fcntl(pollset->p->kqueue_fd, F_GETFD)) == -1) {
-            rv = errno;
-            close(pollset->p->kqueue_fd);
-            pollset->p = NULL;
-            return rv;
-        }
+        if ((flags = fcntl(pollset->p->kqueue_fd, F_GETFD)) == -1)
+            return errno;
 
         flags |= FD_CLOEXEC;
-        if (fcntl(pollset->p->kqueue_fd, F_SETFD, flags) == -1) {
-            rv = errno;
-            close(pollset->p->kqueue_fd);
-            pollset->p = NULL;
-            return rv;
-        }
+        if (fcntl(pollset->p->kqueue_fd, F_SETFD, flags) == -1)
+            return errno;
     }
 
     pollset->p->result_set = apr_palloc(p, pollset->p->setsize * sizeof(apr_pollfd_t));
@@ -346,22 +338,13 @@ static apr_status_t impl_pollcb_create(apr_pollcb_t *pollcb,
 
     {
         int flags;
-        apr_status_t rv;
 
-        if ((flags = fcntl(fd, F_GETFD)) == -1) {
-            rv = errno;
-            close(fd);
-            pollcb->fd = -1;
-            return rv;
-        }
+        if ((flags = fcntl(fd, F_GETFD)) == -1)
+            return errno;
 
         flags |= FD_CLOEXEC;
-        if (fcntl(fd, F_SETFD, flags) == -1) {
-            rv = errno;
-            close(fd);
-            pollcb->fd = -1;
-            return rv;
-        }
+        if (fcntl(fd, F_SETFD, flags) == -1)
+            return errno;
     }
  
     pollcb->fd = fd;

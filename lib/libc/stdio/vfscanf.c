@@ -814,7 +814,9 @@ match_failure:
  * considered part of the scanset.
  */
 static const u_char *
-__sccl(char *tab, const u_char *fmt)
+__sccl(tab, fmt)
+	char *tab;
+	const u_char *fmt;
 {
 	int c, n, v, i;
 	struct xlocale_collate *table =

@@ -36,5 +36,3 @@ __FBSDID("$FreeBSD$");
 #include "SYS.h"
 
 RSYSCALL(syscall)
-
-	.section .note.GNU-stack,"",%progbits

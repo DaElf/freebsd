@@ -32,7 +32,6 @@ __FBSDID("$FreeBSD$");
 #include <err.h>
 #include <errno.h>
 #include <ctype.h>
-#include <inttypes.h>
 #include <limits.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -106,8 +105,7 @@ main(int argc, char *argv[])
 		/*
 		 * Hack: special case for + line
 		 */
-		if (strncmp(line, "+:::", len) == 0 ||
-		    strncmp(line, "+:*::", len) == 0)
+		if (strncmp(line, "+:::", len) == 0)
 			continue;
 
 		/*

@@ -70,7 +70,8 @@ __FBSDID("$FreeBSD$");
  * Calls the pmap service remotely to do get the maps.
  */
 struct pmaplist *
-pmap_getmaps(struct sockaddr_in *address)
+pmap_getmaps(address)
+	 struct sockaddr_in *address;
 {
 	struct pmaplist *head = NULL;
 	int sock = -1;

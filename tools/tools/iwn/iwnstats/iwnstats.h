@@ -33,6 +33,7 @@
 
 struct iwnstats {
 	int s;
+	struct ifreq ifr;
 	struct iwn_stats st;
 };
 

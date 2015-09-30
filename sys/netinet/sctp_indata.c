@@ -1426,25 +1426,30 @@ sctp_process_a_data_chunk(struct sctp_tcb *stcb, struct sctp_association *asoc,
 	}
 	strmno = ntohs(ch->dp.stream_id);
 	if (strmno >= asoc->streamincnt) {
-		struct sctp_error_invalid_stream *cause;
+		struct sctp_paramhdr *phdr;
+		struct mbuf *mb;
 
-		op_err = sctp_get_mbuf_for_msg(sizeof(struct sctp_error_invalid_stream),
+		mb = sctp_get_mbuf_for_msg((sizeof(struct sctp_paramhdr) * 2),
 		    0, M_NOWAIT, 1, MT_DATA);
-		if (op_err != NULL) {
+		if (mb != NULL) {
 			/* add some space up front so prepend will work well */
-			SCTP_BUF_RESV_UF(op_err, sizeof(struct sctp_chunkhdr));
-			cause = mtod(op_err, struct sctp_error_invalid_stream *);
+			SCTP_BUF_RESV_UF(mb, sizeof(struct sctp_chunkhdr));
+			phdr = mtod(mb, struct sctp_paramhdr *);
 			/*
 			 * Error causes are just param's and this one has
 			 * two back to back phdr, one with the error type
 			 * and size, the other with the streamid and a rsvd
 			 */
-			SCTP_BUF_LEN(op_err) = sizeof(struct sctp_error_invalid_stream);
-			cause->cause.code = htons(SCTP_CAUSE_INVALID_STREAM);
-			cause->cause.length = htons(sizeof(struct sctp_error_invalid_stream));
-			cause->stream_id = ch->dp.stream_id;
-			cause->reserved = htons(0);
-			sctp_queue_op_err(stcb, op_err);
+			SCTP_BUF_LEN(mb) = (sizeof(struct sctp_paramhdr) * 2);
+			phdr->param_type = htons(SCTP_CAUSE_INVALID_STREAM);
+			phdr->param_length =
+			    htons(sizeof(struct sctp_paramhdr) * 2);
+			phdr++;
+			/* We insert the stream in the type field */
+			phdr->param_type = ch->dp.stream_id;
+			/* And set the length to 0 for the rsvd field */
+			phdr->param_length = 0;
+			sctp_queue_op_err(stcb, mb);
 		}
 		SCTP_STAT_INCR(sctps_badsid);
 		SCTP_TCB_LOCK_ASSERT(stcb);
@@ -2307,8 +2312,11 @@ doit_again:
 
 int
 sctp_process_data(struct mbuf **mm, int iphlen, int *offset, int length,
-    struct sctp_inpcb *inp, struct sctp_tcb *stcb,
-    struct sctp_nets *net, uint32_t * high_tsn)
+    struct sockaddr *src, struct sockaddr *dst,
+    struct sctphdr *sh, struct sctp_inpcb *inp,
+    struct sctp_tcb *stcb, struct sctp_nets *net, uint32_t * high_tsn,
+    uint8_t mflowtype, uint32_t mflowid,
+    uint32_t vrf_id, uint16_t port)
 {
 	struct sctp_data_chunk *ch, chunk_buf;
 	struct sctp_association *asoc;
@@ -2400,7 +2408,10 @@ sctp_process_data(struct mbuf **mm, int iphlen, int *offset, int length,
 				    chk_length);
 				op_err = sctp_generate_cause(SCTP_CAUSE_PROTOCOL_VIOLATION, msg);
 				stcb->sctp_ep->last_abort_code = SCTP_FROM_SCTP_INDATA + SCTP_LOC_21;
-				sctp_abort_an_association(inp, stcb, op_err, SCTP_SO_NOT_LOCKED);
+				sctp_abort_association(inp, stcb, m, iphlen,
+				    src, dst, sh, op_err,
+				    mflowtype, mflowid,
+				    vrf_id, port);
 				return (2);
 			}
 			if ((size_t)chk_length == sizeof(struct sctp_data_chunk)) {
@@ -2412,7 +2423,10 @@ sctp_process_data(struct mbuf **mm, int iphlen, int *offset, int length,
 
 				op_err = sctp_generate_no_user_data_cause(ch->dp.tsn);
 				stcb->sctp_ep->last_abort_code = SCTP_FROM_SCTP_INDATA + SCTP_LOC_22;
-				sctp_abort_an_association(inp, stcb, op_err, SCTP_SO_NOT_LOCKED);
+				sctp_abort_association(inp, stcb, m, iphlen,
+				    src, dst, sh, op_err,
+				    mflowtype, mflowid,
+				    vrf_id, port);
 				return (2);
 			}
 #ifdef SCTP_AUDITING_ENABLED
@@ -2479,7 +2493,12 @@ sctp_process_data(struct mbuf **mm, int iphlen, int *offset, int length,
 					snprintf(msg, sizeof(msg), "DATA chunk followed by chunk of type %2.2x",
 					    ch->ch.chunk_type);
 					op_err = sctp_generate_cause(SCTP_CAUSE_PROTOCOL_VIOLATION, msg);
-					sctp_abort_an_association(inp, stcb, op_err, SCTP_SO_NOT_LOCKED);
+					sctp_abort_association(inp, stcb,
+					    m, iphlen,
+					    src, dst,
+					    sh, op_err,
+					    mflowtype, mflowid,
+					    vrf_id, port);
 					return (2);
 				}
 				break;
@@ -2487,21 +2506,34 @@ sctp_process_data(struct mbuf **mm, int iphlen, int *offset, int length,
 				/* unknown chunk type, use bit rules */
 				if (ch->ch.chunk_type & 0x40) {
 					/* Add a error report to the queue */
-					struct mbuf *op_err;
-					struct sctp_gen_error_cause *cause;
+					struct mbuf *merr;
+					struct sctp_paramhdr *phd;
 
-					op_err = sctp_get_mbuf_for_msg(sizeof(struct sctp_gen_error_cause),
-					    0, M_NOWAIT, 1, MT_DATA);
-					if (op_err != NULL) {
-						cause = mtod(op_err, struct sctp_gen_error_cause *);
-						cause->code = htons(SCTP_CAUSE_UNRECOG_CHUNK);
-						cause->length = htons(chk_length + sizeof(struct sctp_gen_error_cause));
-						SCTP_BUF_LEN(op_err) = sizeof(struct sctp_gen_error_cause);
-						SCTP_BUF_NEXT(op_err) = SCTP_M_COPYM(m, *offset, chk_length, M_NOWAIT);
-						if (SCTP_BUF_NEXT(op_err) != NULL) {
-							sctp_queue_op_err(stcb, op_err);
+					merr = sctp_get_mbuf_for_msg(sizeof(*phd), 0, M_NOWAIT, 1, MT_DATA);
+					if (merr) {
+						phd = mtod(merr, struct sctp_paramhdr *);
+						/*
+						 * We cheat and use param
+						 * type since we did not
+						 * bother to define a error
+						 * cause struct. They are
+						 * the same basic format
+						 * with different names.
+						 */
+						phd->param_type =
+						    htons(SCTP_CAUSE_UNRECOG_CHUNK);
+						phd->param_length =
+						    htons(chk_length + sizeof(*phd));
+						SCTP_BUF_LEN(merr) = sizeof(*phd);
+						SCTP_BUF_NEXT(merr) = SCTP_M_COPYM(m, *offset, chk_length, M_NOWAIT);
+						if (SCTP_BUF_NEXT(merr)) {
+							if (sctp_pad_lastmbuf(SCTP_BUF_NEXT(merr), SCTP_SIZE32(chk_length) - chk_length, NULL) == NULL) {
+								sctp_m_freem(merr);
+							} else {
+								sctp_queue_op_err(stcb, merr);
+							}
 						} else {
-							sctp_m_freem(op_err);
+							sctp_m_freem(merr);
 						}
 					}
 				}

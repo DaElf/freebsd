@@ -59,7 +59,6 @@ __FBSDID("$FreeBSD$");
 #include <grp.h>
 #include <errno.h>
 #include <locale.h>
-#include <jail.h>
 
 #define	STATUS_MATCH	0
 #define	STATUS_NOMATCH	1
@@ -79,7 +78,7 @@ enum listtype {
 	LT_GROUP,
 	LT_TTY,
 	LT_PGRP,
-	LT_JAIL,
+	LT_JID,
 	LT_SID,
 	LT_CLASS
 };
@@ -246,7 +245,7 @@ main(int argc, char **argv)
 			cflags |= REG_ICASE;
 			break;
 		case 'j':
-			makelist(&jidlist, LT_JAIL, optarg);
+			makelist(&jidlist, LT_JID, optarg);
 			criteria = 1;
 			break;
 		case 'l':
@@ -586,7 +585,7 @@ usage(void)
 
 	fprintf(stderr,
 		"usage: %s %s [-F pidfile] [-G gid] [-M core] [-N system]\n"
-		"             [-P ppid] [-U uid] [-c class] [-g pgrp] [-j jail]\n"
+		"             [-P ppid] [-U uid] [-c class] [-g pgrp] [-j jid]\n"
 		"             [-s sid] [-t tty] [-u euid] pattern ...\n",
 		getprogname(), ustr);
 
@@ -701,7 +700,7 @@ makelist(struct listhead *head, enum listtype type, char *src)
 				if (li->li_number == 0)
 					li->li_number = getsid(mypid);
 				break;
-			case LT_JAIL:
+			case LT_JID:
 				if (li->li_number < 0)
 					errx(STATUS_BADUSAGE,
 					     "Negative jail ID `%s'", sp);
@@ -767,20 +766,15 @@ foundtty:		if ((st.st_mode & S_IFCHR) == 0)
 
 			li->li_number = st.st_rdev;
 			break;
-		case LT_JAIL: {
-			int jid;
-
+		case LT_JID:
 			if (strcmp(sp, "none") == 0)
 				li->li_number = 0;
 			else if (strcmp(sp, "any") == 0)
 				li->li_number = -1;
-			else if ((jid = jail_getid(sp)) != -1)
-				li->li_number = jid;
 			else if (*ep != '\0')
 				errx(STATUS_BADUSAGE,
-				     "Invalid jail ID or name `%s'", sp);
+				     "Invalid jail ID `%s'", sp);
 			break;
-		}
 		case LT_CLASS:
 			li->li_number = -1;
 			li->li_name = strdup(sp);

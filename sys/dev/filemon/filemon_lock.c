@@ -1,6 +1,5 @@
 /*-
  * Copyright (c) 2009-2011, Juniper Networks, Inc.
- * Copyright (c) 2015, EMC Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -28,44 +27,96 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-static __inline void
+static void
 filemon_filemon_lock(struct filemon *filemon)
 {
+	mtx_lock(&filemon->mtx);
 
-	sx_xlock(&filemon->lock);
+	while (filemon->locker != NULL && filemon->locker != curthread)
+		cv_wait(&filemon->cv, &filemon->mtx);
+
+	filemon->locker = curthread;
+
+	mtx_unlock(&filemon->mtx);
 }
 
-static __inline void
+static void
 filemon_filemon_unlock(struct filemon *filemon)
 {
+	mtx_lock(&filemon->mtx);
 
-	sx_xunlock(&filemon->lock);
+	if (filemon->locker == curthread)
+		filemon->locker = NULL;
+
+	/* Wake up threads waiting. */
+	cv_broadcast(&filemon->cv);
+
+	mtx_unlock(&filemon->mtx);
 }
 
-static __inline void
+static void
 filemon_lock_read(void)
 {
+	mtx_lock(&access_mtx);
 
-	sx_slock(&access_lock);
+	while (access_owner != NULL || access_requester != NULL)
+		cv_wait(&access_cv, &access_mtx);
+
+	n_readers++;
+
+	/* Wake up threads waiting. */
+	cv_broadcast(&access_cv);
+
+	mtx_unlock(&access_mtx);
 }
 
-static __inline void
+static void
 filemon_unlock_read(void)
 {
+	mtx_lock(&access_mtx);
 
-	sx_sunlock(&access_lock);
+	if (n_readers > 0)
+		n_readers--;
+
+	/* Wake up a thread waiting. */
+	cv_broadcast(&access_cv);
+
+	mtx_unlock(&access_mtx);
 }
 
-static __inline void
+static void
 filemon_lock_write(void)
 {
+	mtx_lock(&access_mtx);
 
-	sx_xlock(&access_lock);
+	while (access_owner != curthread) {
+		if (access_owner == NULL &&
+		    (access_requester == NULL ||
+		    access_requester == curthread)) {
+			access_owner = curthread;
+			access_requester = NULL;
+		} else {
+			if (access_requester == NULL)
+				access_requester = curthread;
+
+			cv_wait(&access_cv, &access_mtx);
+		}
+	}
+
+	mtx_unlock(&access_mtx);
 }
 
-static __inline void
+static void
 filemon_unlock_write(void)
 {
+	mtx_lock(&access_mtx);
 
-	sx_xunlock(&access_lock);
+	/* Sanity check that the current thread actually has the write lock. */
+	if (access_owner == curthread)
+		access_owner = NULL;
+
+	/* Wake up a thread waiting. */
+	cv_broadcast(&access_cv);
+
+	mtx_unlock(&access_mtx);
 }

@@ -61,7 +61,7 @@ static char *auth_errmsg(enum auth_stat);
 #define CLNT_PERROR_BUFLEN 256
 
 static char *
-_buf(void)
+_buf()
 {
 
 	if (buf == 0)
@@ -73,7 +73,9 @@ _buf(void)
  * Print reply error info
  */
 char *
-clnt_sperror(CLIENT *rpch, const char *s)
+clnt_sperror(rpch, s)
+	CLIENT *rpch;
+	const char *s;
 {
 	struct rpc_err e;
 	char *err;
@@ -178,7 +180,9 @@ clnt_sperror(CLIENT *rpch, const char *s)
 }
 
 void
-clnt_perror(CLIENT *rpch, const char *s)
+clnt_perror(rpch, s)
+	CLIENT *rpch;
+	const char *s;
 {
 
 	assert(rpch != NULL);
@@ -213,7 +217,8 @@ static const char *const rpc_errlist[] = {
  * This interface for use by clntrpc
  */
 char *
-clnt_sperrno(enum clnt_stat stat)
+clnt_sperrno(stat)
+	enum clnt_stat stat;
 {
 	unsigned int errnum = stat;
 
@@ -225,14 +230,16 @@ clnt_sperrno(enum clnt_stat stat)
 }
 
 void
-clnt_perrno(enum clnt_stat num)
+clnt_perrno(num)
+	enum clnt_stat num;
 {
 	(void) fprintf(stderr, "%s\n", clnt_sperrno(num));
 }
 
 
 char *
-clnt_spcreateerror(const char *s)
+clnt_spcreateerror(s)
+	const char *s;
 {
 	char *str;
 	size_t len, i;
@@ -284,7 +291,8 @@ clnt_spcreateerror(const char *s)
 }
 
 void
-clnt_pcreateerror(const char *s)
+clnt_pcreateerror(s)
+	const char *s;
 {
 
 	assert(s != NULL);
@@ -311,7 +319,8 @@ static const char *const auth_errlist[] = {
 };
 
 static char *
-auth_errmsg(enum auth_stat stat)
+auth_errmsg(stat)
+	enum auth_stat stat;
 {
 	unsigned int errnum = stat;
 

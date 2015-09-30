@@ -35,8 +35,6 @@ __FBSDID("$FreeBSD$");
  *  void bzero(dest, len)
  */
 ENTRY_NP(__aeabi_memclr4)
-EENTRY_NP(__aeabi_memclr8)
 	b	bzero
-EEND(__aeabi_memclr8)
 END(__aeabi_memclr4)
 

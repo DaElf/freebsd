@@ -2856,6 +2856,7 @@ printrsnie(const char *tag, const u_int8_t *ie, size_t ielen, int maxlen)
 static void
 printwpsie(const char *tag, const u_int8_t *ie, size_t ielen, int maxlen)
 {
+#define	N(a)	(sizeof(a) / sizeof(a[0]))
 	u_int8_t len = ie[1];
 
 	printf("%s", tag);
@@ -2896,7 +2897,7 @@ printwpsie(const char *tag, const u_int8_t *ie, size_t ielen, int maxlen)
 				break;
 			case IEEE80211_WPS_DEV_PASS_ID:
 				n = LE_READ_2(ie);
-				if (n < nitems(dev_pass_id))
+				if (n < N(dev_pass_id))
 					printf(" dpi:%s", dev_pass_id[n]);
 				break;
 			case IEEE80211_WPS_UUID_E:
@@ -2910,6 +2911,7 @@ printwpsie(const char *tag, const u_int8_t *ie, size_t ielen, int maxlen)
 		}
 		printf(">");
 	}
+#undef N
 }
 
 static void
@@ -3416,6 +3418,7 @@ list_stations(int s)
 static const char *
 mesh_linkstate_string(uint8_t state)
 {
+#define	N(a)	(sizeof(a) / sizeof(a[0]))
 	static const char *state_names[] = {
 	    [0] = "IDLE",
 	    [1] = "OPEN-TX",
@@ -3425,12 +3428,13 @@ mesh_linkstate_string(uint8_t state)
 	    [5] = "HOLDING",
 	};
 
-	if (state >= nitems(state_names)) {
+	if (state >= N(state_names)) {
 		static char buf[10];
 		snprintf(buf, sizeof(buf), "#%u", state);
 		return buf;
 	} else
 		return state_names[state];
+#undef N
 }
 
 static const char *
@@ -5316,10 +5320,12 @@ static struct afswtch af_ieee80211 = {
 static __constructor void
 ieee80211_ctor(void)
 {
+#define	N(a)	(sizeof(a) / sizeof(a[0]))
 	int i;
 
-	for (i = 0; i < nitems(ieee80211_cmds);  i++)
+	for (i = 0; i < N(ieee80211_cmds);  i++)
 		cmd_register(&ieee80211_cmds[i]);
 	af_register(&af_ieee80211);
 	clone_setdefcallback("wlan", wlan_create);
+#undef N
 }

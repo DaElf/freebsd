@@ -96,16 +96,6 @@ usage(void)
 	exit(1);
 }
 
-static void *
-xmalloc(size_t size)
-{
-	void *m;
-
-	if ((m = malloc(size)) == NULL)
-		errx(1, "memory allocation failure");
-	return (m);
-}
-
 static int
 add_mapping(struct glyph *gl, unsigned int c, unsigned int map_idx)
 {
@@ -114,7 +104,7 @@ add_mapping(struct glyph *gl, unsigned int c, unsigned int map_idx)
 
 	mapping_total++;
 
-	mp = xmalloc(sizeof *mp);
+	mp = malloc(sizeof *mp);
 	mp->m_char = c;
 	mp->m_glyph = gl;
 	mp->m_length = 0;
@@ -173,8 +163,8 @@ add_glyph(const uint8_t *bytes, unsigned int map_idx, int fallback)
 		}
 	}
 
-	gl = xmalloc(sizeof *gl);
-	gl->g_data = xmalloc(wbytes * height);
+	gl = malloc(sizeof *gl);
+	gl->g_data = malloc(wbytes * height);
 	memcpy(gl->g_data, bytes, wbytes * height);
 	if (fallback)
 		TAILQ_INSERT_HEAD(&glyphs[map_idx], gl, g_list);
@@ -300,26 +290,17 @@ parse_hex(FILE *fp, unsigned int map_idx)
 	char *ln, *p;
 	char fmt_str[8];
 	size_t length;
-	uint8_t *bytes = NULL, *bytes_r = NULL;
+	uint8_t bytes[wbytes * height], bytes_r[wbytes * height];
 	unsigned curchar = 0, i, line, chars_per_row, dwidth;
-	int rv = 0;
 
 	while ((ln = fgetln(fp, &length)) != NULL) {
 		ln[length - 1] = '\0';
 
 		if (strncmp(ln, "# Height: ", 10) == 0) {
-			if (bytes != NULL)
-				errx(1, "malformed input: Height tag after font data");
 			height = atoi(ln + 10);
 		} else if (strncmp(ln, "# Width: ", 9) == 0) {
-			if (bytes != NULL)
-				errx(1, "malformed input: Width tag after font data");
 			set_width(atoi(ln + 9));
 		} else if (sscanf(ln, "%4x:", &curchar)) {
-			if (bytes == NULL) {
-				bytes = xmalloc(wbytes * height);
-				bytes_r = xmalloc(wbytes * height);
-			}
 			p = ln + 5;
 			chars_per_row = strlen(p) / height;
 			dwidth = width;
@@ -332,23 +313,16 @@ parse_hex(FILE *fp, unsigned int map_idx)
 				sscanf(p, fmt_str, &line);
 				p += chars_per_row;
 				if (parse_bitmap_line(bytes + i * wbytes,
-				    bytes_r + i * wbytes, line, dwidth) != 0) {
-					rv = 1;
-					goto out;
-				}
+				    bytes_r + i * wbytes, line, dwidth) != 0)
+					return (1);
 			}
 
 			if (add_char(curchar, map_idx, bytes,
-			    dwidth == width * 2 ? bytes_r : NULL) != 0) {
-				rv = 1;
-				goto out;
-			}
+			    dwidth == width * 2 ? bytes_r : NULL) != 0)
+				return (1);
 		}
 	}
-out:
-	free(bytes);
-	free(bytes_r);
-	return (rv);
+	return (0);
 }
 
 static int

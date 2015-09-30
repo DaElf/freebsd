@@ -39,7 +39,9 @@ __FBSDID("$FreeBSD$");
 #include <signal.h>
 
 int
-sigaddset(sigset_t *set, int signo)
+sigaddset(set, signo)
+	sigset_t *set;
+	int signo;
 {
 
 	if (signo <= 0 || signo > _SIG_MAXSIG) {
@@ -51,7 +53,9 @@ sigaddset(sigset_t *set, int signo)
 }
 
 int
-sigdelset(sigset_t *set, int signo)
+sigdelset(set, signo)
+	sigset_t *set;
+	int signo;
 {
 
 	if (signo <= 0 || signo > _SIG_MAXSIG) {
@@ -63,7 +67,8 @@ sigdelset(sigset_t *set, int signo)
 }
 
 int
-sigemptyset(sigset_t *set)
+sigemptyset(set)
+	sigset_t *set;
 {
 	int i;
 
@@ -73,7 +78,8 @@ sigemptyset(sigset_t *set)
 }
 
 int
-sigfillset(sigset_t *set)
+sigfillset(set)
+	sigset_t *set;
 {
 	int i;
 
@@ -83,7 +89,9 @@ sigfillset(sigset_t *set)
 }
 
 int
-sigismember(const sigset_t *set, int signo)
+sigismember(set, signo)
+	const sigset_t *set;
+	int signo;
 {
 
 	if (signo <= 0 || signo > _SIG_MAXSIG) {

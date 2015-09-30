@@ -261,7 +261,7 @@ _sx_slock(struct sx *sx, int opts, const char *file, int line)
 	if (!error) {
 		LOCK_LOG_LOCK("SLOCK", &sx->lock_object, 0, 0, file, line);
 		WITNESS_LOCK(&sx->lock_object, 0, file, line);
-		TD_LOCKS_INC(curthread);
+		curthread->td_locks++;
 	}
 
 	return (error);
@@ -290,7 +290,7 @@ sx_try_slock_(struct sx *sx, const char *file, int line)
 			WITNESS_LOCK(&sx->lock_object, LOP_TRYLOCK, file, line);
 			LOCKSTAT_PROFILE_OBTAIN_RWLOCK_SUCCESS(sx__acquire,
 			    sx, 0, 0, file, line, LOCKSTAT_READER);
-			TD_LOCKS_INC(curthread);
+			curthread->td_locks++;
 			return (1);
 		}
 	}
@@ -318,7 +318,7 @@ _sx_xlock(struct sx *sx, int opts, const char *file, int line)
 		LOCK_LOG_LOCK("XLOCK", &sx->lock_object, 0, sx->sx_recurse,
 		    file, line);
 		WITNESS_LOCK(&sx->lock_object, LOP_EXCLUSIVE, file, line);
-		TD_LOCKS_INC(curthread);
+		curthread->td_locks++;
 	}
 
 	return (error);
@@ -353,7 +353,7 @@ sx_try_xlock_(struct sx *sx, const char *file, int line)
 		if (!sx_recursed(sx))
 			LOCKSTAT_PROFILE_OBTAIN_RWLOCK_SUCCESS(sx__acquire,
 			    sx, 0, 0, file, line, LOCKSTAT_WRITER);
-		TD_LOCKS_INC(curthread);
+		curthread->td_locks++;
 	}
 
 	return (rval);
@@ -371,7 +371,7 @@ _sx_sunlock(struct sx *sx, const char *file, int line)
 	WITNESS_UNLOCK(&sx->lock_object, 0, file, line);
 	LOCK_LOG_LOCK("SUNLOCK", &sx->lock_object, 0, 0, file, line);
 	__sx_sunlock(sx, file, line);
-	TD_LOCKS_DEC(curthread);
+	curthread->td_locks--;
 }
 
 void
@@ -387,7 +387,7 @@ _sx_xunlock(struct sx *sx, const char *file, int line)
 	LOCK_LOG_LOCK("XUNLOCK", &sx->lock_object, 0, sx->sx_recurse, file,
 	    line);
 	__sx_xunlock(sx, curthread, file, line);
-	TD_LOCKS_DEC(curthread);
+	curthread->td_locks--;
 }
 
 /*

@@ -1305,5 +1305,3 @@ LSYM(Lchange_\register):
 #include "ieee754-sf.S"
 #include "bpabi.S"
 #endif /* __symbian__ */
-
-	.section .note.GNU-stack,"",%progbits

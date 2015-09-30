@@ -67,7 +67,8 @@ static pthread_mutex_t pidlist_mutex = PTHREAD_MUTEX_INITIALIZER;
 #define	THREAD_UNLOCK()	if (__isthreaded) _pthread_mutex_unlock(&pidlist_mutex)
 
 FILE *
-popen(const char *command, const char *type)
+popen(command, type)
+	const char *command, *type;
 {
 	struct pid *cur;
 	FILE *iop;
@@ -178,7 +179,8 @@ popen(const char *command, const char *type)
  *	if already `pclosed', or waitpid returns an error.
  */
 int
-pclose(FILE *iop)
+pclose(iop)
+	FILE *iop;
 {
 	struct pid *cur, *last = NULL;
 	int pstat;

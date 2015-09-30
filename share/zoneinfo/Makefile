@@ -34,7 +34,7 @@ CONTRIBDIR=	${.CURDIR}/../../contrib/tzdata/
 .PATH:		${CONTRIBDIR}
 
 .if defined(LEAPSECONDS)
-LEAPFILE=	-L ${CONTRIBDIR}leapseconds
+LEAPFILE=	-L leapseconds
 .else
 LEAPFILE=
 .endif
