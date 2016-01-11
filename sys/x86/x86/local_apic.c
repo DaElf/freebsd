@@ -576,12 +576,14 @@ lapic_clear_lapic(u_int disable) {
 
 	struct lapic *la;
 	la = &lapics[lapic_id()];
-
 	uint32_t value;
+	uint32_t maxlvt;
+
+	maxlvt = (lapic_read32(LAPIC_VERSION) & APIC_VER_MAXLVT) >> MAXLVTSHIFT;
 
 	if (bootverbose)
-		printf("%s lapic_id(%d) cpu(%d) la %p lapic_map %p\n",__FUNCTION__,
-		       lapic_id(), PCPU_GET(cpuid), la, lapic_map);
+		printf("%s lapic_id(%d) cpu(%d) la %p lapic_map %p maxlvt %u\n",__FUNCTION__,
+		       lapic_id(), PCPU_GET(cpuid), la, lapic_map, maxlvt);
 
 	/*
 	 * Fist we set the mask bit to keep and new interrupts from
@@ -591,34 +593,37 @@ lapic_clear_lapic(u_int disable) {
 	 * kernel will see the old interrupts before the appropriate handlers
 	 * are in place and trigger a panic.
 	 */
-#ifdef notyet
-	/* this seems to be causing APIC error in the new kernel */
-	value = lapic_read32(LAPIC_LVT_ERROR);
-	value |= APIC_LVT_M;
-	lapic_write32(LAPIC_LVT_ERROR, value);
-#endif
+	if (maxlvt >= APIC_LVT_ERROR) { /* aka 3 */
+		value = lapic_read32(LAPIC_LVT_ERROR);
+		lapic_write32(LAPIC_LVT_ERROR, value | APIC_LVT_M);
+	}
 
 	value = lapic_read32(LAPIC_LVT_TIMER);
-	value |= APIC_LVT_M;
-	lapic_write32(LAPIC_LVT_TIMER, value);
+	lapic_write32(LAPIC_LVT_TIMER, value | APIC_LVT_M;);
 
 	value = lapic_read32(LAPIC_LVT_LINT0);
-	value |= APIC_LVT_M;
-	lapic_write32(LAPIC_LVT_LINT0, value);
+	lapic_write32(LAPIC_LVT_LINT0, value | APIC_LVT_M;);
 
 	value = lapic_read32(LAPIC_LVT_LINT1);
-	value |= APIC_LVT_M;
-	lapic_write32(LAPIC_LVT_LINT1, value);
+	lapic_write32(LAPIC_LVT_LINT1, value | APIC_LVT_M);
 
-	value = lapic_read32(LAPIC_LVT_PCINT);
-	value |= APIC_LVT_M;
-	lapic_write32(LAPIC_LVT_PCINT, value);
+	if (maxlvt >= 4) {
+		value = lapic_read32(LAPIC_LVT_PCINT);
+		lapic_write32(LAPIC_LVT_PCINT, value | APIC_LVT_M);
+	}
+	if (maxlvt >= 5)
+		printf("%s Therm Vector\n", __func__);
+	if (maxlvt >= 6)
+		printf("%s Intel MCE\n", __func__);
 
 	/* Program timer LVT and setup handler. */
 	lapic_write32(LAPIC_LVT_TIMER, APIC_LVTT_M); /* masked */
 	lapic_write32(LAPIC_LVT_LINT0, APIC_LVT_M); /* masked */
 	lapic_write32(LAPIC_LVT_LINT1, APIC_LVT_M); /* masked */
-	//lapic_write32(LAPIC_LVT_PCINT, APIC_LVT_M);  /* masked */
+	if (maxlvt >= 3)
+		lapic_write32(LAPIC_LVT_ERROR, APIC_LVT_M);
+	if (maxlvt >= 4)
+		lapic_write32(LAPIC_LVT_PCINT, APIC_LVT_M);  /* masked */
 
 	if (disable) {
 		if (bootverbose)
