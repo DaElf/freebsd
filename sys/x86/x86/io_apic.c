@@ -171,7 +171,7 @@ ioapic_print_lowreg(void *value)
 	struct ioapic_route_entry *lowreg=
 		(struct ioapic_route_entry *)value;
 	printf("Mask %1d Trig %1d IRR %1d Pol %1d "
-	       "Stat %1d dstm %1d delm %d 0x%02X\n",
+	       "Stat %1d dstm %1d delm %d vector %d\n",
 	       lowreg->mask,
 	       lowreg->trigger,
 	       lowreg->irr,
@@ -429,8 +429,10 @@ ioapic_program_intpin(struct ioapic_intsrc *intpin)
 	value &= ~IOART_DEST;
 
 	if (bootverbose) {
-		printf("%s: IOAPIC_REDTBL_HI value 0x%x  high 0x%x low 0x%x\n",
-		       __func__, value, high, low);
+		printf("%s: IOAPIC_REDTBL_HI intpin %d value 0x%x high 0x%x low 0x%x\n",
+		       __func__,
+		       intpin->io_intpin,
+		       value, high, low);
 	}
 	value |= high;
 	ioapic_write(io->io_addr, IOAPIC_REDTBL_HI(intpin->io_intpin), value);
@@ -500,8 +502,8 @@ ioapic_assign_cpu(struct intsrc *isrc, u_int apic_id)
 		printf("ioapic%u: routing intpin %u (", io->io_id,
 		    intpin->io_intpin);
 		ioapic_print_irq(intpin);
-		printf(") to lapic %u vector %u\n", intpin->io_cpu,
-		    intpin->io_vector);
+			printf(") to lapic %u vector %u (0x%02X)\n", intpin->io_cpu,
+		       intpin->io_vector, intpin->io_vector);
 	}
 	ioapic_program_intpin(intpin);
 	mtx_unlock_spin(&icu_lock);
@@ -737,7 +739,10 @@ ioapic_create(vm_paddr_t addr, int32_t apic_id, int intbase)
 			       intpin, intpin->io_intpin, value);
 			ioapic_print_lowreg(&value);
 		}
-		ioapic_write(apic, IOAPIC_REDTBL_LO(i), value | IOART_INTMSET);
+		//ioapic_write(apic, IOAPIC_REDTBL_LO(i), value | IOART_INTMSET);
+		printf("%s reset intpin %d to 0x%x\n", __func__,
+		       intpin->io_intpin, IOART_INTMSET);
+		ioapic_write(apic, IOAPIC_REDTBL_LO(i), IOART_INTMSET);
 #ifdef ACPI_DMAR
 		/* dummy, but sets cookie */
 		mtx_unlock_spin(&icu_lock);
