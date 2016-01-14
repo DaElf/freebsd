@@ -599,30 +599,30 @@ lapic_clear_lapic(u_int disable) {
 	}
 
 	value = lapic_read32(LAPIC_LVT_TIMER);
-	lapic_write32(LAPIC_LVT_TIMER, value | APIC_LVT_M;);
+	lapic_write32(LAPIC_LVT_TIMER, value | APIC_LVT_M);
 
 	value = lapic_read32(LAPIC_LVT_LINT0);
-	lapic_write32(LAPIC_LVT_LINT0, value | APIC_LVT_M;);
+	lapic_write32(LAPIC_LVT_LINT0, value | APIC_LVT_M);
 
 	value = lapic_read32(LAPIC_LVT_LINT1);
 	lapic_write32(LAPIC_LVT_LINT1, value | APIC_LVT_M);
 
-	if (maxlvt >= 4) {
+	if (maxlvt >= APIC_LVT_PMC) { /* aka 4 */
 		value = lapic_read32(LAPIC_LVT_PCINT);
 		lapic_write32(LAPIC_LVT_PCINT, value | APIC_LVT_M);
 	}
-	if (maxlvt >= 5)
+	if (maxlvt >= APIC_LVT_THERMAL) /* aka 5 */
 		printf("%s Therm Vector\n", __func__);
-	if (maxlvt >= 6)
+	if (maxlvt >= APIC_LVT_CMCI) /* aka 6 */
 		printf("%s Intel MCE\n", __func__);
 
 	/* Program timer LVT and setup handler. */
 	lapic_write32(LAPIC_LVT_TIMER, APIC_LVTT_M); /* masked */
 	lapic_write32(LAPIC_LVT_LINT0, APIC_LVT_M); /* masked */
 	lapic_write32(LAPIC_LVT_LINT1, APIC_LVT_M); /* masked */
-	if (maxlvt >= 3)
+	if (maxlvt >= APIC_LVT_ERROR) /* aka 3 */
 		lapic_write32(LAPIC_LVT_ERROR, APIC_LVT_M);
-	if (maxlvt >= 4)
+	if (maxlvt >= APIC_LVT_PMC) { /* aka 4 */
 		lapic_write32(LAPIC_LVT_PCINT, APIC_LVT_M);  /* masked */
 
 	if (disable) {
