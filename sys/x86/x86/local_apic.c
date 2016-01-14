@@ -622,7 +622,7 @@ lapic_clear_lapic(u_int disable) {
 	lapic_write32(LAPIC_LVT_LINT1, APIC_LVT_M); /* masked */
 	if (maxlvt >= APIC_LVT_ERROR) /* aka 3 */
 		lapic_write32(LAPIC_LVT_ERROR, APIC_LVT_M);
-	if (maxlvt >= APIC_LVT_PMC) { /* aka 4 */
+	if (maxlvt >= APIC_LVT_PMC) /* aka 4 */
 		lapic_write32(LAPIC_LVT_PCINT, APIC_LVT_M);  /* masked */
 
 	if (disable) {
