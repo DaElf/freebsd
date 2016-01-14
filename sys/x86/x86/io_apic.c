@@ -427,6 +427,11 @@ ioapic_program_intpin(struct ioapic_intsrc *intpin)
 	/* Write the values to the APIC. */
 	value = ioapic_read(io->io_addr, IOAPIC_REDTBL_HI(intpin->io_intpin));
 	value &= ~IOART_DEST;
+
+	if (bootverbose) {
+		printf("%s: IOAPIC_REDTBL_HI value 0x%x  high 0x%x low 0x%x\n",
+		       __func__, value, high, low);
+	}
 	value |= high;
 	ioapic_write(io->io_addr, IOAPIC_REDTBL_HI(intpin->io_intpin), value);
 	intpin->io_lowreg = low;
