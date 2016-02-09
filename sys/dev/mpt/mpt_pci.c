@@ -146,6 +146,7 @@ static int mpt_pci_attach(device_t);
 static void mpt_free_bus_resources(struct mpt_softc *mpt);
 static int mpt_pci_detach(device_t);
 static int mpt_pci_shutdown(device_t);
+static int mpt_pci_shutdown_post_sync(device_t);
 static int mpt_dma_mem_alloc(struct mpt_softc *mpt);
 static void mpt_dma_mem_free(struct mpt_softc *mpt);
 #if 0
@@ -539,7 +540,7 @@ mpt_pci_attach(device_t dev)
 		goto bad;
 	}
 
-	mpt->eh = EVENTHANDLER_REGISTER(shutdown_post_sync, mpt_pci_shutdown,
+	mpt->eh = EVENTHANDLER_REGISTER(shutdown_post_sync, mpt_pci_shutdown_post_sync,
 	    dev, SHUTDOWN_PRI_LAST);
 
 	if (mpt->eh == NULL) {
@@ -608,6 +609,7 @@ mpt_pci_detach(device_t dev)
 	struct mpt_softc *mpt;
 
 	mpt  = (struct mpt_softc*)device_get_softc(dev);
+	printf("%s mpt 0x%p\n", __func__, mpt);
 
 	if (mpt) {
 		mpt_disable_ints(mpt);
@@ -627,6 +629,15 @@ mpt_pci_detach(device_t dev)
 	return(0);
 }
 
+static int
+mpt_pci_shutdown_post_sync(device_t dev)
+{
+
+	printf("%s dev %d why does mpt need a post sync shutdown?\n",
+	       __func__, dev);
+	return 0;
+}
+
 /*
  * Disable the hardware
  */
@@ -634,11 +645,34 @@ static int
 mpt_pci_shutdown(device_t dev)
 {
 	struct mpt_softc *mpt;
+	int ret = 0;
 
 	mpt = (struct mpt_softc *)device_get_softc(dev);
-	if (mpt)
-		return (mpt_shutdown(mpt));
-	return(0);
+	if (mpt) {
+		ret = mpt_shutdown(mpt);
+	}
+	if (0) {
+		printf("%s:%d\n", __func__, __LINE__);
+		mpt_shutdown(mpt);
+		printf("%s:%d\n", __func__, __LINE__);
+		//mpt_disable_ints(mpt);
+		mpt_detach(mpt);
+		printf("%s:%d\n", __func__, __LINE__);
+		mpt_reset(mpt, /*reinit*/FALSE);
+		printf("%s:%d\n", __func__, __LINE__);
+		mpt_raid_free_mem(mpt);
+		printf("%s:%d\n", __func__, __LINE__);
+		mpt_dma_mem_free(mpt);
+		printf("%s:%d\n", __func__, __LINE__);
+		mpt_free_bus_resources(mpt);
+		printf("%s:%d\n", __func__, __LINE__);
+#if 0
+		mpt_unlink_peer(mpt);
+#endif
+		MPT_LOCK_DESTROY(mpt);
+		printf("%s:%d\n", __func__, __LINE__);
+	}
+	return ret;
 }
 
 static int
