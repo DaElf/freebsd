@@ -285,10 +285,13 @@ mpt_modevent(module_t mod, int type, void *data)
 		break;
 	}
 	case MOD_SHUTDOWN:
+		printf("%s MOD_SHUTDOWN\n", __func__);
 		break;
 	case MOD_QUIESCE:
+		printf("%s MOD_QUIESCE\n", __func__);
 		break;
 	case MOD_UNLOAD:
+		printf("%s MOD_UNLOAD\n", __func__);
 		error = pers->unload(pers);
 		mpt_personalities[pers->id] = NULL;
 		break;
@@ -304,6 +307,7 @@ mpt_stdload(struct mpt_personality *pers)
 {
 
 	/* Load is always successful. */
+	printf("%s mpt per %p\n", __func__, pers);
 	return (0);
 }
 
@@ -312,6 +316,7 @@ mpt_stdprobe(struct mpt_softc *mpt)
 {
 
 	/* Probe is always successful. */
+	printf("%s mpt %p\n", __func__, mpt);
 	return (0);
 }
 
@@ -320,6 +325,7 @@ mpt_stdattach(struct mpt_softc *mpt)
 {
 
 	/* Attach is always successful. */
+	printf("%s mpt %p\n", __func__, mpt);
 	return (0);
 }
 
@@ -328,13 +334,14 @@ mpt_stdenable(struct mpt_softc *mpt)
 {
 
 	/* Enable is always successful. */
+	printf("%s mpt %p\n", __func__, mpt);
 	return (0);
 }
 
 static void
 mpt_stdready(struct mpt_softc *mpt)
 {
-
+	printf("%s mpt %p\n", __func__, mpt);
 }
 
 static int
@@ -1228,7 +1235,11 @@ mpt_free_request(struct mpt_softc *mpt, request_t *req)
 		req->serno = 0;
 		req->state = REQ_STATE_FREE;
 #ifdef	INVARIANTS
-		memset(req->req_vbuf, 0xff, sizeof (MSG_REQUEST_HEADER));
+#if 0
+		if (req->req_vbuf)
+			memset(req->req_vbuf, 0xff, sizeof (MSG_REQUEST_HEADER));
+#endif
+		//printf("%s req %p req_vbuf %p\n", __func__, req, req->req_vbuf);
 #endif
 		TAILQ_INSERT_TAIL(&mpt->request_free_list, req, links);
 		if (mpt->getreqwaiter != 0) {
@@ -2214,7 +2225,9 @@ mpt_shutdown(struct mpt_softc *mpt)
 {
 	struct mpt_personality *pers;
 
+	printf("%s:%d mpt %p\n", __func__, __LINE__, mpt);
 	MPT_PERS_FOREACH_REVERSE(mpt, pers) {
+		printf("%s mpt func 0x%p\n", __func__, pers->shutdown);
 		pers->shutdown(mpt);
 	}
 	return (0);
@@ -2223,14 +2236,19 @@ mpt_shutdown(struct mpt_softc *mpt)
 int
 mpt_detach(struct mpt_softc *mpt)
 {
+#if 0
 	struct mpt_personality *pers;
+#endif
 
+	printf("%s:%d mpt %p\n", __func__, __LINE__, mpt);
+#if 0
 	MPT_PERS_FOREACH_REVERSE(mpt, pers) {
 		pers->detach(mpt);
 		mpt->mpt_pers_mask &= ~(0x1 << pers->id);
 		pers->use_count--;
 	}
 	TAILQ_REMOVE(&mpt_tailq, mpt, links);
+#endif
 	return (0);
 }
 
@@ -2342,11 +2360,24 @@ mpt_core_enable(struct mpt_softc *mpt)
 	return (0);
 }
 
+void kdb_backtrace(void);
 static void
 mpt_core_shutdown(struct mpt_softc *mpt)
 {
+	int val;
 
+	printf("%s mpt %p\n", __func__, mpt);
+	kdb_backtrace();
+	
 	mpt_disable_ints(mpt);
+	
+	/* Make sure no request has pending timeouts. */
+	for (val = 0; val < MPT_MAX_REQUESTS(mpt); val++) {
+		request_t *req = &mpt->request_pool[val];
+		mpt_callout_drain(mpt, &req->callout);
+	}
+
+	mpt_dma_buf_free(mpt);
 }
 
 static void
@@ -2354,6 +2385,7 @@ mpt_core_detach(struct mpt_softc *mpt)
 {
 	int val;
 
+	printf("%s mpt %p\n", __func__, mpt);
 	/*
 	 * XXX: FREE MEMORY 
 	 */
@@ -2372,6 +2404,7 @@ static int
 mpt_core_unload(struct mpt_personality *pers)
 {
 
+	printf("%s mpt per %p\n", __func__, pers);
 	/* Unload is always successful. */
 	return (0);
 }
