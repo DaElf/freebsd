@@ -1175,6 +1175,10 @@ mpt_cam_detach(struct mpt_softc *mpt)
 {
 	mpt_handler_t handler;
 
+
+	printf("%s mpt 0x%p mpt->ready %d\n", __func__,
+	       mpt, mpt->ready);
+	if (mpt->ready) {
 	MPT_LOCK(mpt);
 	mpt->ready = 0;
 	mpt_terminate_recovery_thread(mpt); 
@@ -1195,30 +1199,45 @@ mpt_cam_detach(struct mpt_softc *mpt)
 	mpt_deregister_handler(mpt, MPT_HANDLER_REPLY, handler,
 			       sata_pass_handler_id);
 
+	printf("%s:%d\n", __func__, __LINE__);
 	if (mpt->tmf_req != NULL) {
 		mpt->tmf_req->state = REQ_STATE_ALLOCATED;
+		printf("%s:%d\n", __func__, __LINE__);
 		mpt_free_request(mpt, mpt->tmf_req);
+		printf("%s:%d\n", __func__, __LINE__);
 		mpt->tmf_req = NULL;
 	}
+	printf("%s:%d\n", __func__, __LINE__);
 	if (mpt->sas_portinfo != NULL) {
+		printf("%s:%d\n", __func__, __LINE__);
 		free(mpt->sas_portinfo, M_DEVBUF);
 		mpt->sas_portinfo = NULL;
 	}
 
+	printf("%s:%d\n", __func__, __LINE__);
 	if (mpt->sim != NULL) {
+		printf("%s:%d\n", __func__, __LINE__);
 		xpt_free_path(mpt->path);
+		printf("%s:%d\n", __func__, __LINE__);
 		xpt_bus_deregister(cam_sim_path(mpt->sim));
+		printf("%s:%d\n", __func__, __LINE__);
 		cam_sim_free(mpt->sim, TRUE);
 		mpt->sim = NULL;
 	}
 
+	printf("%s:%d\n", __func__, __LINE__);
 	if (mpt->phydisk_sim != NULL) {
+		printf("%s:%d\n", __func__, __LINE__);
 		xpt_free_path(mpt->phydisk_path);
+		printf("%s:%d\n", __func__, __LINE__);
 		xpt_bus_deregister(cam_sim_path(mpt->phydisk_sim));
+		printf("%s:%d\n", __func__, __LINE__);
 		cam_sim_free(mpt->phydisk_sim, TRUE);
+		printf("%s:%d\n", __func__, __LINE__);
 		mpt->phydisk_sim = NULL;
 	}
 	MPT_UNLOCK(mpt);
+	}
 }
 
 /* This routine is used after a system crash to dump core onto the swap device.
