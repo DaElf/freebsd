@@ -160,6 +160,9 @@ cpu_mp_start(void)
 	/* Install an inter-CPU IPI for CPU suspend/resume */
 	setidt(IPI_SUSPEND, IDTVEC(cpususpend), SDT_SYSIGT, SEL_KPL, 0);
 
+	/* Install an inter-CPU IPI for kload shutdown */
+	setidt(IPI_KLOAD, IDTVEC(cpukload), SDT_SYSIGT, SEL_KPL, 0);
+
 	/* Set boot_cpu_id if needed. */
 	if (boot_cpu_id == -1) {
 		boot_cpu_id = PCPU_GET(apic_id);

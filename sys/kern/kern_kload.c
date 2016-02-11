@@ -424,7 +424,7 @@ kload_shutdown_final(void *arg, int howto)
 		CPU_NAND(&map, &stopped_cpus);
 		if (!CPU_EMPTY(&map)) {
 			printf("cpu_reset: Stopping other CPUs\n");
-			suspend_cpus(map);
+			kload_suspend_cpus(map);
 		}
 
 		if (bootverbose)
