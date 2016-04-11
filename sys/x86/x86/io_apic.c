@@ -119,6 +119,8 @@ static void	ioapic_resume(struct pic *pic, bool suspend_cancelled);
 static int	ioapic_assign_cpu(struct intsrc *isrc, u_int apic_id);
 static void	ioapic_program_intpin(struct ioapic_intsrc *intpin);
 static void	ioapic_reprogram_intpin(struct intsrc *isrc);
+/* kload debug */
+static void	ioapic_print_lowreg(void *);
 
 static STAILQ_HEAD(,ioapic) ioapic_list = STAILQ_HEAD_INITIALIZER(ioapic_list);
 struct pic ioapic_template = {
@@ -143,35 +145,82 @@ static int enable_extint;
 SYSCTL_INT(_hw_apic, OID_AUTO, enable_extint, CTLFLAG_RDTUN, &enable_extint, 0,
     "Enable the ExtINT pin in the first I/O APIC");
 
+/*
+ * kload debugging
+ * print out the state of the io apic at system boot time
+ * so the sate of each interrupt can be inspected
+ */
+struct ioapic_route_entry {
+	uint32_t	vector		:  8,
+		delivery_mode	:  3,	/* 000: FIXED
+					 * 001: lowest prio
+					 * 111: ExtINT
+					 */
+		dest_mode	:  1,	/* 0: physical, 1: logical */
+		delivery_status	:  1,
+		polarity	:  1,
+		irr		:  1,
+		trigger		:  1,	/* 0: edge, 1: level */
+		mask		:  1,	/* 0: enabled, 1: disabled */
+		__reserved_2	: 15;
+} __attribute__ ((packed));
+
 static void
-_ioapic_eoi_source(struct intsrc *isrc, int locked)
+ioapic_print_lowreg(void *value)
+{
+	struct ioapic_route_entry *lowreg=
+		(struct ioapic_route_entry *)value;
+	printf("Mask %1d Trig %1d IRR %1d Polarity %1d "
+	       "DelStat %1d DestMode %1d DelMode %d Vector %d\n",
+	       lowreg->mask,
+	       lowreg->trigger,
+	       lowreg->irr,
+	       lowreg->polarity,
+	       lowreg->delivery_status,
+	       lowreg->dest_mode,
+	       lowreg->delivery_mode,
+	       lowreg->vector);
+}
+
+static void
+_ioapic_eoi_source(struct intsrc *isrc, int locked, int v)
 {
 	struct ioapic_intsrc *src;
 	struct ioapic *io;
 	volatile uint32_t *apic_eoi;
 	uint32_t low1;
 
+	if (v) printf("%s l_eoi_sup %d\n", __func__, lapic_eoi_suppression);
+
 	lapic_eoi();
-	if (!lapic_eoi_suppression)
+	if (!v && !lapic_eoi_suppression)
 		return;
 	src = (struct ioapic_intsrc *)isrc;
-	if (src->io_edgetrigger)
+
+	if (v) printf("%s edgetrigger %d\n", __func__, src->io_edgetrigger);
+
+	if (!v && src->io_edgetrigger)
 		return;
 	io = (struct ioapic *)isrc->is_pic;
+
+	if (v) printf("%s io 0x%p\n", __func__, io);
 
 	/*
 	 * Handle targeted EOI for level-triggered pins, if broadcast
 	 * EOI suppression is supported by LAPICs.
 	 */
+	if (v) printf("%s:%d haseoi %d\n", __func__, __LINE__, io->io_haseoi);
 	if (io->io_haseoi) {
 		/*
 		 * If IOAPIC has EOI Register, simply write vector
 		 * number into the reg.
 		 */
-		apic_eoi = (volatile uint32_t *)((volatile char *)
-		    io->io_addr + IOAPIC_EOIR);
+		apic_eoi = (volatile uint32_t *)((volatile char *) io->io_addr + IOAPIC_EOIR);
+		if (v) printf("%s:%d apic_eoi %d\n", __func__, __LINE__, *apic_eoi);
 		*apic_eoi = src->io_vector;
+		if (v) printf("%s:%d apic_eoi %d\n", __func__, __LINE__, *apic_eoi);
 	} else {
+		if (v) printf("%s:%d haseoi %d\n", __func__, __LINE__, io->io_haseoi);
 		/*
 		 * Otherwise, if IO-APIC is too old to provide EOIR,
 		 * do what Intel did for the Linux kernel. Temporary
@@ -282,7 +331,7 @@ ioapic_disable_source(struct intsrc *isrc, int eoi)
 	}
 
 	if (eoi == PIC_EOI)
-		_ioapic_eoi_source(isrc, 1);
+		_ioapic_eoi_source(isrc, 1, 0);
 
 	mtx_unlock_spin(&icu_lock);
 }
@@ -291,7 +340,7 @@ static void
 ioapic_eoi_source(struct intsrc *isrc)
 {
 
-	_ioapic_eoi_source(isrc, 0);
+	_ioapic_eoi_source(isrc, 0, 0);
 }
 
 /*
@@ -388,6 +437,13 @@ ioapic_program_intpin(struct ioapic_intsrc *intpin)
 	/* Write the values to the APIC. */
 	value = ioapic_read(io->io_addr, IOAPIC_REDTBL_HI(intpin->io_intpin));
 	value &= ~IOART_DEST;
+
+	if (bootverbose) {
+		printf("%s: IOAPIC_REDTBL_HI intpin %d value 0x%x high 0x%x low 0x%x\n",
+		       __func__,
+		       intpin->io_intpin,
+		       value, high, low);
+	}
 	value |= high;
 	ioapic_write(io->io_addr, IOAPIC_REDTBL_HI(intpin->io_intpin), value);
 	intpin->io_lowreg = low;
@@ -456,8 +512,8 @@ ioapic_assign_cpu(struct intsrc *isrc, u_int apic_id)
 		printf("ioapic%u: routing intpin %u (", io->io_id,
 		    intpin->io_intpin);
 		ioapic_print_irq(intpin);
-		printf(") to lapic %u vector %u\n", intpin->io_cpu,
-		    intpin->io_vector);
+			printf(") to lapic %u vector %u (0x%02X)\n", intpin->io_cpu,
+		       intpin->io_vector, intpin->io_vector);
 	}
 	ioapic_program_intpin(intpin);
 	mtx_unlock_spin(&icu_lock);
@@ -687,6 +743,24 @@ ioapic_create(vm_paddr_t addr, int32_t apic_id, int intbase)
 		 */
 		intpin->io_cpu = PCPU_GET(apic_id);
 		value = ioapic_read(apic, IOAPIC_REDTBL_LO(i));
+		/* Output the state of the ioapic used for kload debugging */
+		if (bootverbose) {
+			printf("%s: intpin %p %d value 0x%x\n", __func__,
+			       intpin, intpin->io_intpin, value);
+			ioapic_print_lowreg(&value);
+		}
+		{
+			struct ioapic_route_entry *lowreg=
+				(struct ioapic_route_entry *)&value;
+			if (lowreg->trigger) {
+				printf("%s:%d EOI apic 0x%p intpin %d\t", __func__, __LINE__,
+				       apic, intpin->io_intpin);
+				_ioapic_eoi_source(&intpin->io_intsrc, 1, 1);
+				value = ioapic_read(apic, IOAPIC_REDTBL_LO(i));
+				ioapic_print_lowreg(&value);
+			}
+		}
+
 		ioapic_write(apic, IOAPIC_REDTBL_LO(i), value | IOART_INTMSET);
 #ifdef ACPI_DMAR
 		/* dummy, but sets cookie */
