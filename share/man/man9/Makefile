@@ -787,7 +787,8 @@ MLINKS+=g_bio.9 g_alloc_bio.9 \
 	g_bio.9 g_destroy_bio.9 \
 	g_bio.9 g_duplicate_bio.9 \
 	g_bio.9 g_new_bio.9 \
-	g_bio.9 g_print_bio.9
+	g_bio.9 g_print_bio.9 \
+	g_bio.9 g_reset_bio.9
 MLINKS+=g_consumer.9 g_destroy_consumer.9 \
 	g_consumer.9 g_new_consumer.9
 MLINKS+=g_data.9 g_read_data.9 \
@@ -1372,7 +1373,6 @@ MLINKS+=resource_int_value.9 resource_long_value.9 \
 	resource_int_value.9 resource_string_value.9
 MLINKS+=rman.9 rman_activate_resource.9 \
 	rman.9 rman_adjust_resource.9 \
-	rman.9 rman_await_resource.9 \
 	rman.9 rman_deactivate_resource.9 \
 	rman.9 rman_fini.9 \
 	rman.9 rman_first_free_region.9 \
