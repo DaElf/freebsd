@@ -464,7 +464,6 @@ void	lapic_handle_cmc(void);
 void	lapic_handle_error(void);
 void	lapic_handle_intr(int vector, struct trapframe *frame);
 void	lapic_handle_timer(struct trapframe *frame);
-void	hv_vector_handler(struct trapframe *frame);
 void	lapic_clear_lapic(u_int);
 
 extern int x2apic_mode;

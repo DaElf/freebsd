@@ -171,6 +171,31 @@ enum tokens {
 	TOK_ECN,
 	TOK_DROPTAIL,
 	TOK_PROTO,
+#ifdef NEW_AQM
+	/* AQM tokens*/
+	TOK_NO_ECN,
+	TOK_CODEL, 
+	TOK_FQ_CODEL,
+	TOK_TARGET,
+	TOK_INTERVAL,
+	TOK_FLOWS,
+	TOK_QUANTUM,
+	
+	TOK_PIE,
+	TOK_FQ_PIE,
+	TOK_TUPDATE,
+	TOK_MAX_BURST,
+	TOK_MAX_ECNTH,
+	TOK_ALPHA,
+	TOK_BETA,
+	TOK_CAPDROP,
+	TOK_NO_CAPDROP,
+	TOK_ONOFF,
+	TOK_DRE,
+	TOK_TS,
+	TOK_DERAND,
+	TOK_NO_DERAND,
+#endif
 	/* dummynet tokens */
 	TOK_WEIGHT,
 	TOK_LMAX,
@@ -345,6 +370,9 @@ void fill_flow6(struct _ipfw_insn_u32 *cmd, char *av, int cblen);
 void fill_unreach6_code(u_short *codep, char *str);
 void fill_icmp6types(struct _ipfw_insn_icmp6 *cmd, char *av, int cblen);
 int fill_ext6hdr(struct _ipfw_insn *cmd, char *av);
+
+/* ipfw2.c */
+void bp_flush(struct buf_pr *b);
 
 /* tables.c */
 struct _ipfw_obj_ctlv;

@@ -113,9 +113,12 @@ __FBSDID("$FreeBSD$");
 #include <machine/in_cksum.h>
 
 #include <dev/hyperv/include/hyperv.h>
+#include <dev/hyperv/include/hyperv_busdma.h>
+
 #include "hv_net_vsc.h"
 #include "hv_rndis.h"
 #include "hv_rndis_filter.h"
+#include "vmbus_if.h"
 
 #define hv_chan_rxr	hv_chan_priv1
 #define hv_chan_txr	hv_chan_priv2
@@ -298,6 +301,12 @@ static int hn_tx_swq_depth = 0;
 SYSCTL_INT(_hw_hn, OID_AUTO, tx_swq_depth, CTLFLAG_RDTUN,
     &hn_tx_swq_depth, 0, "Depth of IFQ or BUFRING");
 
+#if __FreeBSD_version >= 1100095
+static u_int hn_lro_mbufq_depth = 0;
+SYSCTL_UINT(_hw_hn, OID_AUTO, lro_mbufq_depth, CTLFLAG_RDTUN,
+    &hn_lro_mbufq_depth, 0, "Depth of LRO mbuf queue");
+#endif
+
 static u_int hn_cpu_index;
 
 /*
@@ -336,6 +345,7 @@ static void hn_destroy_rx_data(struct hn_softc *sc);
 static void hn_set_tx_chimney_size(struct hn_softc *, int);
 static void hn_channel_attach(struct hn_softc *, struct hv_vmbus_channel *);
 static void hn_subchan_attach(struct hn_softc *, struct hv_vmbus_channel *);
+static void hn_subchan_setup(struct hn_softc *);
 
 static int hn_transmit(struct ifnet *, struct mbuf *);
 static void hn_xmit_qflush(struct ifnet *);
@@ -566,25 +576,8 @@ netvsc_attach(device_t dev)
 	device_printf(dev, "%d TX ring, %d RX ring\n",
 	    sc->hn_tx_ring_inuse, sc->hn_rx_ring_inuse);
 
-	if (sc->net_dev->num_channel > 1) {
-		struct hv_vmbus_channel **subchan;
-		int subchan_cnt = sc->net_dev->num_channel - 1;
-		int i;
-
-		/* Wait for sub-channels setup to complete. */
-		subchan = vmbus_get_subchan(pri_chan, subchan_cnt);
-
-		/* Attach the sub-channels. */
-		for (i = 0; i < subchan_cnt; ++i) {
-			/* NOTE: Calling order is critical. */
-			hn_subchan_attach(sc, subchan[i]);
-			hv_nv_subchan_attach(subchan[i]);
-		}
-
-		/* Release the sub-channels */
-		vmbus_rel_subchan(subchan, subchan_cnt);
-		device_printf(dev, "%d sub-channels setup done\n", subchan_cnt);
-	}
+	if (sc->net_dev->num_channel > 1)
+		hn_subchan_setup(sc);
 
 #if __FreeBSD_version >= 1100099
 	if (sc->hn_rx_ring_inuse > 1) {
@@ -1282,6 +1275,19 @@ hv_m_append(struct mbuf *m0, int len, c_caddr_t cp)
 	return (remainder == 0);
 }
 
+#if defined(INET) || defined(INET6)
+static __inline int
+hn_lro_rx(struct lro_ctrl *lc, struct mbuf *m)
+{
+#if __FreeBSD_version >= 1100095
+	if (hn_lro_mbufq_depth) {
+		tcp_lro_queue_mbuf(lc, m);
+		return 0;
+	}
+#endif
+	return tcp_lro_rx(lc, m, 0);
+}
+#endif
 
 /*
  * Called when we receive a data packet from the "wire" on the
@@ -1299,6 +1305,7 @@ netvsc_recv(struct hv_vmbus_channel *chan, netvsc_packet *packet,
 	struct ifnet *ifp = rxr->hn_ifp;
 	struct mbuf *m_new;
 	int size, do_lro = 0, do_csum = 1;
+	int hash_type = M_HASHTYPE_OPAQUE_HASH;
 
 	if (!(ifp->if_drv_flags & IFF_DRV_RUNNING))
 		return (0);
@@ -1429,8 +1436,6 @@ skip:
 	}
 
 	if (hash_info != NULL && hash_value != NULL) {
-		int hash_type = M_HASHTYPE_OPAQUE;
-
 		rxr->hn_rss_pkts++;
 		m_new->m_pkthdr.flowid = hash_value->hash_value;
 		if ((hash_info->hash_info & NDIS_HASH_FUNCTION_MASK) ==
@@ -1464,14 +1469,15 @@ skip:
 				break;
 			}
 		}
-		M_HASHTYPE_SET(m_new, hash_type);
 	} else {
-		if (hash_value != NULL)
+		if (hash_value != NULL) {
 			m_new->m_pkthdr.flowid = hash_value->hash_value;
-		else
+		} else {
 			m_new->m_pkthdr.flowid = rxr->hn_rx_idx;
-		M_HASHTYPE_SET(m_new, M_HASHTYPE_OPAQUE);
+			hash_type = M_HASHTYPE_OPAQUE;
+		}
 	}
+	M_HASHTYPE_SET(m_new, hash_type);
 
 	/*
 	 * Note:  Moved RX completion back to hv_nv_on_receive() so all
@@ -1487,7 +1493,7 @@ skip:
 
 		if (lro->lro_cnt) {
 			rxr->hn_lro_tried++;
-			if (tcp_lro_rx(lro, m_new, 0) == 0) {
+			if (hn_lro_rx(lro, m_new) == 0) {
 				/* DONE! */
 				return 0;
 			}
@@ -1598,6 +1604,10 @@ hn_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			NV_UNLOCK(sc);
 			break;
 		}
+
+		/* Wait for subchannels to be destroyed */
+		vmbus_drain_subchan(hn_dev->channel);
+
 		error = hv_rf_on_device_add(hn_dev, &device_info,
 		    sc->hn_rx_ring_inuse);
 		if (error) {
@@ -1605,6 +1615,26 @@ hn_ioctl(struct ifnet *ifp, u_long cmd, caddr_t data)
 			sc->temp_unusable = FALSE;
 			NV_UNLOCK(sc);
 			break;
+		}
+		KASSERT(sc->hn_rx_ring_cnt == sc->net_dev->num_channel,
+		    ("RX ring count %d and channel count %u mismatch",
+		     sc->hn_rx_ring_cnt, sc->net_dev->num_channel));
+		if (sc->net_dev->num_channel > 1) {
+			int r;
+
+			/*
+			 * Skip the rings on primary channel; they are
+			 * handled by the hv_rf_on_device_add() above.
+			 */
+			for (r = 1; r < sc->hn_rx_ring_cnt; ++r) {
+				sc->hn_rx_ring[r].hn_rx_flags &=
+				    ~HN_RX_FLAG_ATTACHED;
+			}
+			for (r = 1; r < sc->hn_tx_ring_cnt; ++r) {
+				sc->hn_tx_ring[r].hn_tx_flags &=
+				    ~HN_TX_FLAG_ATTACHED;
+			}
+			hn_subchan_setup(sc);
 		}
 
 		sc->hn_tx_chimney_max = sc->net_dev->send_section_size;
@@ -2171,18 +2201,6 @@ hn_check_iplen(const struct mbuf *m, int hoff)
 }
 
 static void
-hn_dma_map_paddr(void *arg, bus_dma_segment_t *segs, int nseg, int error)
-{
-	bus_addr_t *paddr = arg;
-
-	if (error)
-		return;
-
-	KASSERT(nseg == 1, ("too many segments %d!", nseg));
-	*paddr = segs->ds_addr;
-}
-
-static void
 hn_create_rx_data(struct hn_softc *sc, int ring_cnt)
 {
 	struct sysctl_oid_list *child;
@@ -2234,7 +2252,8 @@ hn_create_rx_data(struct hn_softc *sc, int ring_cnt)
 		 */
 #if defined(INET) || defined(INET6)
 #if __FreeBSD_version >= 1100095
-		tcp_lro_init_args(&rxr->hn_lro, sc->hn_ifp, lroent_cnt, 0);
+		tcp_lro_init_args(&rxr->hn_lro, sc->hn_ifp, lroent_cnt,
+		    hn_lro_mbufq_depth);
 #else
 		tcp_lro_init(&rxr->hn_lro);
 		rxr->hn_lro.ifp = sc->hn_ifp;
@@ -2360,8 +2379,10 @@ static int
 hn_create_tx_ring(struct hn_softc *sc, int id)
 {
 	struct hn_tx_ring *txr = &sc->hn_tx_ring[id];
+	device_t dev = sc->hn_dev;
 	bus_dma_tag_t parent_dtag;
 	int error, i;
+	uint32_t version;
 
 	txr->hn_sc = sc;
 	txr->hn_tx_idx = id;
@@ -2400,10 +2421,18 @@ hn_create_tx_ring(struct hn_softc *sc, int id)
 	}
 
 	txr->hn_direct_tx_size = hn_direct_tx_size;
-	if (hv_vmbus_protocal_version >= HV_VMBUS_VERSION_WIN8_1)
+	version = VMBUS_GET_VERSION(device_get_parent(dev), dev);
+	if (version >= VMBUS_VERSION_WIN8_1) {
 		txr->hn_csum_assist = HN_CSUM_ASSIST;
-	else
+	} else {
 		txr->hn_csum_assist = HN_CSUM_ASSIST_WIN8;
+		if (id == 0) {
+			device_printf(dev, "bus version %u.%u, "
+			    "no UDP checksum offloading\n",
+			    VMBUS_VERSION_MAJOR(version),
+			    VMBUS_VERSION_MINOR(version));
+		}
+	}
 
 	/*
 	 * Always schedule transmission instead of trying to do direct
@@ -2411,7 +2440,7 @@ hn_create_tx_ring(struct hn_softc *sc, int id)
 	 */
 	txr->hn_sched_tx = 1;
 
-	parent_dtag = bus_get_dma_tag(sc->hn_dev);
+	parent_dtag = bus_get_dma_tag(dev);
 
 	/* DMA tag for RNDIS messages. */
 	error = bus_dma_tag_create(parent_dtag, /* parent */
@@ -2428,7 +2457,7 @@ hn_create_tx_ring(struct hn_softc *sc, int id)
 	    NULL,			/* lockfuncarg */
 	    &txr->hn_tx_rndis_dtag);
 	if (error) {
-		device_printf(sc->hn_dev, "failed to create rndis dmatag\n");
+		device_printf(dev, "failed to create rndis dmatag\n");
 		return error;
 	}
 
@@ -2447,7 +2476,7 @@ hn_create_tx_ring(struct hn_softc *sc, int id)
 	    NULL,			/* lockfuncarg */
 	    &txr->hn_tx_data_dtag);
 	if (error) {
-		device_printf(sc->hn_dev, "failed to create data dmatag\n");
+		device_printf(dev, "failed to create data dmatag\n");
 		return error;
 	}
 
@@ -2464,7 +2493,7 @@ hn_create_tx_ring(struct hn_softc *sc, int id)
 		    BUS_DMA_WAITOK | BUS_DMA_COHERENT,
 		    &txd->rndis_msg_dmap);
 		if (error) {
-			device_printf(sc->hn_dev,
+			device_printf(dev,
 			    "failed to allocate rndis_msg, %d\n", i);
 			return error;
 		}
@@ -2472,10 +2501,10 @@ hn_create_tx_ring(struct hn_softc *sc, int id)
 		error = bus_dmamap_load(txr->hn_tx_rndis_dtag,
 		    txd->rndis_msg_dmap,
 		    txd->rndis_msg, HN_RNDIS_MSG_LEN,
-		    hn_dma_map_paddr, &txd->rndis_msg_paddr,
+		    hyperv_dma_map_paddr, &txd->rndis_msg_paddr,
 		    BUS_DMA_NOWAIT);
 		if (error) {
-			device_printf(sc->hn_dev,
+			device_printf(dev,
 			    "failed to load rndis_msg, %d\n", i);
 			bus_dmamem_free(txr->hn_tx_rndis_dtag,
 			    txd->rndis_msg, txd->rndis_msg_dmap);
@@ -2486,7 +2515,7 @@ hn_create_tx_ring(struct hn_softc *sc, int id)
 		error = bus_dmamap_create(txr->hn_tx_data_dtag, 0,
 		    &txd->data_dmap);
 		if (error) {
-			device_printf(sc->hn_dev,
+			device_printf(dev,
 			    "failed to allocate tx data dmamap\n");
 			bus_dmamap_unload(txr->hn_tx_rndis_dtag,
 			    txd->rndis_msg_dmap);
@@ -2514,7 +2543,7 @@ hn_create_tx_ring(struct hn_softc *sc, int id)
 		 * Create per TX ring sysctl tree:
 		 * dev.hn.UNIT.tx.RINGID
 		 */
-		ctx = device_get_sysctl_ctx(sc->hn_dev);
+		ctx = device_get_sysctl_ctx(dev);
 		child = SYSCTL_CHILDREN(sc->hn_tx_sysctl_tree);
 
 		snprintf(name, sizeof(name), "%d", id);
@@ -2956,6 +2985,29 @@ hn_subchan_attach(struct hn_softc *sc, struct hv_vmbus_channel *chan)
 	    ("invalid channel subidx %u",
 	     chan->offer_msg.offer.sub_channel_index));
 	hn_channel_attach(sc, chan);
+}
+
+static void
+hn_subchan_setup(struct hn_softc *sc)
+{
+	struct hv_device *device_ctx = vmbus_get_devctx(sc->hn_dev);
+	struct hv_vmbus_channel **subchan;
+	int subchan_cnt = sc->net_dev->num_channel - 1;
+	int i;
+
+	/* Wait for sub-channels setup to complete. */
+	subchan = vmbus_get_subchan(device_ctx->channel, subchan_cnt);
+
+	/* Attach the sub-channels. */
+	for (i = 0; i < subchan_cnt; ++i) {
+		/* NOTE: Calling order is critical. */
+		hn_subchan_attach(sc, subchan[i]);
+		hv_nv_subchan_attach(subchan[i]);
+	}
+
+	/* Release the sub-channels */
+	vmbus_rel_subchan(subchan, subchan_cnt);
+	if_printf(sc->hn_ifp, "%d sub-channels setup done\n", subchan_cnt);
 }
 
 static void
