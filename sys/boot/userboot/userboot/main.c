@@ -46,7 +46,7 @@ static int userboot_zfs_found;
 #define	USERBOOT_VERSION	USERBOOT_VERSION_4
 
 #define	MALLOCSZ		(64*1024*1024)
-
+static char mallocbuf[MALLOCSZ];
 struct loader_callbacks *callbacks;
 void *callbacks_arg;
 
@@ -90,13 +90,6 @@ loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 {
 	const char *var;
 	int i;
-
-	if (version < USERBOOT_VERSION)
-		abort();
-
-	callbacks = cb;
-	callbacks_arg = arg;
-	userboot_disk_maxunit = ndisks;
 
 	/*
 	 * initialise the heap as early as possible.  Once this is done,
