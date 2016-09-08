@@ -69,6 +69,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/namei.h>
 #include <sys/priv.h>
 #include <sys/proc.h>
+#include <sys/racct.h>
 #include <sys/rwlock.h>
 #include <sys/stat.h>
 #include <sys/sysctl.h>
@@ -751,16 +752,16 @@ static	int flush_newblk_dep(struct vnode *, struct mount *, ufs_lbn_t);
 static	int flush_inodedep_deps(struct vnode *, struct mount *, ino_t);
 static	int flush_deplist(struct allocdirectlst *, int, int *);
 static	int sync_cgs(struct mount *, int);
-static	int handle_written_filepage(struct pagedep *, struct buf *);
+static	int handle_written_filepage(struct pagedep *, struct buf *, int);
 static	int handle_written_sbdep(struct sbdep *, struct buf *);
 static	void initiate_write_sbdep(struct sbdep *);
 static	void diradd_inode_written(struct diradd *, struct inodedep *);
 static	int handle_written_indirdep(struct indirdep *, struct buf *,
-	    struct buf**);
-static	int handle_written_inodeblock(struct inodedep *, struct buf *);
+	    struct buf**, int);
+static	int handle_written_inodeblock(struct inodedep *, struct buf *, int);
 static	int jnewblk_rollforward(struct jnewblk *, struct fs *, struct cg *,
 	    uint8_t *);
-static	int handle_written_bmsafemap(struct bmsafemap *, struct buf *);
+static	int handle_written_bmsafemap(struct bmsafemap *, struct buf *, int);
 static	void handle_written_jaddref(struct jaddref *);
 static	void handle_written_jremref(struct jremref *);
 static	void handle_written_jseg(struct jseg *, struct buf *);
@@ -1868,7 +1869,7 @@ softdep_move_dependencies(oldbp, newbp)
 		if (wk->wk_type == D_BMSAFEMAP &&
 		    bmsafemap_backgroundwrite(WK_BMSAFEMAP(wk), newbp))
 			dirty = 1;
-		if (wktail == 0)
+		if (wktail == NULL)
 			LIST_INSERT_HEAD(&newbp->b_dep, wk, wk_list);
 		else
 			LIST_INSERT_AFTER(wktail, wk, wk_list);
@@ -1937,9 +1938,9 @@ softdep_waitidle(struct mount *mp, int flags __unused)
 		vn_lock(devvp, LK_EXCLUSIVE | LK_RETRY);
 		error = VOP_FSYNC(devvp, MNT_WAIT, td);
 		VOP_UNLOCK(devvp, 0);
+		ACQUIRE_LOCK(ump);
 		if (error != 0)
 			break;
-		ACQUIRE_LOCK(ump);
 	}
 	ump->softdep_req = 0;
 	if (i == SU_WAITIDLE_RETRIES && error == 0 && ump->softdep_deps != 0) {
@@ -2996,10 +2997,13 @@ softdep_prealloc(vp, waitok)
 	    ("softdep_prealloc called on non-softdep filesystem"));
 	/*
 	 * Nothing to do if we are not running journaled soft updates.
-	 * If we currently hold the snapshot lock, we must avoid handling
-	 * other resources that could cause deadlock.
+	 * If we currently hold the snapshot lock, we must avoid
+	 * handling other resources that could cause deadlock.  Do not
+	 * touch quotas vnode since it is typically recursed with
+	 * other vnode locks held.
 	 */
-	if (DOINGSUJ(vp) == 0 || IS_SNAPSHOT(VTOI(vp)))
+	if (DOINGSUJ(vp) == 0 || IS_SNAPSHOT(VTOI(vp)) ||
+	    (vp->v_vflag & VV_SYSTEM) != 0)
 		return (0);
 	ump = VFSTOUFS(vp->v_mount);
 	ACQUIRE_LOCK(ump);
@@ -6229,6 +6233,13 @@ setup_trunc_indir(freeblks, ip, lbn, lastlbn, blkno)
 		vfs_busy_pages(bp, 0);
 		bp->b_iooffset = dbtob(bp->b_blkno);
 		bstrategy(bp);
+#ifdef RACCT
+		if (racct_enable) {
+			PROC_LOCK(curproc);
+			racct_add_buf(curproc, bp, 0);
+			PROC_UNLOCK(curproc);
+		}
+#endif /* RACCT */
 		curthread->td_ru.ru_inblock++;
 		error = bufwait(bp);
 		if (error) {
@@ -6667,7 +6678,7 @@ softdep_journal_freeblocks(ip, cred, length, flags)
 		}
 	}
 	if ((flags & IO_EXT) != 0)
-		while ((adp = TAILQ_FIRST(&inodedep->id_extupdt)) != 0)
+		while ((adp = TAILQ_FIRST(&inodedep->id_extupdt)) != NULL)
 			cancel_allocdirect(&inodedep->id_extupdt, adp,
 			    freeblks);
 	/*
@@ -6920,14 +6931,14 @@ softdep_setup_freeblocks(ip, length, flags)
 	if (flags & IO_NORMAL) {
 		merge_inode_lists(&inodedep->id_newinoupdt,
 		    &inodedep->id_inoupdt);
-		while ((adp = TAILQ_FIRST(&inodedep->id_inoupdt)) != 0)
+		while ((adp = TAILQ_FIRST(&inodedep->id_inoupdt)) != NULL)
 			cancel_allocdirect(&inodedep->id_inoupdt, adp,
 			    freeblks);
 	}
 	if (flags & IO_EXT) {
 		merge_inode_lists(&inodedep->id_newextupdt,
 		    &inodedep->id_extupdt);
-		while ((adp = TAILQ_FIRST(&inodedep->id_extupdt)) != 0)
+		while ((adp = TAILQ_FIRST(&inodedep->id_extupdt)) != NULL)
 			cancel_allocdirect(&inodedep->id_extupdt, adp,
 			    freeblks);
 	}
@@ -8042,8 +8053,8 @@ indir_trunc(freework, dbn, lbn)
 	struct fs *fs;
 	struct indirdep *indirdep;
 	struct ufsmount *ump;
-	ufs1_daddr_t *bap1 = 0;
-	ufs2_daddr_t nb, nnb, *bap2 = 0;
+	ufs1_daddr_t *bap1;
+	ufs2_daddr_t nb, nnb, *bap2;
 	ufs_lbn_t lbnadd, nlbn;
 	int i, nblocks, ufs1fmt;
 	int freedblocks;
@@ -8126,10 +8137,12 @@ indir_trunc(freework, dbn, lbn)
 		bap1 = (ufs1_daddr_t *)bp->b_data;
 		nb = bap1[freework->fw_off];
 		ufs1fmt = 1;
+		bap2 = NULL;
 	} else {
 		bap2 = (ufs2_daddr_t *)bp->b_data;
 		nb = bap2[freework->fw_off];
 		ufs1fmt = 0;
+		bap1 = NULL;
 	}
 	level = lbn_level(lbn);
 	needj = MOUNTEDSUJ(UFSTOVFS(ump)) != 0;
@@ -8304,7 +8317,7 @@ setup_newdir(dap, newinum, dinum, newdirbp, mkdirp)
 	struct newblk *newblk;
 	struct pagedep *pagedep;
 	struct inodedep *inodedep;
-	struct newdirblk *newdirblk = 0;
+	struct newdirblk *newdirblk;
 	struct mkdir *mkdir1, *mkdir2;
 	struct worklist *wk;
 	struct jaddref *jaddref;
@@ -8431,7 +8444,7 @@ softdep_setup_directory_add(bp, dp, diroffset, newinum, newdirbp, isnewblk)
 	struct newblk *newblk;
 	struct pagedep *pagedep;
 	struct inodedep *inodedep;
-	struct newdirblk *newdirblk = 0;
+	struct newdirblk *newdirblk;
 	struct mkdir *mkdir1, *mkdir2;
 	struct jaddref *jaddref;
 	struct ufsmount *ump;
@@ -8463,6 +8476,7 @@ softdep_setup_directory_add(bp, dp, diroffset, newinum, newdirbp, isnewblk)
 	dap->da_state = ATTACHED;
 	LIST_INIT(&dap->da_jwork);
 	isindir = bp->b_lblkno >= NDADDR;
+	newdirblk = NULL;
 	if (isnewblk &&
 	    (isindir ? blkoff(fs, diroffset) : fragoff(fs, diroffset)) == 0) {
 		newdirblk = malloc(sizeof(struct newdirblk),
@@ -8553,7 +8567,7 @@ softdep_setup_directory_add(bp, dp, diroffset, newinum, newdirbp, isnewblk)
 		inodedep->id_mkdiradd = dap;
 	} else if (inodedep->id_mkdiradd)
 		merge_diradd(inodedep, dap);
-	if (newdirblk) {
+	if (newdirblk != NULL) {
 		/*
 		 * There is nothing to do if we are already tracking
 		 * this block.
@@ -10530,13 +10544,13 @@ cancel_indirdep(indirdep, bp, freeblks)
 	 * Pass in bp for blocks still have journal writes
 	 * pending so we can cancel them on their own.
 	 */
-	while ((aip = LIST_FIRST(&indirdep->ir_deplisthd)) != 0)
+	while ((aip = LIST_FIRST(&indirdep->ir_deplisthd)) != NULL)
 		cancel_allocindir(aip, bp, freeblks, 0);
-	while ((aip = LIST_FIRST(&indirdep->ir_donehd)) != 0)
+	while ((aip = LIST_FIRST(&indirdep->ir_donehd)) != NULL)
 		cancel_allocindir(aip, NULL, freeblks, 0);
-	while ((aip = LIST_FIRST(&indirdep->ir_writehd)) != 0)
+	while ((aip = LIST_FIRST(&indirdep->ir_writehd)) != NULL)
 		cancel_allocindir(aip, NULL, freeblks, 0);
-	while ((aip = LIST_FIRST(&indirdep->ir_completehd)) != 0)
+	while ((aip = LIST_FIRST(&indirdep->ir_completehd)) != NULL)
 		cancel_allocindir(aip, NULL, freeblks, 0);
 	/*
 	 * If there are pending partial truncations we need to keep the
@@ -10863,6 +10877,10 @@ initiate_write_bmsafemap(bmsafemap, bp)
 	struct fs *fs;
 	ino_t ino;
 
+	/*
+	 * If this is a background write, we did this at the time that
+	 * the copy was made, so do not need to do it again.
+	 */
 	if (bmsafemap->sm_state & IOSTARTED)
 		return;
 	bmsafemap->sm_state |= IOSTARTED;
@@ -10936,10 +10954,39 @@ softdep_disk_write_complete(bp)
 
 	/*
 	 * If an error occurred while doing the write, then the data
-	 * has not hit the disk and the dependencies cannot be unrolled.
+	 * has not hit the disk and the dependencies cannot be processed.
+	 * But we do have to go through and roll forward any dependencies
+	 * that were rolled back before the disk write.
 	 */
-	if ((bp->b_ioflags & BIO_ERROR) != 0 && (bp->b_flags & B_INVAL) == 0)
+	if ((bp->b_ioflags & BIO_ERROR) != 0 && (bp->b_flags & B_INVAL) == 0) {
+		LIST_FOREACH(wk, &bp->b_dep, wk_list) {
+			switch (wk->wk_type) {
+
+			case D_PAGEDEP:
+				handle_written_filepage(WK_PAGEDEP(wk), bp, 0);
+				continue;
+
+			case D_INODEDEP:
+				handle_written_inodeblock(WK_INODEDEP(wk),
+				    bp, 0);
+				continue;
+
+			case D_BMSAFEMAP:
+				handle_written_bmsafemap(WK_BMSAFEMAP(wk),
+				    bp, 0);
+				continue;
+
+			case D_INDIRDEP:
+				handle_written_indirdep(WK_INDIRDEP(wk),
+				    bp, &sbp, 0);
+				continue;
+			default:
+				/* nothing to roll forward */
+				continue;
+			}
+		}
 		return;
+	}
 	if ((wk = LIST_FIRST(&bp->b_dep)) == NULL)
 		return;
 	ump = VFSTOUFS(wk->wk_mp);
@@ -10959,17 +11006,20 @@ softdep_disk_write_complete(bp)
 		switch (wk->wk_type) {
 
 		case D_PAGEDEP:
-			if (handle_written_filepage(WK_PAGEDEP(wk), bp))
+			if (handle_written_filepage(WK_PAGEDEP(wk), bp,
+			    WRITESUCCEEDED))
 				WORKLIST_INSERT(&reattach, wk);
 			continue;
 
 		case D_INODEDEP:
-			if (handle_written_inodeblock(WK_INODEDEP(wk), bp))
+			if (handle_written_inodeblock(WK_INODEDEP(wk), bp,
+			    WRITESUCCEEDED))
 				WORKLIST_INSERT(&reattach, wk);
 			continue;
 
 		case D_BMSAFEMAP:
-			if (handle_written_bmsafemap(WK_BMSAFEMAP(wk), bp))
+			if (handle_written_bmsafemap(WK_BMSAFEMAP(wk), bp,
+			    WRITESUCCEEDED))
 				WORKLIST_INSERT(&reattach, wk);
 			continue;
 
@@ -10988,7 +11038,8 @@ softdep_disk_write_complete(bp)
 			continue;
 
 		case D_INDIRDEP:
-			if (handle_written_indirdep(WK_INDIRDEP(wk), bp, &sbp))
+			if (handle_written_indirdep(WK_INDIRDEP(wk), bp, &sbp,
+			    WRITESUCCEEDED))
 				WORKLIST_INSERT(&reattach, wk);
 			continue;
 
@@ -11288,12 +11339,17 @@ handle_bufwait(inodedep, refhd)
  * Called from within softdep_disk_write_complete above to restore
  * in-memory inode block contents to their most up-to-date state. Note
  * that this routine is always called from interrupt level with further
- * splbio interrupts blocked.
+ * interrupts from this device blocked.
+ *
+ * If the write did not succeed, we will do all the roll-forward
+ * operations, but we will not take the actions that will allow its
+ * dependencies to be processed.
  */
 static int 
-handle_written_inodeblock(inodedep, bp)
+handle_written_inodeblock(inodedep, bp, flags)
 	struct inodedep *inodedep;
 	struct buf *bp;		/* buffer containing the inode block */
+	int flags;
 {
 	struct freefile *freefile;
 	struct allocdirect *adp, *nextadp;
@@ -11323,7 +11379,8 @@ handle_written_inodeblock(inodedep, bp)
 	/*
 	 * Leave this inodeblock dirty until it's in the list.
 	 */
-	if ((inodedep->id_state & (UNLINKED | UNLINKONLIST)) == UNLINKED) {
+	if ((inodedep->id_state & (UNLINKED | UNLINKONLIST)) == UNLINKED &&
+	    (flags & WRITESUCCEEDED)) {
 		struct inodedep *inon;
 
 		inon = TAILQ_NEXT(inodedep, id_unlinked);
@@ -11362,7 +11419,8 @@ handle_written_inodeblock(inodedep, bp)
 			goto bufwait;
 		return (1);
 	}
-	inodedep->id_state |= COMPLETE;
+	if (flags & WRITESUCCEEDED)
+		inodedep->id_state |= COMPLETE;
 	/*
 	 * Roll forward anything that had to be rolled back before 
 	 * the inode could be updated.
@@ -11477,6 +11535,13 @@ handle_written_inodeblock(inodedep, bp)
 		bdirty(bp);
 bufwait:
 	/*
+	 * If the write did not succeed, we have done all the roll-forward
+	 * operations, but we cannot take the actions that will allow its
+	 * dependencies to be processed.
+	 */
+	if ((flags & WRITESUCCEEDED) == 0)
+		return (hadchanges);
+	/*
 	 * Process any allocdirects that completed during the update.
 	 */
 	if ((adp = TAILQ_FIRST(&inodedep->id_inoupdt)) != NULL)
@@ -11533,11 +11598,20 @@ bufwait:
 	return (hadchanges);
 }
 
+/*
+ * Perform needed roll-forwards and kick off any dependencies that
+ * can now be processed.
+ *
+ * If the write did not succeed, we will do all the roll-forward
+ * operations, but we will not take the actions that will allow its
+ * dependencies to be processed.
+ */
 static int
-handle_written_indirdep(indirdep, bp, bpp)
+handle_written_indirdep(indirdep, bp, bpp, flags)
 	struct indirdep *indirdep;
 	struct buf *bp;
 	struct buf **bpp;
+	int flags;
 {
 	struct allocindir *aip;
 	struct buf *sbp;
@@ -11562,11 +11636,21 @@ handle_written_indirdep(indirdep, bp, bpp)
 	indirdep->ir_state &= ~(UNDONE | IOSTARTED);
 	indirdep->ir_state |= ATTACHED;
 	/*
+	 * If the write did not succeed, we have done all the roll-forward
+	 * operations, but we cannot take the actions that will allow its
+	 * dependencies to be processed.
+	 */
+	if ((flags & WRITESUCCEEDED) == 0) {
+		stat_indir_blk_ptrs++;
+		bdirty(bp);
+		return (1);
+	}
+	/*
 	 * Move allocindirs with written pointers to the completehd if
 	 * the indirdep's pointer is not yet written.  Otherwise
 	 * free them here.
 	 */
-	while ((aip = LIST_FIRST(&indirdep->ir_writehd)) != 0) {
+	while ((aip = LIST_FIRST(&indirdep->ir_writehd)) != NULL) {
 		LIST_REMOVE(aip, ai_next);
 		if ((indirdep->ir_state & DEPCOMPLETE) == 0) {
 			LIST_INSERT_HEAD(&indirdep->ir_completehd, aip,
@@ -11581,7 +11665,7 @@ handle_written_indirdep(indirdep, bp, bpp)
 	 * the done list to the write list after updating the pointers.
 	 */
 	if (TAILQ_EMPTY(&indirdep->ir_trunc)) {
-		while ((aip = LIST_FIRST(&indirdep->ir_donehd)) != 0) {
+		while ((aip = LIST_FIRST(&indirdep->ir_donehd)) != NULL) {
 			handle_allocindir_partdone(aip);
 			if (aip == LIST_FIRST(&indirdep->ir_donehd))
 				panic("disk_write_complete: not gone");
@@ -11715,11 +11799,16 @@ jnewblk_rollforward(jnewblk, fs, cgp, blksfree)
  * Complete a write to a bmsafemap structure.  Roll forward any bitmap
  * changes if it's not a background write.  Set all written dependencies 
  * to DEPCOMPLETE and free the structure if possible.
+ *
+ * If the write did not succeed, we will do all the roll-forward
+ * operations, but we will not take the actions that will allow its
+ * dependencies to be processed.
  */
 static int
-handle_written_bmsafemap(bmsafemap, bp)
+handle_written_bmsafemap(bmsafemap, bp, flags)
 	struct bmsafemap *bmsafemap;
 	struct buf *bp;
+	int flags;
 {
 	struct newblk *newblk;
 	struct inodedep *inodedep;
@@ -11735,15 +11824,20 @@ handle_written_bmsafemap(bmsafemap, bp)
 	int chgs;
 
 	if ((bmsafemap->sm_state & IOSTARTED) == 0)
-		panic("initiate_write_bmsafemap: Not started\n");
+		panic("handle_written_bmsafemap: Not started\n");
 	ump = VFSTOUFS(bmsafemap->sm_list.wk_mp);
 	chgs = 0;
 	bmsafemap->sm_state &= ~IOSTARTED;
 	foreground = (bp->b_xflags & BX_BKGRDMARKER) == 0;
 	/*
-	 * Release journal work that was waiting on the write.
+	 * If write was successful, release journal work that was waiting
+	 * on the write. Otherwise move the work back.
 	 */
-	handle_jwork(&bmsafemap->sm_freewr);
+	if (flags & WRITESUCCEEDED)
+		handle_jwork(&bmsafemap->sm_freewr);
+	else
+		LIST_CONCAT(&bmsafemap->sm_freehd, &bmsafemap->sm_freewr,
+		    worklist, wk_list);
 
 	/*
 	 * Restore unwritten inode allocation pending jaddref writes.
@@ -11792,6 +11886,20 @@ handle_written_bmsafemap(bmsafemap, bp)
 			jnewblk->jn_state |= ATTACHED;
 			free_jnewblk(jnewblk);
 		}
+	}
+	/*
+	 * If the write did not succeed, we have done all the roll-forward
+	 * operations, but we cannot take the actions that will allow its
+	 * dependencies to be processed.
+	 */
+	if ((flags & WRITESUCCEEDED) == 0) {
+		LIST_CONCAT(&bmsafemap->sm_newblkhd, &bmsafemap->sm_newblkwr,
+		    newblk, nb_deps);
+		LIST_CONCAT(&bmsafemap->sm_freehd, &bmsafemap->sm_freewr,
+		    worklist, wk_list);
+		if (foreground)
+			bdirty(bp);
+		return (1);
 	}
 	while ((newblk = LIST_FIRST(&bmsafemap->sm_newblkwr))) {
 		newblk->nb_state |= DEPCOMPLETE;
@@ -11896,12 +12004,17 @@ free_pagedep(pagedep)
  * A write operation was just completed. Removed inodes can
  * now be freed and associated block pointers may be committed.
  * Note that this routine is always called from interrupt level
- * with further splbio interrupts blocked.
+ * with further interrupts from this device blocked.
+ *
+ * If the write did not succeed, we will do all the roll-forward
+ * operations, but we will not take the actions that will allow its
+ * dependencies to be processed.
  */
 static int 
-handle_written_filepage(pagedep, bp)
+handle_written_filepage(pagedep, bp, flags)
 	struct pagedep *pagedep;
 	struct buf *bp;		/* buffer containing the written page */
+	int flags;
 {
 	struct dirrem *dirrem;
 	struct diradd *dap, *nextdap;
@@ -11911,6 +12024,8 @@ handle_written_filepage(pagedep, bp)
 	if ((pagedep->pd_state & IOSTARTED) == 0)
 		panic("handle_written_filepage: not started");
 	pagedep->pd_state &= ~IOSTARTED;
+	if ((flags & WRITESUCCEEDED) == 0)
+		goto rollforward;
 	/*
 	 * Process any directory removals that have been committed.
 	 */
@@ -11930,6 +12045,7 @@ handle_written_filepage(pagedep, bp)
 	if ((pagedep->pd_state & NEWBLOCK) == 0)
 		while ((dap = LIST_FIRST(&pagedep->pd_pendinghd)) != NULL)
 			free_diradd(dap, NULL);
+rollforward:
 	/*
 	 * Uncommitted directory entries must be restored.
 	 */
@@ -11962,7 +12078,7 @@ handle_written_filepage(pagedep, bp)
 	 * marked dirty so that its will eventually get written back in
 	 * its correct form.
 	 */
-	if (chgs) {
+	if (chgs || (flags & WRITESUCCEEDED) == 0) {
 		if ((bp->b_flags & B_DELWRI) == 0)
 			stat_dir_entry++;
 		bdirty(bp);
@@ -12838,6 +12954,7 @@ flush_newblk_dep(vp, mp, lbn)
 			    LK_INTERLOCK, BO_LOCKPTR(bo));
 			if (error == ENOLCK) {
 				ACQUIRE_LOCK(ump);
+				error = 0;
 				continue; /* Slept, retry */
 			}
 			if (error != 0)
@@ -13176,7 +13293,7 @@ softdep_request_cleanup(fs, vp, cred, resource)
 	 *
 	 * Additionally, if we are unpriviledged and allocating space,
 	 * we need to ensure that we clean up enough blocks to get the
-	 * needed number of blocks over the threshhold of the minimum
+	 * needed number of blocks over the threshold of the minimum
 	 * number of blocks required to be kept free by the filesystem
 	 * (fs_minfree).
 	 */
@@ -13583,7 +13700,7 @@ clear_inodedeps(mp)
 	/*
 	 * Find the last inode in the block with dependencies.
 	 */
-	firstino = inodedep->id_ino & ~(INOPB(fs) - 1);
+	firstino = rounddown2(inodedep->id_ino, INOPB(fs));
 	for (lastino = firstino + INOPB(fs) - 1; lastino > firstino; lastino--)
 		if (inodedep_lookup(mp, lastino, 0, &inodedep) != 0)
 			break;
@@ -13877,7 +13994,7 @@ getdirtybuf(bp, lock, waitfor)
 		error = BUF_LOCK(bp,
 		    LK_EXCLUSIVE | LK_SLEEPFAIL | LK_INTERLOCK, lock);
 		/*
-		 * Even if we sucessfully acquire bp here, we have dropped
+		 * Even if we successfully acquire bp here, we have dropped
 		 * lock, which may violates our guarantee.
 		 */
 		if (error == 0)

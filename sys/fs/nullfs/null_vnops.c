@@ -117,7 +117,7 @@
  * are created as a result of vnode operations on
  * this or other null vnode stacks.
  *
- * New vnode stacks come into existance as a result of
+ * New vnode stacks come into existence as a result of
  * an operation which returns a vnode.
  * The bypass routine stacks a null-node above the new
  * vnode before returning it to the caller.
@@ -869,9 +869,6 @@ null_vptocnp(struct vop_vptocnp_args *ap)
 	struct vnode *lvp, *ldvp;
 	struct ucred *cred = ap->a_cred;
 	int error, locked;
-
-	if (vp->v_type == VDIR)
-		return (vop_stdvptocnp(ap));
 
 	locked = VOP_ISLOCKED(vp);
 	lvp = NULLVPTOLOWERVP(vp);

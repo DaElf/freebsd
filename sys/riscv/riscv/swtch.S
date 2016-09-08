@@ -1,5 +1,5 @@
 /*-
- * Copyright (c) 2015 Ruslan Bukin <br@bsdpad.com>
+ * Copyright (c) 2015-2016 Ruslan Bukin <br@bsdpad.com>
  * All rights reserved.
  *
  * Portions of this software were developed by SRI International and the
@@ -55,14 +55,9 @@ ENTRY(cpu_throw)
 	sfence.vm
 
 	/* Switch to the new pmap */
-	la	t0, pagetable_l0
-	ld	t1, PCB_L1ADDR(x13)	/* Link to next level PN */
-	srli	t1, t1, PAGE_SHIFT	/* PN no */
-	li	t2, (PTE_VALID | (PTE_TYPE_PTR << PTE_TYPE_S))
-	slli	t3, t1, PTE_PPN0_S	/* (t1 << PTE_PPN0_S) */
-	or	t4, t2, t3
-	/* Store single level0 PTE entry to position */
-	sd	t4, 0(t0)
+	ld	t0, PCB_L1ADDR(x13)
+	srli	t0, t0, PAGE_SHIFT
+	csrw	sptbr, t0
 
 	/* TODO: Invalidate the TLB */
 
@@ -85,6 +80,7 @@ ENTRY(cpu_throw)
 	ld	s9, (PCB_S + 9 * 8)(x13)
 	ld	s10, (PCB_S + 10 * 8)(x13)
 	ld	s11, (PCB_S + 11 * 8)(x13)
+
 	ret
 
 .Lcpu_throw_panic_str:
@@ -140,14 +136,9 @@ ENTRY(cpu_switch)
 	sfence.vm
 
 	/* Switch to the new pmap */
-	la	t0, pagetable_l0
-	ld	t1, PCB_L1ADDR(x13)	/* Link to next level PN */
-	srli	t1, t1, PAGE_SHIFT	/* PN no */
-	li	t2, (PTE_VALID | (PTE_TYPE_PTR << PTE_TYPE_S))
-	slli	t3, t1, PTE_PPN0_S	/* (t1 << PTE_PPN0_S) */
-	or	t4, t2, t3
-	/* Store single level0 PTE entry to position */
-	sd	t4, 0(t0)
+	ld	t0, PCB_L1ADDR(x13)
+	srli	t0, t0, PAGE_SHIFT
+	csrw	sptbr, t0
 
 	/* TODO: Invalidate the TLB */
 
@@ -156,7 +147,11 @@ ENTRY(cpu_switch)
 	/* Release the old thread */
 	sd	a2, TD_LOCK(a0)
 #if defined(SCHED_ULE) && defined(SMP)
-	/* TODO */
+	/* Spin if TD_LOCK points to a blocked_lock */
+	la	a2, _C_LABEL(blocked_lock)
+1:
+	ld	t0, TD_LOCK(a1)
+	beq	t0, a2, 1b
 #endif
 
 	/* Restore the registers */
@@ -195,7 +190,7 @@ ENTRY(fork_trampoline)
 	/* Restore sstatus */
 	ld	t0, (TF_SSTATUS)(sp)
 	/* Ensure interrupts disabled */
-	li	t1, ~SSTATUS_IE
+	li	t1, ~SSTATUS_SIE
 	and	t0, t0, t1
 	csrw	sstatus, t0
 
@@ -252,7 +247,7 @@ ENTRY(fork_trampoline)
 	/* Load user stack */
 	ld	sp, (TF_SP - TF_SIZE)(sp)
 
-	eret
+	sret
 END(fork_trampoline)
 
 ENTRY(savectx)

@@ -43,6 +43,9 @@ __FBSDID("$FreeBSD$");
 #include <sys/module.h>
 #include <sys/pcpu.h>
 #include <sys/rman.h>
+#ifdef INTRNG
+#include <sys/intr.h>
+#endif
 
 #include <vm/vm.h>
 #include <vm/pmap.h>
@@ -200,8 +203,8 @@ ofwbus_alloc_resource(device_t bus, device_t child, int type, int *rid,
 			return (NULL);
 		}
 		start = rle->start;
-		count = ulmax(count, rle->count);
-		end = ulmax(rle->end, start + count - 1);
+		count = ummax(count, rle->count);
+		end = ummax(rle->end, start + count - 1);
 	}
 
 	switch (type) {

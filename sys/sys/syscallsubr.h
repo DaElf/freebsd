@@ -100,6 +100,7 @@ int	kern_fhstat(struct thread *td, fhandle_t fh, struct stat *buf);
 int	kern_fhstatfs(struct thread *td, fhandle_t fh, struct statfs *buf);
 int	kern_fstat(struct thread *td, int fd, struct stat *sbp);
 int	kern_fstatfs(struct thread *td, int fd, struct statfs *buf);
+int	kern_fsync(struct thread *td, int fd, bool fullsync);
 int	kern_ftruncate(struct thread *td, int fd, off_t length);
 int	kern_futimes(struct thread *td, int fd, struct timeval *tptr,
 	    enum uio_seg tptrseg);
@@ -158,6 +159,7 @@ int	kern_pipe(struct thread *td, int fildes[2], int flags,
 	    struct filecaps *fcaps1, struct filecaps *fcaps2);
 int	kern_poll(struct thread *td, struct pollfd *fds, u_int nfds,
 	    struct timespec *tsp, sigset_t *uset);
+int	kern_posix_error(struct thread *td, int error);
 int	kern_posix_fadvise(struct thread *td, int fd, off_t offset, off_t len,
 	    int advice);
 int	kern_posix_fallocate(struct thread *td, int fd, off_t offset,

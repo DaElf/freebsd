@@ -666,10 +666,15 @@ mlx5e_create_rq(struct mlx5e_channel *c,
 	}
 
 	wq_sz = mlx5_wq_ll_get_size(&rq->wq);
+
+	err = -tcp_lro_init_args(&rq->lro, c->ifp, TCP_LRO_ENTRIES, wq_sz);
+	if (err)
+		goto err_rq_wq_destroy;
+
 	rq->mbuf = malloc(wq_sz * sizeof(rq->mbuf[0]), M_MLX5EN, M_WAITOK | M_ZERO);
 	if (rq->mbuf == NULL) {
 		err = -ENOMEM;
-		goto err_rq_wq_destroy;
+		goto err_lro_init;
 	}
 	for (i = 0; i != wq_sz; i++) {
 		struct mlx5e_rx_wqe *wqe = mlx5_wq_ll_get_wqe(&rq->wq, i);
@@ -694,20 +699,12 @@ mlx5e_create_rq(struct mlx5e_channel *c,
 	mlx5e_create_stats(&rq->stats.ctx, SYSCTL_CHILDREN(priv->sysctl_ifnet),
 	    buffer, mlx5e_rq_stats_desc, MLX5E_RQ_STATS_NUM,
 	    rq->stats.arg);
-
-#ifdef HAVE_TURBO_LRO
-	if (tcp_tlro_init(&rq->lro, c->ifp, MLX5E_BUDGET_MAX) != 0)
-		rq->lro.mbuf = NULL;
-#else
-	if (tcp_lro_init(&rq->lro))
-		rq->lro.lro_cnt = 0;
-	else
-		rq->lro.ifp = c->ifp;
-#endif
 	return (0);
 
 err_rq_mbuf_free:
 	free(rq->mbuf, M_MLX5EN);
+err_lro_init:
+	tcp_lro_free(&rq->lro);
 err_rq_wq_destroy:
 	mlx5_wq_destroy(&rq->wq_ctrl);
 err_free_dma_tag:
@@ -726,11 +723,8 @@ mlx5e_destroy_rq(struct mlx5e_rq *rq)
 	sysctl_ctx_free(&rq->stats.ctx);
 
 	/* free leftover LRO packets, if any */
-#ifdef HAVE_TURBO_LRO
-	tcp_tlro_free(&rq->lro);
-#else
 	tcp_lro_free(&rq->lro);
-#endif
+
 	wq_sz = mlx5_wq_ll_get_size(&rq->wq);
 	for (i = 0; i != wq_sz; i++) {
 		if (rq->mbuf[i].mbuf != NULL) {
@@ -850,7 +844,6 @@ mlx5e_open_rq(struct mlx5e_channel *c,
     struct mlx5e_rq *rq)
 {
 	int err;
-	int i;
 
 	err = mlx5e_create_rq(c, param, rq);
 	if (err)
@@ -866,12 +859,6 @@ mlx5e_open_rq(struct mlx5e_channel *c,
 
 	c->rq.enabled = 1;
 
-	/*
-	 * Test send queues, which will trigger
-	 * "mlx5e_post_rx_wqes()":
-	 */
-	for (i = 0; i != c->num_tc; i++)
-		mlx5e_send_nop(&c->sq[i], 1, true);
 	return (0);
 
 err_disable_rq:
@@ -1185,24 +1172,89 @@ err_destroy_sq:
 }
 
 static void
-mlx5e_close_sq(struct mlx5e_sq *sq)
+mlx5e_sq_send_nops_locked(struct mlx5e_sq *sq, int can_sleep)
 {
+	/* fill up remainder with NOPs */
+	while (sq->cev_counter != 0) {
+		while (!mlx5e_sq_has_room_for(sq, 1)) {
+			if (can_sleep != 0) {
+				mtx_unlock(&sq->lock);
+				msleep(4);
+				mtx_lock(&sq->lock);
+			} else {
+				goto done;
+			}
+		}
+		/* send a single NOP */
+		mlx5e_send_nop(sq, 1);
+		wmb();
+	}
+done:
+	/* Check if we need to write the doorbell */
+	if (likely(sq->doorbell.d64 != 0)) {
+		mlx5e_tx_notify_hw(sq, sq->doorbell.d32, 0);
+		sq->doorbell.d64 = 0;
+	}
+	return;
+}
 
-	/* ensure hw is notified of all pending wqes */
-	if (mlx5e_sq_has_room_for(sq, 1))
-		mlx5e_send_nop(sq, 1, true);
+void
+mlx5e_sq_cev_timeout(void *arg)
+{
+	struct mlx5e_sq *sq = arg;
 
-	mlx5e_modify_sq(sq, MLX5_SQC_STATE_RDY, MLX5_SQC_STATE_ERR);
+	mtx_assert(&sq->lock, MA_OWNED);
+
+	/* check next state */
+	switch (sq->cev_next_state) {
+	case MLX5E_CEV_STATE_SEND_NOPS:
+		/* fill TX ring with NOPs, if any */
+		mlx5e_sq_send_nops_locked(sq, 0);
+
+		/* check if completed */
+		if (sq->cev_counter == 0) {
+			sq->cev_next_state = MLX5E_CEV_STATE_INITIAL;
+			return;
+		}
+		break;
+	default:
+		/* send NOPs on next timeout */
+		sq->cev_next_state = MLX5E_CEV_STATE_SEND_NOPS;
+		break;
+	}
+
+	/* restart timer */
+	callout_reset_curcpu(&sq->cev_callout, hz, mlx5e_sq_cev_timeout, sq);
 }
 
 static void
 mlx5e_close_sq_wait(struct mlx5e_sq *sq)
 {
+
+	mtx_lock(&sq->lock);
+	/* teardown event factor timer, if any */
+	sq->cev_next_state = MLX5E_CEV_STATE_HOLD_NOPS;
+	callout_stop(&sq->cev_callout);
+
+	/* send dummy NOPs in order to flush the transmit ring */
+	mlx5e_sq_send_nops_locked(sq, 1);
+	mtx_unlock(&sq->lock);
+
+	/* make sure it is safe to free the callout */
+	callout_drain(&sq->cev_callout);
+
+	/* error out remaining requests */
+	mlx5e_modify_sq(sq, MLX5_SQC_STATE_RDY, MLX5_SQC_STATE_ERR);
+
 	/* wait till SQ is empty */
+	mtx_lock(&sq->lock);
 	while (sq->cc != sq->pc) {
+		mtx_unlock(&sq->lock);
 		msleep(4);
 		sq->cq.mcq.comp(&sq->cq.mcq);
+		mtx_lock(&sq->lock);
 	}
+	mtx_unlock(&sq->lock);
 
 	mlx5e_disable_sq(sq);
 	mlx5e_destroy_sq(sq);
@@ -1412,21 +1464,10 @@ mlx5e_open_sqs(struct mlx5e_channel *c,
 	return (0);
 
 err_close_sqs:
-	for (tc--; tc >= 0; tc--) {
-		mlx5e_close_sq(&c->sq[tc]);
+	for (tc--; tc >= 0; tc--)
 		mlx5e_close_sq_wait(&c->sq[tc]);
-	}
 
 	return (err);
-}
-
-static void
-mlx5e_close_sqs(struct mlx5e_channel *c)
-{
-	int tc;
-
-	for (tc = 0; tc < c->num_tc; tc++)
-		mlx5e_close_sq(&c->sq[tc]);
 }
 
 static void
@@ -1446,9 +1487,19 @@ mlx5e_chan_mtx_init(struct mlx5e_channel *c)
 	mtx_init(&c->rq.mtx, "mlx5rx", MTX_NETWORK_LOCK, MTX_DEF);
 
 	for (tc = 0; tc < c->num_tc; tc++) {
-		mtx_init(&c->sq[tc].lock, "mlx5tx", MTX_NETWORK_LOCK, MTX_DEF);
-		mtx_init(&c->sq[tc].comp_lock, "mlx5comp", MTX_NETWORK_LOCK,
+		struct mlx5e_sq *sq = c->sq + tc;
+
+		mtx_init(&sq->lock, "mlx5tx", MTX_NETWORK_LOCK, MTX_DEF);
+		mtx_init(&sq->comp_lock, "mlx5comp", MTX_NETWORK_LOCK,
 		    MTX_DEF);
+
+		callout_init_mtx(&sq->cev_callout, &sq->lock, 0);
+
+		sq->cev_factor = c->priv->params_ethtool.tx_completion_fact;
+
+		/* ensure the TX completion event factor is not zero */
+		if (sq->cev_factor == 0)
+			sq->cev_factor = 1;
 	}
 }
 
@@ -1529,7 +1580,6 @@ mlx5e_open_channel(struct mlx5e_priv *priv, int ix,
 	return (0);
 
 err_close_sqs:
-	mlx5e_close_sqs(c);
 	mlx5e_close_sqs_wait(c);
 
 err_close_rx_cq:
@@ -1554,7 +1604,6 @@ mlx5e_close_channel(struct mlx5e_channel *volatile *pp)
 	if (c == NULL)
 		return;
 	mlx5e_close_rq(&c->rq);
-	mlx5e_close_sqs(c);
 }
 
 static void
@@ -2559,9 +2608,15 @@ out:
 		if (error) {
 			if_printf(ifp, "Query module num failed, eeprom "
 			    "reading is not supported\n");
+			error = EINVAL;
 			goto err_i2c;
 		}
-
+		/* Check if module is present before doing an access */
+		if (mlx5_query_module_status(priv->mdev, module_num) !=
+		    MLX5_MODULE_STATUS_PLUGGED) {
+			error = EINVAL;
+			goto err_i2c;
+		}
 		/*
 		 * Currently 0XA0 and 0xA2 are the only addresses permitted.
 		 * The internal conversion is as follows:
@@ -2583,6 +2638,7 @@ out:
 		if (error) {
 			if_printf(ifp, "Query eeprom failed, eeprom "
 			    "reading is not supported\n");
+			error = EINVAL;
 			goto err_i2c;
 		}
 
@@ -2596,6 +2652,7 @@ out:
 		if (error) {
 			if_printf(ifp, "Query eeprom failed, eeprom "
 			    "reading is not supported\n");
+			error = EINVAL;
 			goto err_i2c;
 		}
 
@@ -2938,6 +2995,13 @@ mlx5e_create_ifp(struct mlx5_core_dev *mdev)
 	}
 	mlx5_query_nic_vport_mac_address(priv->mdev, 0, dev_addr);
 
+	/* check if we should generate a random MAC address */
+	if (MLX5_CAP_GEN(priv->mdev, vport_group_manager) == 0 &&
+	    is_zero_ether_addr(dev_addr)) {
+		random_ether_addr(dev_addr);
+		if_printf(ifp, "Assigned random MAC address\n");
+	}
+
 	/* set default MTU */
 	mlx5e_set_dev_port_mtu(ifp, ifp->if_mtu);
 
@@ -3043,6 +3107,13 @@ mlx5e_destroy_ifp(struct mlx5_core_dev *mdev, void *vpriv)
 
 	/* don't allow more IOCTLs */
 	priv->gone = 1;
+
+	/*
+	 * Clear the device description to avoid use after free,
+	 * because the bsddev is not destroyed when this module is
+	 * unloaded:
+	 */
+	device_set_desc(mdev->pdev->dev.bsddev, NULL);
 
 	/* XXX wait a bit to allow IOCTL handlers to complete */
 	pause("W", hz);

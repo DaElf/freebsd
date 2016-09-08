@@ -246,7 +246,7 @@ usbd_transfer_setup_sub_malloc(struct usb_setup_params *parm,
 		 * Compute number of DMA chunks, rounded up
 		 * to nearest one:
 		 */
-		n_dma_pc = ((count + n_obj - 1) / n_obj);
+		n_dma_pc = howmany(count, n_obj);
 		n_dma_pg = 1;
 	}
 
@@ -615,7 +615,7 @@ usbd_transfer_setup_sub(struct usb_setup_params *parm)
 	/*
 	 * NOTE: we do not allow "max_packet_size" or "max_frame_size"
 	 * to be equal to zero when setting up USB transfers, hence
-	 * this leads to alot of extra code in the USB kernel.
+	 * this leads to a lot of extra code in the USB kernel.
 	 */
 
 	if ((xfer->max_frame_size == 0) ||
@@ -925,7 +925,7 @@ usbd_transfer_setup(struct usb_device *udev,
 		DPRINTFN(6, "setup array has zero length!\n");
 		return (USB_ERR_INVAL);
 	}
-	if (ifaces == 0) {
+	if (ifaces == NULL) {
 		DPRINTFN(6, "ifaces array is NULL!\n");
 		return (USB_ERR_INVAL);
 	}
@@ -953,7 +953,7 @@ usbd_transfer_setup(struct usb_device *udev,
 		return (error);
 
 	/* Protect scratch area */
-	do_unlock = usbd_enum_lock(udev);
+	do_unlock = usbd_ctrl_lock(udev);
 
 	refcount = 0;
 	info = NULL;
@@ -1274,7 +1274,7 @@ done:
 	error = parm->err;
 
 	if (do_unlock)
-		usbd_enum_unlock(udev);
+		usbd_ctrl_unlock(udev);
 
 	return (error);
 }
@@ -2448,7 +2448,7 @@ done:
  *
  * This function is called when the DMA delay has been exectuded, and
  * will make sure that the callback is called to complete the USB
- * transfer. This code path is ususally only used when there is an USB
+ * transfer. This code path is usually only used when there is an USB
  * error like USB_ERR_CANCELLED.
  *------------------------------------------------------------------------*/
 void

@@ -91,63 +91,60 @@ ath_hal_mac_name(struct ath_hal *ah)
 	switch (ah->ah_macVersion) {
 	case AR_SREV_VERSION_CRETE:
 	case AR_SREV_VERSION_MAUI_1:
-		return "5210";
+		return "AR5210";
 	case AR_SREV_VERSION_MAUI_2:
 	case AR_SREV_VERSION_OAHU:
-		return "5211";
+		return "AR5211";
 	case AR_SREV_VERSION_VENICE:
-		return "5212";
+		return "AR5212";
 	case AR_SREV_VERSION_GRIFFIN:
-		return "2413";
+		return "AR2413";
 	case AR_SREV_VERSION_CONDOR:
-		return "5424";
+		return "AR5424";
 	case AR_SREV_VERSION_EAGLE:
-		return "5413";
+		return "AR5413";
 	case AR_SREV_VERSION_COBRA:
-		return "2415";
+		return "AR2415";
 	case AR_SREV_2425:	/* Swan */
-		return "2425";
+		return "AR2425";
 	case AR_SREV_2417:	/* Nala */
-		return "2417";
+		return "AR2417";
 	case AR_XSREV_VERSION_OWL_PCI:
-		return "5416";
+		return "AR5416";
 	case AR_XSREV_VERSION_OWL_PCIE:
-		return "5418";
+		return "AR5418";
 	case AR_XSREV_VERSION_HOWL:
-		return "9130";
+		return "AR9130";
 	case AR_XSREV_VERSION_SOWL:
-		return "9160";
+		return "AR9160";
 	case AR_XSREV_VERSION_MERLIN:
 		if (AH_PRIVATE(ah)->ah_ispcie)
-			return "9280";
-		return "9220";
+			return "AR9280";
+		return "AR9220";
 	case AR_XSREV_VERSION_KITE:
-		return "9285";
+		return "AR9285";
 	case AR_XSREV_VERSION_KIWI:
 		if (AH_PRIVATE(ah)->ah_ispcie)
-			return "9287";
-		return "9227";
+			return "AR9287";
+		return "AR9227";
 	case AR_SREV_VERSION_AR9380:
 		if (ah->ah_macRev >= AR_SREV_REVISION_AR9580_10)
-			return "9580";
-		return "9380";
+			return "AR9580";
+		return "AR9380";
 	case AR_SREV_VERSION_AR9460:
-		return "9460";
+		return "AR9460";
 	case AR_SREV_VERSION_AR9330:
-		return "9330";
+		return "AR9330";
 	case AR_SREV_VERSION_AR9340:
-		return "9340";
+		return "AR9340";
 	case AR_SREV_VERSION_QCA9550:
-		/* XXX should say QCA, not AR */
-		return "9550";
+		return "QCA9550";
 	case AR_SREV_VERSION_AR9485:
-		return "9485";
+		return "AR9485";
 	case AR_SREV_VERSION_QCA9565:
-		/* XXX should say QCA, not AR */
-		return "9565";
+		return "QCA9565";
 	case AR_SREV_VERSION_QCA9530:
-		/* XXX should say QCA, not AR */
-		return "9530";
+		return "QCA9530";
 	}
 	return "????";
 }
@@ -287,7 +284,8 @@ ath_hal_reverseBits(uint32_t val, uint32_t n)
  */
 uint32_t
 ath_hal_pkt_txtime(struct ath_hal *ah, const HAL_RATE_TABLE *rates, uint32_t frameLen,
-    uint16_t rateix, HAL_BOOL isht40, HAL_BOOL shortPreamble)
+    uint16_t rateix, HAL_BOOL isht40, HAL_BOOL shortPreamble,
+    HAL_BOOL includeSifs)
 {
 	uint8_t rc;
 	int numStreams;
@@ -296,7 +294,8 @@ ath_hal_pkt_txtime(struct ath_hal *ah, const HAL_RATE_TABLE *rates, uint32_t fra
 
 	/* Legacy rate? Return the old way */
 	if (! IS_HT_RATE(rc))
-		return ath_hal_computetxtime(ah, rates, frameLen, rateix, shortPreamble);
+		return ath_hal_computetxtime(ah, rates, frameLen, rateix,
+		    shortPreamble, includeSifs);
 
 	/* 11n frame - extract out the number of spatial streams */
 	numStreams = HT_RC_2_STREAMS(rc);
@@ -304,7 +303,9 @@ ath_hal_pkt_txtime(struct ath_hal *ah, const HAL_RATE_TABLE *rates, uint32_t fra
 	    ("number of spatial streams needs to be 1..3: MCS rate 0x%x!",
 	    rateix));
 
-	return ath_computedur_ht(frameLen, rc, numStreams, isht40, shortPreamble);
+	/* XXX TODO: Add SIFS */
+	return ath_computedur_ht(frameLen, rc, numStreams, isht40,
+	    shortPreamble);
 }
 
 static const uint16_t ht20_bps[32] = {
@@ -353,7 +354,7 @@ ath_computedur_ht(uint32_t frameLen, uint16_t rate, int streams,
 uint16_t
 ath_hal_computetxtime(struct ath_hal *ah,
 	const HAL_RATE_TABLE *rates, uint32_t frameLen, uint16_t rateix,
-	HAL_BOOL shortPreamble)
+	HAL_BOOL shortPreamble, HAL_BOOL includeSifs)
 {
 	uint32_t bitsPerSymbol, numBits, numSymbols, phyTime, txTime;
 	uint32_t kbps;
@@ -365,7 +366,7 @@ ath_hal_computetxtime(struct ath_hal *ah,
 
 	kbps = rates->info[rateix].rateKbps;
 	/*
-	 * index can be invalid duting dynamic Turbo transitions. 
+	 * index can be invalid during dynamic Turbo transitions. 
 	 * XXX
 	 */
 	if (kbps == 0)
@@ -376,8 +377,10 @@ ath_hal_computetxtime(struct ath_hal *ah,
 		if (shortPreamble && rates->info[rateix].shortPreamble)
 			phyTime >>= 1;
 		numBits		= frameLen << 3;
-		txTime		= CCK_SIFS_TIME + phyTime
+		txTime		= phyTime
 				+ ((numBits * 1000)/kbps);
+		if (includeSifs)
+			txTime	+= CCK_SIFS_TIME;
 		break;
 	case IEEE80211_T_OFDM:
 		bitsPerSymbol	= (kbps * OFDM_SYMBOL_TIME) / 1000;
@@ -385,9 +388,10 @@ ath_hal_computetxtime(struct ath_hal *ah,
 
 		numBits		= OFDM_PLCP_BITS + (frameLen << 3);
 		numSymbols	= howmany(numBits, bitsPerSymbol);
-		txTime		= OFDM_SIFS_TIME
-				+ OFDM_PREAMBLE_TIME
+		txTime		= OFDM_PREAMBLE_TIME
 				+ (numSymbols * OFDM_SYMBOL_TIME);
+		if (includeSifs)
+			txTime	+= OFDM_SIFS_TIME;
 		break;
 	case IEEE80211_T_OFDM_HALF:
 		bitsPerSymbol	= (kbps * OFDM_HALF_SYMBOL_TIME) / 1000;
@@ -395,9 +399,10 @@ ath_hal_computetxtime(struct ath_hal *ah,
 
 		numBits		= OFDM_HALF_PLCP_BITS + (frameLen << 3);
 		numSymbols	= howmany(numBits, bitsPerSymbol);
-		txTime		= OFDM_HALF_SIFS_TIME
-				+ OFDM_HALF_PREAMBLE_TIME
+		txTime		= OFDM_HALF_PREAMBLE_TIME
 				+ (numSymbols * OFDM_HALF_SYMBOL_TIME);
+		if (includeSifs)
+			txTime	+= OFDM_HALF_SIFS_TIME;
 		break;
 	case IEEE80211_T_OFDM_QUARTER:
 		bitsPerSymbol	= (kbps * OFDM_QUARTER_SYMBOL_TIME) / 1000;
@@ -405,9 +410,10 @@ ath_hal_computetxtime(struct ath_hal *ah,
 
 		numBits		= OFDM_QUARTER_PLCP_BITS + (frameLen << 3);
 		numSymbols	= howmany(numBits, bitsPerSymbol);
-		txTime		= OFDM_QUARTER_SIFS_TIME
-				+ OFDM_QUARTER_PREAMBLE_TIME
+		txTime		= OFDM_QUARTER_PREAMBLE_TIME
 				+ (numSymbols * OFDM_QUARTER_SYMBOL_TIME);
+		if (includeSifs)
+			txTime	+= OFDM_QUARTER_SIFS_TIME;
 		break;
 	case IEEE80211_T_TURBO:
 		bitsPerSymbol	= (kbps * TURBO_SYMBOL_TIME) / 1000;
@@ -415,9 +421,10 @@ ath_hal_computetxtime(struct ath_hal *ah,
 
 		numBits		= TURBO_PLCP_BITS + (frameLen << 3);
 		numSymbols	= howmany(numBits, bitsPerSymbol);
-		txTime		= TURBO_SIFS_TIME
-				+ TURBO_PREAMBLE_TIME
+		txTime		= TURBO_PREAMBLE_TIME
 				+ (numSymbols * TURBO_SYMBOL_TIME);
+		if (includeSifs)
+			txTime	+= TURBO_SIFS_TIME;
 		break;
 	default:
 		HALDEBUG(ah, HAL_DEBUG_PHYIO,
@@ -591,9 +598,9 @@ ath_hal_setupratetable(struct ath_hal *ah, HAL_RATE_TABLE *rt)
 		 *     2Mb/s rate which will work but is suboptimal
 		 */
 		rt->info[i].lpAckDuration = ath_hal_computetxtime(ah, rt,
-			WLAN_CTRL_FRAME_SIZE, cix, AH_FALSE);
+			WLAN_CTRL_FRAME_SIZE, cix, AH_FALSE, AH_TRUE);
 		rt->info[i].spAckDuration = ath_hal_computetxtime(ah, rt,
-			WLAN_CTRL_FRAME_SIZE, cix, AH_TRUE);
+			WLAN_CTRL_FRAME_SIZE, cix, AH_TRUE, AH_TRUE);
 	}
 #undef N
 }
@@ -752,7 +759,7 @@ ath_hal_getcapability(struct ath_hal *ah, HAL_CAPABILITY_TYPE type,
 	case HAL_CAP_HT20_SGI:
 		return pCap->halHTSGI20Support ? HAL_OK : HAL_ENOTSUPP;
 	case HAL_CAP_RXTSTAMP_PREC:	/* rx desc tstamp precision (bits) */
-		*result = pCap->halTstampPrecision;
+		*result = pCap->halRxTstampPrecision;
 		return HAL_OK;
 	case HAL_CAP_ANT_DIV_COMB:	/* AR9285/AR9485 LNA diversity */
 		return pCap->halAntDivCombSupport ? HAL_OK  : HAL_ENOTSUPP;
@@ -781,8 +788,6 @@ ath_hal_getcapability(struct ath_hal *ah, HAL_CAPABILITY_TYPE type,
 		}
 	case HAL_CAP_RXDESC_SELFLINK:	/* hardware supports self-linked final RX descriptors correctly */
 		return pCap->halHasRxSelfLinkedTail ? HAL_OK : HAL_ENOTSUPP;
-	case HAL_CAP_LONG_RXDESC_TSF:		/* 32 bit TSF in RX descriptor? */
-		return pCap->halHasLongRxDescTsf ? HAL_OK : HAL_ENOTSUPP;
 	case HAL_CAP_BB_READ_WAR:		/* Baseband read WAR */
 		return pCap->halHasBBReadWar? HAL_OK : HAL_ENOTSUPP;
 	case HAL_CAP_SERIALISE_WAR:		/* PCI register serialisation */
@@ -794,6 +799,9 @@ ath_hal_getcapability(struct ath_hal *ah, HAL_CAPABILITY_TYPE type,
 		return pCap->halRxUsingLnaMixing ? HAL_OK : HAL_ENOTSUPP;
 	case HAL_CAP_DO_MYBEACON:	/* Hardware supports filtering my-beacons */
 		return pCap->halRxDoMyBeacon ? HAL_OK : HAL_ENOTSUPP;
+	case HAL_CAP_TXTSTAMP_PREC:	/* tx desc tstamp precision (bits) */
+		*result = pCap->halTxTstampPrecision;
+		return HAL_OK;
 	default:
 		return HAL_EINVAL;
 	}

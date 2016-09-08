@@ -3,12 +3,13 @@
 
 .include <src.opts.mk>
 
-# The SUBDIR_ORDERED list is a small set of libraries which are used by many
+# The SUBDIR_BOOTSTRAP list is a small set of libraries which are used by many
 # of the other libraries.  These are built first with a .WAIT between them
 # and the main list to avoid needing a SUBDIR_DEPEND line on every library
 # naming just these few items.
 
-SUBDIR_ORDERED=	csu \
+SUBDIR_BOOTSTRAP= \
+	csu \
 	.WAIT \
 	libc \
 	libc_nonshared \
@@ -21,13 +22,14 @@ SUBDIR_ORDERED=	csu \
 
 # The main list; please keep these sorted alphabetically.
 
-SUBDIR=	${SUBDIR_ORDERED} \
+SUBDIR=	${SUBDIR_BOOTSTRAP} \
 	.WAIT \
 	libalias \
 	libarchive \
 	${_libatm} \
 	libauditd \
 	libbegemot \
+	${_libblacklist} \
 	libblocksruntime \
 	${_libbluetooth} \
 	${_libbsnmp} \
@@ -36,12 +38,12 @@ SUBDIR=	${SUBDIR_ORDERED} \
 	libbz2 \
 	libcalendar \
 	libcam \
-	${_libcapsicum} \
 	${_libcasper} \
 	${_libcom_err} \
 	libcompat \
 	libcrypt \
 	libdevctl \
+	${_libdevdctl} \
 	libdevinfo \
 	libdevstat \
 	libdpv \
@@ -58,6 +60,7 @@ SUBDIR=	${SUBDIR_ORDERED} \
 	${_libgssapi} \
 	${_librpcsec_gss} \
 	${_libiconv_modules} \
+	libifconfig \
 	libipsec \
 	libjail \
 	libkiconv \
@@ -135,8 +138,7 @@ SUBDIR_DEPEND_libbsnmp= ${_libnetgraph}
 SUBDIR_DEPEND_libc++:= libcxxrt
 SUBDIR_DEPEND_libc= libcompiler_rt
 SUBDIR_DEPEND_libcam= libsbuf
-SUBDIR_DEPEND_libcapsicum= libnv
-SUBDIR_DEPEND_libcasper= libcapsicum libnv libpjdlog
+SUBDIR_DEPEND_libcasper= libnv
 SUBDIR_DEPEND_libdevstat= libkvm
 SUBDIR_DEPEND_libdpv= libfigpar ncurses libutil
 SUBDIR_DEPEND_libedit= ncurses
@@ -161,6 +163,10 @@ SUBDIR_DEPEND_liblzma= ${_libthr}
 _libngatm=	libngatm
 .endif
 
+.if ${MK_BLACKLIST} != "no"
+_libblacklist=	libblacklist
+.endif
+
 .if ${MK_BLUETOOTH} != "no"
 _libbluetooth=	libbluetooth
 _libsdp=	libsdp
@@ -171,16 +177,19 @@ _libbsnmp=	libbsnmp
 .endif
 
 .if ${MK_CASPER} != "no"
-_libcapsicum=	libcapsicum
 _libcasper=	libcasper
 .endif
 
-.if ${MK_CLANG} != "no" && !defined(COMPAT_32BIT)
+.if ${MK_CLANG} != "no" && !defined(COMPAT_32BIT) && !defined(COMPAT_SOFTFP)
 _clang=		clang
 .endif
 
 .if ${MK_CUSE} != "no"
 _cuse=		libcuse
+.endif
+
+.if ${MK_CXX} != "no"
+_libdevdctl=	libdevdctl
 .endif
 
 .if ${MK_TOOLCHAIN} != "no"

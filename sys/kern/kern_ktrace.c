@@ -572,9 +572,14 @@ void
 ktrprocfork(struct proc *p1, struct proc *p2)
 {
 
+	MPASS(p2->p_tracevp == NULL);
+	MPASS(p2->p_traceflag == 0);
+
+	if (p1->p_traceflag == 0)
+		return;
+
 	PROC_LOCK(p1);
 	mtx_lock(&ktrace_mtx);
-	KASSERT(p2->p_tracevp == NULL, ("new process has a ktrace vnode"));
 	if (p1->p_traceflag & KTRFAC_INHERIT) {
 		p2->p_traceflag = p1->p_traceflag;
 		if ((p2->p_tracevp = p1->p_tracevp) != NULL) {
@@ -1163,8 +1168,7 @@ ktr_writerequest(struct thread *td, struct ktr_request *req)
 	mtx_unlock(&ktrace_mtx);
 
 	kth = &req->ktr_header;
-	KASSERT(((u_short)kth->ktr_type & ~KTR_DROP) <
-	    sizeof(data_lengths) / sizeof(data_lengths[0]),
+	KASSERT(((u_short)kth->ktr_type & ~KTR_DROP) < nitems(data_lengths),
 	    ("data_lengths array overflow"));
 	datalen = data_lengths[(u_short)kth->ktr_type & ~KTR_DROP];
 	buflen = kth->ktr_len;

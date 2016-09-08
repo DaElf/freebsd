@@ -160,6 +160,8 @@ static void log_bad_page_fault(char *, struct trapframe *, int);
 static void log_frame_dump(struct trapframe *frame);
 static void get_mapping_info(vm_offset_t, pd_entry_t **, pt_entry_t **);
 
+int (*dtrace_invop_jump_addr)(struct trapframe *);
+
 #ifdef TRAP_DEBUG
 static void trap_frame_dump(struct trapframe *frame);
 #endif
@@ -808,10 +810,18 @@ dofault:
 			return (trapframe->pc);
 		}
 
-#ifdef DDB
+#if defined(KDTRACE_HOOKS) || defined(DDB)
 	case T_BREAK:
+#ifdef KDTRACE_HOOKS
+		if (!usermode && dtrace_invop_jump_addr != 0) {
+			dtrace_invop_jump_addr(trapframe);
+			return (trapframe->pc);
+		}
+#endif
+#ifdef DDB
 		kdb_trap(type, 0, trapframe);
 		return (trapframe->pc);
+#endif
 #endif
 
 	case T_BREAK + T_USER:
@@ -839,7 +849,7 @@ dofault:
 			}
 			/*
 			 * The restoration of the original instruction and
-			 * the clearing of the berakpoint will be done later
+			 * the clearing of the breakpoint will be done later
 			 * by the call to ptrace_clear_single_step() in
 			 * issignal() when SIGTRAP is processed.
 			 */
@@ -1576,7 +1586,7 @@ mips_unaligned_load_store(struct trapframe *frame, int mode, register_t addr, re
 		return (0);
 	}
 
-	if (!useracc((void *)((vm_offset_t)addr & ~(size - 1)), size * 2, mode))
+	if (!useracc((void *)rounddown2((vm_offset_t)addr, size), size * 2, mode))
 		return (0);
 
 	/*

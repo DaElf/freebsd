@@ -111,7 +111,6 @@ net_init(void)
 static int
 net_open(struct open_file *f, ...)
 {
-	char temp[FNAME_SIZE];
 	struct iodesc *d;
 	va_list args;
 	char *devname;		/* Device part of file name (or NULL). */
@@ -164,13 +163,24 @@ net_open(struct open_file *f, ...)
 		 * info from bootp or other sources.
 		 */
 		d = socktodesc(netdev_sock);
-		sprintf(temp, "%6D", d->myea, ":");
-		setenv("boot.netif.hwaddr", temp, 1);
+		setenv("boot.netif.hwaddr", ether_sprintf(d->myea), 1);
 		setenv("boot.netif.ip", inet_ntoa(myip), 1);
 		setenv("boot.netif.netmask", intoa(netmask), 1);
 		setenv("boot.netif.gateway", inet_ntoa(gateip), 1);
-		setenv("boot.nfsroot.server", inet_ntoa(rootip), 1);
-		setenv("boot.nfsroot.path", rootpath, 1);
+		setenv("boot.netif.server", inet_ntoa(rootip), 1);
+		if (netproto == NET_TFTP) {
+			setenv("boot.tftproot.server", inet_ntoa(rootip), 1);
+			setenv("boot.tftproot.path", rootpath, 1);
+		} else if (netproto == NET_NFS) {
+			setenv("boot.nfsroot.server", inet_ntoa(rootip), 1);
+			setenv("boot.nfsroot.path", rootpath, 1);
+		}
+		if (intf_mtu != 0) {
+			char mtu[16];
+			sprintf(mtu, "%u", intf_mtu);
+			setenv("boot.netif.mtu", mtu, 1);
+		}
+
 	}
 	netdev_opens++;
 	f->f_devdata = &netdev_sock;
@@ -358,16 +368,24 @@ net_print(int verbose)
 uint32_t
 net_parse_rootpath()
 {
-	int i;
+	int i, ipstart;
 	n_long addr = INADDR_NONE;
+
+	netproto = NET_NFS;
+
+	if (tftpip.s_addr != 0) {
+		netproto = NET_TFTP;
+		addr = tftpip.s_addr;
+	}
 
 	for (i = 0; rootpath[i] != '\0' && i < FNAME_SIZE; i++)
 		if (rootpath[i] == ':')
 			break;
 	if (i && i != FNAME_SIZE && rootpath[i] == ':') {
 		rootpath[i++] = '\0';
-		addr = inet_addr(&rootpath[0]);
+		addr = inet_addr(&rootpath[ipstart]);
 		bcopy(&rootpath[i], rootpath, strlen(&rootpath[i])+1);
 	}
+
 	return (addr);
 }

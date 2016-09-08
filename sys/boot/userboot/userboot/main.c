@@ -43,7 +43,10 @@ static void userboot_zfs_probe(void);
 static int userboot_zfs_found;
 #endif
 
+/* Minimum version required */
 #define	USERBOOT_VERSION	USERBOOT_VERSION_4
+
+#define	MALLOCSZ		(64*1024*1024)
 
 #define	MALLOCSZ		(10*1024*1024)
 static char mallocbuf[MALLOCSZ];
@@ -64,7 +67,7 @@ void
 delay(int usec)
 {
 
-        CALLBACK(delay, usec);
+	CALLBACK(delay, usec);
 }
 
 void
@@ -90,7 +93,14 @@ loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 {
 	const char *var;
 	int i;
-	
+
+	if (version < USERBOOT_VERSION)
+		abort();
+
+	callbacks = cb;
+	callbacks_arg = arg;
+	userboot_disk_maxunit = ndisks;
+
 	/*
 	 * initialise the heap as early as possible.  Once this is done,
 	 * alloc() is usable.
@@ -117,7 +127,7 @@ loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 	}
 
 	/*
-	 * March through the device switch probing for things.
+	 * Hook up the console
 	 */
 	for (i = 0; devsw[i] != NULL; i++)
 		if (devsw[i]->dv_init != NULL)
@@ -153,6 +163,10 @@ loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 	archsw.arch_zfs_probe = userboot_zfs_probe;
 #endif
 
+	/*
+	 * Initialise the block cache. Set the upper limit.
+	 */
+	bcache_init(32768, 512);
 	/*
 	 * March through the device switch probing for things.
 	 */
@@ -216,9 +230,9 @@ extract_currdev(void)
 	}
 
 	env_setenv("currdev", EV_VOLATILE, userboot_fmtdev(&dev),
-            userboot_setcurrdev, env_nounset);
+	    userboot_setcurrdev, env_nounset);
 	env_setenv("loaddev", EV_VOLATILE, userboot_fmtdev(&dev),
-            env_noset, env_nounset);
+	    env_noset, env_nounset);
 }
 
 #if defined(USERBOOT_ZFS_SUPPORT)

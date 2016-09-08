@@ -57,10 +57,16 @@
 #define	C_PRELGET(x)		(int)((((x) >> 1) & C_PRELRANGE) - 1)
 #define	C_HARDCLOCK		0x0100 /* align to hardclock() calls */
 #define	C_ABSOLUTE		0x0200 /* event time is absolute. */
+#define	C_PRECALC		0x0400 /* event time is pre-calculated. */
 
 struct callout_handle {
 	struct callout *callout;
 };
+
+/* Flags for callout_stop_safe() */
+#define	CS_DRAIN		0x0001 /* callout_drain(), wait allowed */
+#define	CS_EXECUTING		0x0002 /* Positive return value indicates that
+					  the callout was executing */
 
 #ifdef _KERNEL
 /* 
@@ -81,7 +87,7 @@ struct callout_handle {
  */
 #define	callout_active(c)	((c)->c_flags & CALLOUT_ACTIVE)
 #define	callout_deactivate(c)	((c)->c_flags &= ~CALLOUT_ACTIVE)
-#define	callout_drain(c)	_callout_stop_safe(c, 1, NULL)
+#define	callout_drain(c)	_callout_stop_safe(c, CS_DRAIN, NULL)
 void	callout_init(struct callout *, int);
 void	_callout_init_lock(struct callout *, struct lock_object *, int);
 #define	callout_init_mtx(c, mtx, flags)					\
@@ -124,6 +130,8 @@ int	_callout_stop_safe(struct callout *, int, void (*)(void *));
 void	callout_process(sbintime_t now);
 #define callout_async_drain(c, d)					\
     _callout_stop_safe(c, 0, d)
+void callout_when(sbintime_t sbt, sbintime_t precision, int flags,
+    sbintime_t *sbt_res, sbintime_t *prec_res);
 #endif
 
 #endif /* _SYS_CALLOUT_H_ */

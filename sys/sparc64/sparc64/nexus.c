@@ -233,7 +233,7 @@ nexus_attach(device_t dev)
 		    rman_init(&sc->sc_mem_rman) != 0 ||
 		    rman_manage_region(&sc->sc_intr_rman, 0,
 		    IV_MAX - 1) != 0 ||
-		    rman_manage_region(&sc->sc_mem_rman, 0ULL, ~0ULL) != 0)
+		    rman_manage_region(&sc->sc_mem_rman, 0, BUS_SPACE_MAXADDR) != 0)
 			panic("%s: failed to set up rmans.", __func__);
 	} else
 		node = ofw_bus_get_node(dev);
@@ -559,7 +559,7 @@ nexus_setup_dinfo(device_t dev, phandle_t node)
 			resource_list_add(&ndi->ndi_rl, SYS_RES_MEMORY, i,
 			    phys, phys + size - 1, size);
 	}
-	free(reg, M_OFWPROP);
+	OF_prop_free(reg);
 
 	nintr = OF_getprop_alloc(node, "interrupts",  sizeof(*intr),
 	    (void **)&intr);
@@ -568,7 +568,7 @@ nexus_setup_dinfo(device_t dev, phandle_t node)
 		    "upa-portid" : "portid", &ign, sizeof(ign)) <= 0) {
 			device_printf(dev, "<%s>: could not determine portid\n",
 			    ndi->ndi_obdinfo.obd_name);
-			free(intr, M_OFWPROP);
+			OF_prop_free(intr);
 			goto fail;
 		}
 
@@ -579,7 +579,7 @@ nexus_setup_dinfo(device_t dev, phandle_t node)
 			resource_list_add(&ndi->ndi_rl, SYS_RES_IRQ, i, intr[i],
 			    intr[i], 1);
 		}
-		free(intr, M_OFWPROP);
+		OF_prop_free(intr);
 	}
 
 	return (ndi);
@@ -605,8 +605,8 @@ nexus_print_res(struct nexus_devinfo *ndi)
 
 	rv = 0;
 	rv += resource_list_print_type(&ndi->ndi_rl, "mem", SYS_RES_MEMORY,
-	    "%#lx");
+	    "%#jx");
 	rv += resource_list_print_type(&ndi->ndi_rl, "irq", SYS_RES_IRQ,
-	    "%ld");
+	    "%jd");
 	return (rv);
 }

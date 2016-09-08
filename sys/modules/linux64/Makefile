@@ -16,7 +16,10 @@ SRCS=	linux_fork.c linux_dummy.c linux_file.c linux_event.c \
 DPSRCS=	linux_genassym.c
 
 # XXX: for assym.s
-SRCS+=  opt_kstack_pages.h opt_nfs.h opt_apic.h opt_hwpmc_hooks.h
+SRCS+=  opt_kstack_pages.h opt_nfs.h opt_hwpmc_hooks.h
+.if ${MACHINE_CPUARCH} == "i386"
+SRCS+=	opt_apic.h
+.endif
 
 CLEANFILES=	linux_assym.h linux_genassym.o linux_locore.o
 
@@ -27,9 +30,9 @@ linux_assym.h: linux_genassym.o
 
 linux_locore.o: linux_locore.s linux_assym.h
 	${CC} -x assembler-with-cpp -DLOCORE -shared -mcmodel=small	\
-	-pipe -I. -I${SYSDIR} -Werror -Wall -fno-common -nostdinc 	\
+	-pipe -I. -I${SYSDIR} -Werror -Wall -fno-common -fPIC -nostdinc	\
 	-Wl,-T${.CURDIR}/../../${MACHINE_CPUARCH}/linux/${VDSO}.lds.s	\
-	-Wl,-soname=${VDSO}.so.1,-fPIC,-warn-common -nostdlib		\
+	-Wl,-soname=${VDSO}.so.1,-warn-common -nostdlib			\
 	    ${.IMPSRC} -o ${.TARGET}
 
 ${VDSO}.so: linux_locore.o

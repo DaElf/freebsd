@@ -485,14 +485,12 @@ icmp6_input(struct mbuf **mp, int *offp, int proto)
 		icmp6_ifstat_inc(ifp, ifs6_in_dstunreach);
 		switch (code) {
 		case ICMP6_DST_UNREACH_NOROUTE:
+		case ICMP6_DST_UNREACH_ADDR:	/* PRC_HOSTDEAD is a DOS */
 			code = PRC_UNREACH_NET;
 			break;
 		case ICMP6_DST_UNREACH_ADMIN:
 			icmp6_ifstat_inc(ifp, ifs6_in_adminprohib);
 			code = PRC_UNREACH_PROTOCOL; /* is this a good code? */
-			break;
-		case ICMP6_DST_UNREACH_ADDR:
-			code = PRC_HOSTDEAD;
 			break;
 		case ICMP6_DST_UNREACH_BEYONDSCOPE:
 			/* I mean "source address was incorrect." */
@@ -667,7 +665,9 @@ icmp6_input(struct mbuf **mp, int *offp, int proto)
 			 * XXX: this combination of flags is pointless,
 			 * but should we keep this for compatibility?
 			 */
-			if ((V_icmp6_nodeinfo & 5) != 5)
+			if ((V_icmp6_nodeinfo & (ICMP6_NODEINFO_FQDNOK |
+			    ICMP6_NODEINFO_TMPADDROK)) !=
+			    (ICMP6_NODEINFO_FQDNOK | ICMP6_NODEINFO_TMPADDROK))
 				break;
 
 			if (code != 0)

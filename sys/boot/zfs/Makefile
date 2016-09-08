@@ -5,10 +5,14 @@ INTERNALLIB=
 
 SRCS+=		zfs.c
 
+SRCS+=		skein.c skein_block.c
+.PATH:		${.CURDIR}/../../crypto/skein
+
 CFLAGS+=	-DBOOTPROG=\"zfsloader\"
 CFLAGS+=	-I${.CURDIR}/../common -I${.CURDIR}/../.. -I.
 CFLAGS+=	-I${.CURDIR}/../../../lib/libstand
 CFLAGS+=	-I${.CURDIR}/../../cddl/boot/zfs
+CFLAGS+=	-I${.CURDIR}/../../crypto/skein
 
 .if ${MACHINE_CPUARCH} == "i386" || ${MACHINE_CPUARCH} == "amd64"
 CFLAGS+=	-march=i386
@@ -21,7 +25,7 @@ CFLAGS+=	-Wformat -Wall
 
 .if ${MACHINE_CPUARCH} == "amd64"
 CLEANFILES+=    machine
-machine:
+machine: .NOMETA
 	ln -sf ${.CURDIR}/../../i386/include machine
 .endif
 

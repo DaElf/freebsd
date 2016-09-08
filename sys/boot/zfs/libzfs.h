@@ -55,6 +55,7 @@ struct zfs_boot_args
     uint64_t		root;
     uint64_t		primary_pool;
     uint64_t		primary_vdev;
+    char		gelipw[256];
 };
 
 int	zfs_parsedev(struct zfs_devdesc *dev, const char *devspec,
@@ -64,7 +65,7 @@ int	zfs_probe_dev(const char *devname, uint64_t *pool_guid);
 int	zfs_list(const char *name);
 void	init_zfs_bootenv(char *currdev);
 int	zfs_bootenv(const char *name);
-int	zfs_belist_add(const char *name);
+int	zfs_belist_add(const char *name, uint64_t __unused);
 int	zfs_set_env(void);
 
 extern struct devsw zfs_dev;

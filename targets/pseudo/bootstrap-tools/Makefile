@@ -49,22 +49,20 @@ BSARGS+= OBJTOP=${BTOOLSDIR}${SRCTOP} OBJROOT='$${OBJTOP}/'
 BSARGS+= MK_CROSS_COMPILER=no MK_CLANG=no MK_GCC=no
 
 DISTRIB_ENV=	INSTALL="sh ${SRCTOP}/tools/install.sh" NO_FSCHG=1 MK_TESTS=no
-legacy: .MAKE .META
+legacy: .MAKE ${META_DEPS}
 	mkdir -p ${LEGACY_TOOLS}
 	${DISTRIB_ENV} ${MAKE} -C ${SRCTOP}/etc distrib-dirs \
 	    DESTDIR=${BTOOLSDIR} > $@.distrib-dirs_btoolsdir
 	${DISTRIB_ENV} ${MAKE} -C ${SRCTOP}/etc distrib-dirs \
 	    DESTDIR=${LEGACY_TOOLS} > $@.distrib-dirs_legacy_tools
 	${BSENV} ${MAKE} -C ${SRCTOP} -f Makefile.inc1 ${BSARGS} $@
-	touch $@
 
 bootstrap-tools: legacy
 build-tools: bootstrap-tools
 cross-tools: build-tools
 
-cross-tools build-tools bootstrap-tools: .MAKE .META
+cross-tools build-tools bootstrap-tools: .MAKE ${META_DEPS}
 	${BSENV} ${MAKE} -C ${SRCTOP} -f Makefile.inc1 ${BSARGS} $@
-	touch $@
 
 # MAKELEVEL=0 so that dirdeps.mk does its thing
 # BSENV:MPATH=* lets us use the bootstrapped stuff in LEGACY_TOOLS above.
@@ -80,9 +78,14 @@ BSTCENV= \
 BSTCARGS= \
 	${BSARGS:NDESTDIR=*:NOBJTOP=*:NOBJROOT=*:NMK_CROSS_COMPILER=*:NMK_CLANG=*:NMK_GCC=*} \
 	BUILD_DIRDEPS=yes \
+	LLVM_TBLGEN=${TOOLSDIR}/usr/bin/llvm-tblgen \
+	CLANG_TBLGEN=${TOOLSDIR}/usr/bin/clang-tblgen \
 	-DWITH_STAGING \
 	-DWITH_TOOLSDIR
 
 # finally we build toolchain leveraging the above.
 bootstrap-toolchain:	.MAKE cross-tools
 	${BSTCENV} ${MAKE} -C ${.CURDIR:H:H} ${BSTCARGS} toolchain
+
+# Ensure CCACHE_DIR is ignored since we are processing .meta files here.
+.include <bsd.compiler.mk>

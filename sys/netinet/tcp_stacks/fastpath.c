@@ -54,11 +54,9 @@
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
-#include "opt_ipfw.h"		/* for ipfw_fwd	*/
 #include "opt_inet.h"
 #include "opt_inet6.h"
 #include "opt_ipsec.h"
-#include "opt_kdtrace.h"
 #include "opt_tcpdebug.h"
 
 #include <sys/param.h>
@@ -124,8 +122,6 @@ __FBSDID("$FreeBSD$");
 
 #include <security/mac/mac_framework.h>
 
-const int tcprexmtthresh;
-
 VNET_DECLARE(int, tcp_autorcvbuf_inc);
 #define	V_tcp_autorcvbuf_inc	VNET(tcp_autorcvbuf_inc)
 VNET_DECLARE(int, tcp_autorcvbuf_max);
@@ -176,7 +172,10 @@ tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	       int ti_locked, u_long tiwin)
 {
 	int acked;
+	uint16_t nsegs;
 	int winup_only=0;
+
+	nsegs = max(1, m->m_pkthdr.lro_nsegs);
 #ifdef TCPDEBUG
 	/*
 	 * The size of tcp_saveipgen must be the size of the max ip header,
@@ -187,7 +186,7 @@ tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	short ostate = 0;
 #endif
         /*
-	 * The following if statment will be true if
+	 * The following if statement will be true if
 	 * we are doing the win_up_in_fp <and>
 	 * - We have more new data (SEQ_LT(tp->snd_wl1, th->th_seq)) <or>
 	 * - No more new data, but we have an ack for new data
@@ -282,7 +281,7 @@ tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		 * typically means increasing the congestion
 		 * window.
 		 */
-		cc_ack_received(tp, th, CC_ACK);
+		cc_ack_received(tp, th, nsegs, CC_ACK);
 
 		tp->snd_una = th->th_ack;
 		/*
@@ -291,7 +290,6 @@ tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		 */
 		tp->snd_wl2 = th->th_ack;
 		tp->t_dupacks = 0;
-		m_freem(m);
 
 		/*
 		 * If all outstanding data are acked, stop
@@ -308,6 +306,8 @@ tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 				  (void *)tcp_saveipgen,
 				  &tcp_savetcp, 0);
 #endif
+		TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
+		m_freem(m);
 		if (tp->snd_una == tp->snd_max)
 			tcp_timer_activate(tp, TT_REXMT, 0);
 		else if (!tcp_timer_active(tp, TT_PERSIST))
@@ -398,6 +398,7 @@ tcp_do_fastnewdata(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		tcp_trace(TA_INPUT, ostate, tp,
 			  (void *)tcp_saveipgen, &tcp_savetcp, 0);
 #endif
+	TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
 	/*
 	 * Automatic sizing of receive socket buffer.  Often the send
 	 * buffer size is not optimally adjusted to the actual network
@@ -504,9 +505,12 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 {
 	int  acked, ourfinisacked, needoutput = 0;
 	int rstreason, todrop, win;
+	uint16_t nsegs;
 	char *s;
 	struct in_conninfo *inc;
 	struct mbuf *mfree = NULL;
+
+	nsegs = max(1, m->m_pkthdr.lro_nsegs);
 #ifdef TCPDEBUG
 	/*
 	 * The size of tcp_saveipgen must be the size of the max ip header,
@@ -1061,7 +1065,7 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 				 * change and FIN isn't set),
 				 * the ack is the biggest we've
 				 * seen and we've seen exactly our rexmt
-				 * threshhold of them, assume a packet
+				 * threshold of them, assume a packet
 				 * has been dropped and retransmit it.
 				 * Kludge snd_nxt & the congestion
 				 * window so we send only this one
@@ -1087,7 +1091,8 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 					tp->t_dupacks = 0;
 				else if (++tp->t_dupacks > tcprexmtthresh ||
 				     IN_FASTRECOVERY(tp->t_flags)) {
-					cc_ack_received(tp, th, CC_DUPACK);
+					cc_ack_received(tp, th, nsegs,
+					    CC_DUPACK);
 					if ((tp->t_flags & TF_SACK_PERMIT) &&
 					    IN_FASTRECOVERY(tp->t_flags)) {
 						int awnd;
@@ -1137,7 +1142,8 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 					}
 					/* Congestion signal before ack. */
 					cc_cong_signal(tp, th, CC_NDUPACK);
-					cc_ack_received(tp, th, CC_DUPACK);
+					cc_ack_received(tp, th, nsegs,
+					    CC_DUPACK);
 					tcp_timer_activate(tp, TT_REXMT, 0);
 					tp->t_rtttime = 0;
 					if (tp->t_flags & TF_SACK_PERMIT) {
@@ -1171,7 +1177,8 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 					 * segment. Restore the original
 					 * snd_cwnd after packet transmission.
 					 */
-					cc_ack_received(tp, th, CC_DUPACK);
+					cc_ack_received(tp, th, nsegs,
+					    CC_DUPACK);
 					u_long oldcwnd = tp->snd_cwnd;
 					tcp_seq oldsndmax = tp->snd_max;
 					u_int sent;
@@ -1325,7 +1332,7 @@ process_ACK:
 		 * control related information. This typically means increasing
 		 * the congestion window.
 		 */
-		cc_ack_received(tp, th, CC_ACK);
+		cc_ack_received(tp, th, nsegs, CC_ACK);
 
 		SOCKBUF_LOCK(&so->so_snd);
 		if (acked > sbavail(&so->so_snd)) {
@@ -1695,7 +1702,7 @@ dropafterack:
 		tcp_trace(TA_DROP, ostate, tp, (void *)tcp_saveipgen,
 			  &tcp_savetcp, 0);
 #endif
-	TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
+	TCP_PROBE3(debug__drop, tp, th, mtod(m, const char *));
 	if (ti_locked == TI_RLOCKED) {
 		INP_INFO_RUNLOCK(&V_tcbinfo);
 	}
@@ -1738,7 +1745,7 @@ drop:
 		tcp_trace(TA_DROP, ostate, tp, (void *)tcp_saveipgen,
 			  &tcp_savetcp, 0);
 #endif
-	TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
+	TCP_PROBE3(debug__drop, tp, th, mtod(m, const char *));
 	if (tp != NULL)
 		INP_WUNLOCK(tp->t_inpcb);
 	m_freem(m);
@@ -1760,6 +1767,7 @@ tcp_do_segment_fastslow(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	int thflags;
 	u_long tiwin;
 	char *s;
+	uint16_t nsegs;
 	int can_enter;
 	struct in_conninfo *inc;
 	struct tcpopt to;
@@ -1767,6 +1775,7 @@ tcp_do_segment_fastslow(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	thflags = th->th_flags;
 	tp->sackhint.last_sack_ack = 0;
 	inc = &tp->t_inpcb->inp_inc;
+	nsegs = max(1, m->m_pkthdr.lro_nsegs);
 	/*
 	 * If this is either a state-changing packet or current state isn't
 	 * established, we require a write lock on tcbinfo.  Otherwise, we
@@ -1985,7 +1994,10 @@ tcp_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	       int ti_locked, u_long tiwin)
 {
 	int acked;
+	uint16_t nsegs;
 	int winup_only=0;
+
+	nsegs = max(1, m->m_pkthdr.lro_nsegs);
 #ifdef TCPDEBUG
 	/*
 	 * The size of tcp_saveipgen must be the size of the max ip header,
@@ -2130,11 +2142,10 @@ tcp_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		 * typically means increasing the congestion
 		 * window.
 		 */
-		cc_ack_received(tp, th, CC_ACK);
+		cc_ack_received(tp, th, nsegs, CC_ACK);
 
 		tp->snd_una = th->th_ack;
 		tp->t_dupacks = 0;
-		m_freem(m);
 
 		/*
 		 * If all outstanding data are acked, stop
@@ -2151,6 +2162,8 @@ tcp_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 				  (void *)tcp_saveipgen,
 				  &tcp_savetcp, 0);
 #endif
+		TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
+		m_freem(m);
 		if (tp->snd_una == tp->snd_max)
 			tcp_timer_activate(tp, TT_REXMT, 0);
 		else if (!tcp_timer_active(tp, TT_PERSIST))
@@ -2375,36 +2388,17 @@ tcp_do_segment_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 }
 
 struct tcp_function_block __tcp_fastslow = {
-	"fastslow",
-	tcp_output,
-	tcp_do_segment_fastslow,
-	tcp_default_ctloutput,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	0,
-	0
-
+	.tfb_tcp_block_name = "fastslow",
+	.tfb_tcp_output = tcp_output,
+	.tfb_tcp_do_segment = tcp_do_segment_fastslow,
+	.tfb_tcp_ctloutput = tcp_default_ctloutput,
 };
 
 struct tcp_function_block __tcp_fastack = {
-	"fastack",
-	tcp_output,
-	tcp_do_segment_fastack,
-	tcp_default_ctloutput,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	NULL,
-	0,
-	0
+	.tfb_tcp_block_name = "fastack",
+	.tfb_tcp_output = tcp_output,
+	.tfb_tcp_do_segment = tcp_do_segment_fastack,
+	.tfb_tcp_ctloutput = tcp_default_ctloutput
 };
 
 static int
@@ -2453,4 +2447,4 @@ static moduledata_t new_tcp_fastpaths = {
 };
 
 MODULE_VERSION(kern_tcpfastpaths, 1);
-DECLARE_MODULE(kern_tcpfastpaths, new_tcp_fastpaths, SI_SUB_PSEUDO, SI_ORDER_ANY);
+DECLARE_MODULE(kern_tcpfastpaths, new_tcp_fastpaths, SI_SUB_PROTO_DOMAIN, SI_ORDER_ANY);

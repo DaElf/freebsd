@@ -525,6 +525,7 @@ tcp_usr_connect(struct socket *so, struct sockaddr *nam, struct thread *td)
 	error = tp->t_fb->tfb_tcp_output(tp);
 out:
 	TCPDEBUG2(PRU_CONNECT);
+	TCP_PROBE2(debug__user, tp, PRU_CONNECT);
 	INP_WUNLOCK(inp);
 	return (error);
 }
@@ -1360,14 +1361,16 @@ tcp_fill_info(struct tcpcb *tp, struct tcp_info *ti)
  * has to revalidate that the connection is still valid for the socket
  * option.
  */
-#define INP_WLOCK_RECHECK(inp) do {					\
+#define INP_WLOCK_RECHECK_CLEANUP(inp, cleanup) do {			\
 	INP_WLOCK(inp);							\
 	if (inp->inp_flags & (INP_TIMEWAIT | INP_DROPPED)) {		\
 		INP_WUNLOCK(inp);					\
+		cleanup;						\
 		return (ECONNRESET);					\
 	}								\
 	tp = intotcpcb(inp);						\
 } while(0)
+#define INP_WLOCK_RECHECK(inp) INP_WLOCK_RECHECK_CLEANUP((inp), /* noop */)
 
 int
 tcp_ctloutput(struct socket *so, struct sockopt *sopt)
@@ -1417,40 +1420,59 @@ tcp_ctloutput(struct socket *so, struct sockopt *sopt)
 		if (error)
 			return (error);
 		INP_WLOCK_RECHECK(inp);
-		if (tp->t_state != TCPS_CLOSED) {
-			/* 
-			 * The user has advanced the state
-			 * past the initial point, we can't
-			 * switch since we are down the road
-			 * and a new set of functions may
-			 * not be compatibile.
-			 */
-			INP_WUNLOCK(inp);
-			return(EINVAL);
-		}
 		blk = find_and_ref_tcp_functions(&fsn);
 		if (blk == NULL) {
 			INP_WUNLOCK(inp);
 			return (ENOENT);
 		}
-		if (tp->t_fb != blk) {
-			if (blk->tfb_flags & TCP_FUNC_BEING_REMOVED) {
+		if (tp->t_fb == blk) {
+			/* You already have this */
+			refcount_release(&blk->tfb_refcnt);
+			INP_WUNLOCK(inp);
+			return (0);
+		}
+		if (tp->t_state != TCPS_CLOSED) {
+			int error=EINVAL;
+			/* 
+			 * The user has advanced the state
+			 * past the initial point, we may not
+			 * be able to switch. 
+			 */
+			if (blk->tfb_tcp_handoff_ok != NULL) {
+				/* 
+				 * Does the stack provide a
+				 * query mechanism, if so it may
+				 * still be possible?
+				 */
+				error = (*blk->tfb_tcp_handoff_ok)(tp);
+			}
+			if (error) {
 				refcount_release(&blk->tfb_refcnt);
 				INP_WUNLOCK(inp);
-				return (ENOENT);
+				return(error);
 			}
+		}
+		if (blk->tfb_flags & TCP_FUNC_BEING_REMOVED) {
+			refcount_release(&blk->tfb_refcnt);
+			INP_WUNLOCK(inp);
+			return (ENOENT);
+		}
+		/* 
+		 * Release the old refcnt, the
+		 * lookup acquired a ref on the
+		 * new one already.
+		 */
+		if (tp->t_fb->tfb_tcp_fb_fini) {
 			/* 
-			 * Release the old refcnt, the
-			 * lookup acquires a ref on the
-			 * new one.
+			 * Tell the stack to cleanup with 0 i.e.
+			 * the tcb is not going away.
 			 */
-			if (tp->t_fb->tfb_tcp_fb_fini)
-				(*tp->t_fb->tfb_tcp_fb_fini)(tp);
-			refcount_release(&tp->t_fb->tfb_refcnt);
-			tp->t_fb = blk;
-			if (tp->t_fb->tfb_tcp_fb_init) {
-				(*tp->t_fb->tfb_tcp_fb_init)(tp);
-			}
+			(*tp->t_fb->tfb_tcp_fb_fini)(tp, 0);
+		}
+		refcount_release(&tp->t_fb->tfb_refcnt);
+		tp->t_fb = blk;
+		if (tp->t_fb->tfb_tcp_fb_init) {
+			(*tp->t_fb->tfb_tcp_fb_init)(tp);
 		}
 #ifdef TCP_OFFLOAD
 		if (tp->t_flags & TF_TOE) {
@@ -1496,7 +1518,7 @@ tcp_default_ctloutput(struct socket *so, struct sockopt *sopt, struct inpcb *inp
 			free(pbuf, M_TEMP);
 			return (error);
 		}
-		INP_WLOCK_RECHECK(inp);
+		INP_WLOCK_RECHECK_CLEANUP(inp, free(pbuf, M_TEMP));
 		if (CC_ALGO(tp)->ctl_output != NULL)
 			error = CC_ALGO(tp)->ctl_output(tp->ccv, sopt, pbuf);
 		else
@@ -1837,6 +1859,7 @@ unlock_and_done:
 	return (error);
 }
 #undef INP_WLOCK_RECHECK
+#undef INP_WLOCK_RECHECK_CLEANUP
 
 /*
  * Attach TCP protocol to socket, allocating
@@ -1882,7 +1905,7 @@ tcp_attach(struct socket *so)
 	tp->t_state = TCPS_CLOSED;
 	INP_WUNLOCK(inp);
 	INP_INFO_RUNLOCK(&V_tcbinfo);
-	TCPSTAT_INC(tcps_states[TCPS_CLOSED]);
+	TCPSTATES_INC(TCPS_CLOSED);
 	return (0);
 }
 

@@ -637,7 +637,6 @@ static struct witness_order_list_entry order_lists[] = {
 #endif
 	{ "rm.mutex_mtx", &lock_class_mtx_spin },
 	{ "sio", &lock_class_mtx_spin },
-	{ "scrlock", &lock_class_mtx_spin },
 #ifdef __i386__
 	{ "cy", &lock_class_mtx_spin },
 #endif
@@ -653,6 +652,7 @@ static struct witness_order_list_entry order_lists[] = {
 	{ "pmc-per-proc", &lock_class_mtx_spin },
 #endif
 	{ "process slock", &lock_class_mtx_spin },
+	{ "syscons video lock", &lock_class_mtx_spin },
 	{ "sleepq chain", &lock_class_mtx_spin },
 	{ "rm_spinlock", &lock_class_mtx_spin },
 	{ "turnstile chain", &lock_class_mtx_spin },
@@ -661,7 +661,6 @@ static struct witness_order_list_entry order_lists[] = {
 	{ "td_contested", &lock_class_mtx_spin },
 	{ "callout", &lock_class_mtx_spin },
 	{ "entropy harvest mutex", &lock_class_mtx_spin },
-	{ "syscons video lock", &lock_class_mtx_spin },
 #ifdef SMP
 	{ "smp rendezvous", &lock_class_mtx_spin },
 #endif
@@ -709,8 +708,6 @@ static struct witness_order_list_entry order_lists[] = {
  */
 static struct witness_blessed blessed_list[] = {
 };
-static int blessed_count =
-	sizeof(blessed_list) / sizeof(struct witness_blessed);
 #endif
 
 /*
@@ -2060,7 +2057,7 @@ blessed(struct witness *w1, struct witness *w2)
 	int i;
 	struct witness_blessed *b;
 
-	for (i = 0; i < blessed_count; i++) {
+	for (i = 0; i < nitems(blessed_list); i++) {
 		b = &blessed_list[i];
 		if (strcmp(w1->w_name, b->b_lock1) == 0) {
 			if (strcmp(w2->w_name, b->b_lock2) == 0)
@@ -2973,7 +2970,7 @@ witness_lock_order_add(struct witness *parent, struct witness *child)
 	return (1);
 }
 
-/* Call this whenver the structure of the witness graph changes. */
+/* Call this whenever the structure of the witness graph changes. */
 static void
 witness_increment_graph_generation(void)
 {

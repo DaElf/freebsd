@@ -10,15 +10,15 @@ sinclude(dnstap/dnstap.m4)
 # must be numbers. ac_defun because of later processing
 m4_define([VERSION_MAJOR],[1])
 m4_define([VERSION_MINOR],[5])
-m4_define([VERSION_MICRO],[7])
+m4_define([VERSION_MICRO],[9])
 AC_INIT(unbound, m4_defn([VERSION_MAJOR]).m4_defn([VERSION_MINOR]).m4_defn([VERSION_MICRO]), unbound-bugs@nlnetlabs.nl, unbound)
 AC_SUBST(UNBOUND_VERSION_MAJOR, [VERSION_MAJOR])
 AC_SUBST(UNBOUND_VERSION_MINOR, [VERSION_MINOR])
 AC_SUBST(UNBOUND_VERSION_MICRO, [VERSION_MICRO])
 
-LIBUNBOUND_CURRENT=5
-LIBUNBOUND_REVISION=10
-LIBUNBOUND_AGE=3
+LIBUNBOUND_CURRENT=6
+LIBUNBOUND_REVISION=1
+LIBUNBOUND_AGE=4
 # 1.0.0 had 0:12:0
 # 1.0.1 had 0:13:0
 # 1.0.2 had 0:14:0
@@ -64,6 +64,8 @@ LIBUNBOUND_AGE=3
 # 1.5.5 had 5:8:3
 # 1.5.6 had 5:9:3
 # 1.5.7 had 5:10:3
+# 1.5.8 had 6:0:4 # adds ub_ctx_set_stub
+# 1.5.9 had 6:1:4
 
 #   Current  -- the number of the binary API that we're implementing
 #   Revision -- which iteration of the implementation of the binary
@@ -256,6 +258,29 @@ AC_C_INLINE
 ACX_CHECK_FORMAT_ATTRIBUTE
 ACX_CHECK_UNUSED_ATTRIBUTE
 
+AC_DEFUN([CHECK_WEAK_ATTRIBUTE],
+[AC_REQUIRE([AC_PROG_CC])
+AC_MSG_CHECKING(whether the C compiler (${CC-cc}) accepts the "weak" attribute)
+AC_CACHE_VAL(ac_cv_c_weak_attribute,
+[ac_cv_c_weak_attribute=no
+AC_TRY_COMPILE(
+[ #include <stdio.h>
+__attribute__((weak)) void f(int x) { printf("%d", x); }
+], [
+   f(1);
+],
+[ac_cv_c_weak_attribute="yes"],
+[ac_cv_c_weak_attribute="no"])
+])
+
+AC_MSG_RESULT($ac_cv_c_weak_attribute)
+if test $ac_cv_c_weak_attribute = yes; then
+  AC_DEFINE(HAVE_ATTR_WEAK, 1, [Whether the C compiler accepts the "weak" attribute])
+fi
+])dnl End of CHECK_WEAK_ATTRIBUTE
+
+CHECK_WEAK_ATTRIBUTE
+
 if test "$srcdir" != "."; then
 	CPPFLAGS="$CPPFLAGS -I$srcdir"
 fi
@@ -276,7 +301,7 @@ AC_CHECK_TOOL(STRIP, strip)
 ACX_LIBTOOL_C_ONLY
 
 # Checks for header files.
-AC_CHECK_HEADERS([stdarg.h stdbool.h netinet/in.h sys/param.h sys/socket.h sys/un.h sys/uio.h sys/resource.h arpa/inet.h syslog.h netdb.h sys/wait.h pwd.h glob.h grp.h login_cap.h winsock2.h ws2tcpip.h endian.h],,, [AC_INCLUDES_DEFAULT])
+AC_CHECK_HEADERS([stdarg.h stdbool.h netinet/in.h netinet/tcp.h sys/param.h sys/socket.h sys/un.h sys/uio.h sys/resource.h arpa/inet.h syslog.h netdb.h sys/wait.h pwd.h glob.h grp.h login_cap.h winsock2.h ws2tcpip.h endian.h],,, [AC_INCLUDES_DEFAULT])
 
 # check for types.  
 # Using own tests for int64* because autoconf builtin only give 32bit.
@@ -417,6 +442,36 @@ if test x_$withval != x_no; then
 		CC="$PTHREAD_CC"
 		ub_have_pthreads=yes
 		AC_CHECK_TYPES([pthread_spinlock_t, pthread_rwlock_t],,,[#include <pthread.h>])
+
+		if echo "$CFLAGS" | $GREP -e "-pthread" >/dev/null; then
+		AC_MSG_CHECKING([if -pthread unused during linking])
+		# catch clang warning 'argument unused during compilation'
+		AC_LANG_CONFTEST([AC_LANG_SOURCE(AC_INCLUDES_DEFAULT
+[[
+int main(void) {return 0;}
+]])])
+		pthread_unused="yes"
+		# first compile
+		echo "$CC $CFLAGS -c conftest.c -o conftest.o" >&AS_MESSAGE_LOG_FD
+		$CC $CFLAGS -c conftest.c -o conftest.o 2>&AS_MESSAGE_LOG_FD >&AS_MESSAGE_LOG_FD
+		if test $? = 0; then 
+			# then link
+			echo "$CC $CFLAGS -Werror $LDFLAGS $LIBS -o conftest contest.o" >&AS_MESSAGE_LOG_FD
+			$CC $CFLAGS -Werror $LDFLAGS $LIBS -o conftest conftest.o 2>&AS_MESSAGE_LOG_FD >&AS_MESSAGE_LOG_FD
+			if test $? -ne 0; then
+				AC_MSG_RESULT(yes)
+				CFLAGS=`echo "$CFLAGS" | sed -e 's/-pthread//'`
+				PTHREAD_CFLAGS_ONLY="-pthread"
+				AC_SUBST(PTHREAD_CFLAGS_ONLY)
+			else
+				AC_MSG_RESULT(no)
+			fi
+		else
+			AC_MSG_RESULT(no)
+		fi # endif cc successful
+		rm -f conftest conftest.c conftest.o
+		fi # endif -pthread in CFLAGS
+
 		])
 fi
 
@@ -603,7 +658,7 @@ else
 fi
 AC_CHECK_HEADERS([openssl/conf.h],,, [AC_INCLUDES_DEFAULT])
 AC_CHECK_HEADERS([openssl/engine.h],,, [AC_INCLUDES_DEFAULT])
-AC_CHECK_FUNCS([OPENSSL_config EVP_sha1 EVP_sha256 EVP_sha512 FIPS_mode])
+AC_CHECK_FUNCS([OPENSSL_config EVP_sha1 EVP_sha256 EVP_sha512 FIPS_mode EVP_MD_CTX_new])
 AC_CHECK_DECLS([SSL_COMP_get_compression_methods,sk_SSL_COMP_pop_free,SSL_CTX_set_ecdh_auto], [], [], [
 AC_INCLUDES_DEFAULT
 #ifdef HAVE_OPENSSL_ERR_H
@@ -785,11 +840,26 @@ case "$enable_ecdsa" in
       ;;
 esac
 
-AC_ARG_ENABLE(event-api, AC_HELP_STRING([--enable-event-api], [Enable (experimental) libevent-based libunbound API installed to unbound-event.h]))
-use_unbound_event="no"
+AC_ARG_ENABLE(dsa, AC_HELP_STRING([--disable-dsa], [Disable DSA support]))
+use_dsa="no"
+case "$enable_ecdsa" in
+    no)
+      ;;
+    *)
+      # detect if DSA is supported, and turn it off if not.
+      AC_CHECK_FUNC(EVP_dss1, [
+      AC_DEFINE_UNQUOTED([USE_DSA], [1], [Define this to enable DSA support.])
+      ], [if test "x$enable_dsa" = "xyes"; then AC_MSG_ERROR([OpenSSL does not support DSA and you used --enable-dsa.])
+               fi ])
+      ;;
+esac
+
+
+AC_ARG_ENABLE(event-api, AC_HELP_STRING([--enable-event-api], [Enable (experimental) pluggable event base libunbound API installed to unbound-event.h]))
 case "$enable_event_api" in
     yes)
-      use_unbound_event="yes"
+      AC_SUBST(UNBOUND_EVENT_INSTALL, [unbound-event-install])
+      AC_SUBST(UNBOUND_EVENT_UNINSTALL, [unbound-event-uninstall])
       ;;
     *)
       ;;
@@ -874,10 +944,6 @@ large outgoing port ranges.  ])
 	AC_CHECK_FUNCS([ev_default_loop]) # only in libev. (tested on 4.00)
 	if test -n "$BAK_LDFLAGS_SET"; then
 		LDFLAGS="$BAK_LDFLAGS"
-	fi
-        if test "$use_unbound_event" = "yes"; then
-		AC_SUBST(UNBOUND_EVENT_INSTALL, [unbound-event-install])
-		AC_SUBST(UNBOUND_EVENT_UNINSTALL, [unbound-event-uninstall])
 	fi
 else
 	AC_DEFINE(USE_MINI_EVENT, 1, [Define if you want to use internal select based events])
@@ -999,6 +1065,10 @@ AC_INCLUDES_DEFAULT
 #include <netinet/in.h>
 #endif
 
+#ifdef HAVE_NETINET_TCP_H
+#include <netinet/tcp.h>
+#endif
+
 #ifdef HAVE_ARPA_INET_H
 #include <arpa/inet.h>
 #endif
@@ -1012,9 +1082,22 @@ AC_INCLUDES_DEFAULT
 #endif
 ])
 AC_SEARCH_LIBS([setusercontext], [util])
-AC_CHECK_FUNCS([tzset sigprocmask fcntl getpwnam getrlimit setrlimit setsid sbrk chroot kill chown sleep usleep random srandom recvmsg sendmsg writev socketpair glob initgroups strftime localtime_r setusercontext _beginthreadex endservent endprotoent fsync])
+AC_CHECK_FUNCS([tzset sigprocmask fcntl getpwnam getrlimit setrlimit setsid chroot kill chown sleep usleep random srandom recvmsg sendmsg writev socketpair glob initgroups strftime localtime_r setusercontext _beginthreadex endservent endprotoent fsync])
 AC_CHECK_FUNCS([setresuid],,[AC_CHECK_FUNCS([setreuid])])
 AC_CHECK_FUNCS([setresgid],,[AC_CHECK_FUNCS([setregid])])
+
+AC_MSG_CHECKING([for sbrk])
+# catch the warning of deprecated sbrk
+old_cflags="$CFLAGS"
+CFLAGS="$CFLAGS -Werror"
+AC_COMPILE_IFELSE([AC_LANG_SOURCE(AC_INCLUDES_DEFAULT
+[[
+int main(void) { void* cur = sbrk(0); printf("%u\n", (unsigned)(size_t)((char*)cur - (char*)sbrk(0))); return 0; }
+]])], [
+	AC_MSG_RESULT(yes)
+	AC_DEFINE(HAVE_SBRK, 1, [define if you have the sbrk() call])
+    ], [AC_MSG_RESULT(no)])
+CFLAGS="$old_cflags"
 
 # check if setreuid en setregid fail, on MacOSX10.4(darwin8).
 if echo $build_os | grep darwin8 > /dev/null; then
@@ -1092,6 +1175,7 @@ fi
 LIBOBJ_WITHOUT_CTIME="$LIBOBJS"
 AC_SUBST(LIBOBJ_WITHOUT_CTIME)
 AC_REPLACE_FUNCS(ctime_r)
+AC_REPLACE_FUNCS(strsep)
 
 AC_ARG_ENABLE(allsymbols, AC_HELP_STRING([--enable-allsymbols], [export all symbols from libunbound and link binaries to it, smaller install size but libunbound export table is polluted by internal symbols]))
 case "$enable_allsymbols" in
@@ -1143,6 +1227,17 @@ dt_DNSTAP([$UNBOUND_RUN_DIR/dnstap.sock],
         AC_SUBST([ENABLE_DNSTAP], [0])
     ]
 )
+
+# check for cachedb if requested
+AC_ARG_ENABLE(cachedb, AC_HELP_STRING([--enable-cachedb], [enable cachedb module that can use external cache storage]))
+case "$enable_cachedb" in
+    yes)
+    	AC_DEFINE([USE_CACHEDB], [1], [Define to 1 to use cachedb support])
+    	;;
+    no|*)
+    	# nothing
+    	;;
+esac
 
 AC_MSG_CHECKING([if ${MAKE:-make} supports $< with implicit rule in scope])
 # on openBSD, the implicit rule make $< work.
@@ -1250,6 +1345,10 @@ dnl includes
 #include <netinet/in.h>
 #endif
 
+#ifdef HAVE_NETINET_TCP_H
+#include <netinet/tcp.h>
+#endif
+
 #ifdef HAVE_ARPA_INET_H
 #include <arpa/inet.h>
 #endif
@@ -1304,6 +1403,11 @@ AHX_MEMCMP_BROKEN(unbound)
 #ifndef HAVE_CTIME_R
 #define ctime_r unbound_ctime_r
 char *ctime_r(const time_t *timep, char *buf);
+#endif
+
+#ifndef HAVE_STRSEP
+#define strsep unbound_strsep
+char *strsep(char **stringp, const char *delim);
 #endif
 
 #ifndef HAVE_ISBLANK

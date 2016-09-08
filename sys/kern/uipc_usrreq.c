@@ -277,10 +277,10 @@ static int	unp_connectat(int, struct socket *, struct sockaddr *,
 		    struct thread *);
 static int	unp_connect2(struct socket *so, struct socket *so2, int);
 static void	unp_disconnect(struct unpcb *unp, struct unpcb *unp2);
-static void	unp_dispose(struct mbuf *);
-static void	unp_dispose_so(struct socket *so);
+static void	unp_dispose(struct socket *so);
+static void	unp_dispose_mbuf(struct mbuf *);
 static void	unp_shutdown(struct unpcb *);
-static void	unp_drop(struct unpcb *, int);
+static void	unp_drop(struct unpcb *);
 static void	unp_gc(__unused void *, int);
 static void	unp_scan(struct mbuf *, void (*)(struct filedescent **, int));
 static void	unp_discard(struct file *);
@@ -335,9 +335,9 @@ static struct domain localdomain = {
 	.dom_name =		"local",
 	.dom_init =		unp_init,
 	.dom_externalize =	unp_externalize,
-	.dom_dispose =		unp_dispose_so,
+	.dom_dispose =		unp_dispose,
 	.dom_protosw =		localsw,
-	.dom_protoswNPROTOSW =	&localsw[sizeof(localsw)/sizeof(localsw[0])]
+	.dom_protoswNPROTOSW =	&localsw[nitems(localsw)]
 };
 DOMAIN_SET(local);
 
@@ -354,7 +354,7 @@ uipc_abort(struct socket *so)
 	unp2 = unp->unp_conn;
 	if (unp2 != NULL) {
 		UNP_PCB_LOCK(unp2);
-		unp_drop(unp2, ECONNABORTED);
+		unp_drop(unp2);
 		UNP_PCB_UNLOCK(unp2);
 	}
 	UNP_PCB_UNLOCK(unp);
@@ -430,6 +430,8 @@ uipc_attach(struct socket *so, int proto, struct thread *td)
 	unp->unp_socket = so;
 	so->so_pcb = unp;
 	unp->unp_refcount = 1;
+	if (so->so_head != NULL)
+		unp->unp_flags |= UNP_NASCENT;
 
 	UNP_LIST_LOCK();
 	unp->unp_gencnt = ++unp_gencnt;
@@ -652,13 +654,21 @@ uipc_detach(struct socket *so)
 	unp = sotounpcb(so);
 	KASSERT(unp != NULL, ("uipc_detach: unp == NULL"));
 
-	UNP_LINK_WLOCK();
+	vp = NULL;
+	local_unp_rights = 0;
+
 	UNP_LIST_LOCK();
-	UNP_PCB_LOCK(unp);
 	LIST_REMOVE(unp, unp_link);
 	unp->unp_gencnt = ++unp_gencnt;
 	--unp_count;
 	UNP_LIST_UNLOCK();
+
+	if ((unp->unp_flags & UNP_NASCENT) != 0) {
+		UNP_PCB_LOCK(unp);
+		goto teardown;
+	}
+	UNP_LINK_WLOCK();
+	UNP_PCB_LOCK(unp);
 
 	/*
 	 * XXXRW: Should assert vp->v_socket == so.
@@ -682,11 +692,12 @@ uipc_detach(struct socket *so)
 		struct unpcb *ref = LIST_FIRST(&unp->unp_refs);
 
 		UNP_PCB_LOCK(ref);
-		unp_drop(ref, ECONNRESET);
+		unp_drop(ref);
 		UNP_PCB_UNLOCK(ref);
 	}
 	local_unp_rights = unp_rights;
 	UNP_LINK_WUNLOCK();
+teardown:
 	unp->unp_socket->so_pcb = NULL;
 	saved_unp_addr = unp->unp_addr;
 	unp->unp_addr = NULL;
@@ -1040,7 +1051,7 @@ uipc_send(struct socket *so, int flags, struct mbuf *m, struct sockaddr *nam,
 		UNP_LINK_RUNLOCK();
 
 	if (control != NULL && error != 0)
-		unp_dispose(control);
+		unp_dispose_mbuf(control);
 
 release:
 	if (control != NULL)
@@ -1473,6 +1484,7 @@ unp_connect2(struct socket *so, struct socket *so2, int req)
 
 	if (so2->so_type != so->so_type)
 		return (EPROTOTYPE);
+	unp2->unp_flags &= ~UNP_NASCENT;
 	unp->unp_conn = unp2;
 
 	switch (so->so_type) {
@@ -1698,7 +1710,7 @@ unp_shutdown(struct unpcb *unp)
 }
 
 static void
-unp_drop(struct unpcb *unp, int errno)
+unp_drop(struct unpcb *unp)
 {
 	struct socket *so = unp->unp_socket;
 	struct unpcb *unp2;
@@ -1706,7 +1718,12 @@ unp_drop(struct unpcb *unp, int errno)
 	UNP_LINK_WLOCK_ASSERT();
 	UNP_PCB_LOCK_ASSERT(unp);
 
-	so->so_error = errno;
+	/*
+	 * Regardless of whether the socket's peer dropped the connection
+	 * with this socket by aborting or disconnecting, POSIX requires
+	 * that ECONNRESET is returned.
+	 */
+	so->so_error = ECONNRESET;
 	unp2 = unp->unp_conn;
 	if (unp2 == NULL)
 		return;
@@ -2335,7 +2352,7 @@ unp_gc(__unused void *arg, int pending)
 }
 
 static void
-unp_dispose(struct mbuf *m)
+unp_dispose_mbuf(struct mbuf *m)
 {
 
 	if (m)
@@ -2346,7 +2363,7 @@ unp_dispose(struct mbuf *m)
  * Synchronize against unp_gc, which can trip over data as we are freeing it.
  */
 static void
-unp_dispose_so(struct socket *so)
+unp_dispose(struct socket *so)
 {
 	struct unpcb *unp;
 
@@ -2354,7 +2371,7 @@ unp_dispose_so(struct socket *so)
 	UNP_LIST_LOCK();
 	unp->unp_gcflag |= UNPGC_IGNORE_RIGHTS;
 	UNP_LIST_UNLOCK();
-	unp_dispose(so->so_rcv.sb_mb);
+	unp_dispose_mbuf(so->so_rcv.sb_mb);
 }
 
 static void

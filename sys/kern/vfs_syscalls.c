@@ -106,14 +106,6 @@ static int vn_access(struct vnode *vp, int user_flags, struct ucred *cred,
     struct thread *td);
 
 /*
- * The module initialization routine for POSIX asynchronous I/O will
- * set this to the version of AIO that it implements.  (Zero means
- * that it is not implemented.)  This value is used here by pathconf()
- * and in kern_descrip.c by fpathconf().
- */
-int async_io_version;
-
-/*
  * Sync each mounted filesystem.
  */
 #ifndef _SYS_SYSPROTO_H_
@@ -950,6 +942,7 @@ int
 sys_openat(struct thread *td, struct openat_args *uap)
 {
 
+	AUDIT_ARG_FD(uap->fd);
 	return (kern_openat(td, uap->fd, uap->path, UIO_USERSPACE, uap->flag,
 	    uap->mode));
 }
@@ -970,7 +963,6 @@ kern_openat(struct thread *td, int fd, char *path, enum uio_seg pathseg,
 
 	AUDIT_ARG_FFLAGS(flags);
 	AUDIT_ARG_MODE(mode);
-	/* XXX: audit dirfd */
 	cap_rights_init(&rights, CAP_LOOKUP);
 	flags_to_rights(flags, &rights);
 	/*
@@ -1175,6 +1167,8 @@ kern_mknodat(struct thread *td, int fd, char *path, enum uio_seg pathseg,
 	case S_IFCHR:
 	case S_IFBLK:
 		error = priv_check(td, PRIV_VFS_MKNOD_DEV);
+		if (error == 0 && dev == VNOVAL)
+			error = EINVAL;
 		break;
 	case S_IFMT:
 		error = priv_check(td, PRIV_VFS_MKNOD_BAD);
@@ -2076,6 +2070,7 @@ cvtstat(st, ost)
 	struct ostat *ost;
 {
 
+	bzero(ost, sizeof(*ost));
 	ost->st_dev = st->st_dev;
 	ost->st_ino = st->st_ino;
 	ost->st_mode = st->st_mode;
@@ -2347,11 +2342,7 @@ kern_pathconf(struct thread *td, char *path, enum uio_seg pathseg, int name,
 		return (error);
 	NDFREE(&nd, NDF_ONLY_PNBUF);
 
-	/* If asynchronous I/O is available, it works for all files. */
-	if (name == _PC_ASYNC_IO)
-		td->td_retval[0] = async_io_version;
-	else
-		error = VOP_PATHCONF(nd.ni_vp, name, td->td_retval);
+	error = VOP_PATHCONF(nd.ni_vp, name, td->td_retval);
 	vput(nd.ni_vp);
 	return (error);
 }
@@ -3363,20 +3354,8 @@ freebsd6_ftruncate(struct thread *td, struct freebsd6_ftruncate_args *uap)
 }
 #endif
 
-/*
- * Sync an open file.
- */
-#ifndef _SYS_SYSPROTO_H_
-struct fsync_args {
-	int	fd;
-};
-#endif
 int
-sys_fsync(td, uap)
-	struct thread *td;
-	struct fsync_args /* {
-		int fd;
-	} */ *uap;
+kern_fsync(struct thread *td, int fd, bool fullsync)
 {
 	struct vnode *vp;
 	struct mount *mp;
@@ -3384,11 +3363,15 @@ sys_fsync(td, uap)
 	cap_rights_t rights;
 	int error, lock_flags;
 
-	AUDIT_ARG_FD(uap->fd);
-	error = getvnode(td, uap->fd, cap_rights_init(&rights, CAP_FSYNC), &fp);
+	AUDIT_ARG_FD(fd);
+	error = getvnode(td, fd, cap_rights_init(&rights, CAP_FSYNC), &fp);
 	if (error != 0)
 		return (error);
 	vp = fp->f_vnode;
+#if 0
+	if (!fullsync)
+		/* XXXKIB: compete outstanding aio writes */;
+#endif
 	error = vn_start_write(vp, &mp, V_WAIT | PCATCH);
 	if (error != 0)
 		goto drop;
@@ -3405,13 +3388,34 @@ sys_fsync(td, uap)
 		vm_object_page_clean(vp->v_object, 0, 0, 0);
 		VM_OBJECT_WUNLOCK(vp->v_object);
 	}
-	error = VOP_FSYNC(vp, MNT_WAIT, td);
-
+	error = fullsync ? VOP_FSYNC(vp, MNT_WAIT, td) : VOP_FDATASYNC(vp, td);
 	VOP_UNLOCK(vp, 0);
 	vn_finished_write(mp);
 drop:
 	fdrop(fp, td);
 	return (error);
+}
+
+/*
+ * Sync an open file.
+ */
+#ifndef _SYS_SYSPROTO_H_
+struct fsync_args {
+	int	fd;
+};
+#endif
+int
+sys_fsync(struct thread *td, struct fsync_args *uap)
+{
+
+	return (kern_fsync(td, uap->fd, true));
+}
+
+int
+sys_fdatasync(struct thread *td, struct fdatasync_args *uap)
+{
+
+	return (kern_fsync(td, uap->fd, false));
 }
 
 /*
@@ -4533,10 +4537,10 @@ kern_posix_fallocate(struct thread *td, int fd, off_t offset, off_t len)
 int
 sys_posix_fallocate(struct thread *td, struct posix_fallocate_args *uap)
 {
+	int error;
 
-	td->td_retval[0] = kern_posix_fallocate(td, uap->fd, uap->offset,
-	    uap->len);
-	return (0);
+	error = kern_posix_fallocate(td, uap->fd, uap->offset, uap->len);
+	return (kern_posix_error(td, error));
 }
 
 /*
@@ -4668,8 +4672,9 @@ out:
 int
 sys_posix_fadvise(struct thread *td, struct posix_fadvise_args *uap)
 {
+	int error;
 
-	td->td_retval[0] = kern_posix_fadvise(td, uap->fd, uap->offset,
-	    uap->len, uap->advice);
-	return (0);
+	error = kern_posix_fadvise(td, uap->fd, uap->offset, uap->len,
+	    uap->advice);
+	return (kern_posix_error(td, error));
 }

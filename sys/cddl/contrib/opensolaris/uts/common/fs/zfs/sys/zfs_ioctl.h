@@ -20,7 +20,10 @@
  */
 /*
  * Copyright (c) 2005, 2010, Oracle and/or its affiliates. All rights reserved.
+ * Copyright (c) 2011-2012 Pawel Jakub Dawidek. All rights reserved.
  * Copyright (c) 2012, 2015 by Delphix. All rights reserved.
+ * Copyright 2016 RackTop Systems.
+ * Copyright (c) 2014 Integros [integros.com]
  */
 
 #ifndef	_SYS_ZFS_IOCTL_H
@@ -124,6 +127,10 @@ typedef enum dmu_send_resume_token_version {
 
 #define	DMU_BACKUP_MAGIC 0x2F5bacbacULL
 
+/*
+ * Send stream flags.  Bits 24-31 are reserved for vendor-specific
+ * implementations and should not be used.
+ */
 #define	DRR_FLAG_CLONE		(1<<0)
 #define	DRR_FLAG_CI_DATA	(1<<1)
 /*
@@ -308,6 +315,7 @@ typedef struct zinject_record {
 	uint32_t	zi_iotype;
 	int32_t		zi_duration;
 	uint64_t	zi_timer;
+	uint64_t	zi_nlanes;
 	uint32_t	zi_cmd;
 	uint32_t	zi_pad;
 } zinject_record_t;
@@ -345,6 +353,12 @@ typedef enum zfs_case {
 	ZFS_CASE_MIXED
 } zfs_case_t;
 
+/*
+ * Note: this struct must have the same layout in 32-bit and 64-bit, so
+ * that 32-bit processes (like /sbin/zfs) can pass it to the 64-bit
+ * kernel.  Therefore, we add padding to it so that no "hidden" padding
+ * is automatically added on 64-bit (but not on 32-bit).
+ */
 typedef struct zfs_cmd {
 	char		zc_name[MAXPATHLEN];	/* name of pool or dataset */
 	uint64_t	zc_nvlist_src;		/* really (char *) */
@@ -381,7 +395,9 @@ typedef struct zfs_cmd {
 	uint64_t	zc_action_handle;
 	int		zc_cleanup_fd;
 	uint8_t		zc_simple;
+	uint8_t		zc_pad3[3];
 	boolean_t	zc_resumable;
+	uint32_t	zc_pad4;
 	uint64_t	zc_sendobj;
 	uint64_t	zc_fromobj;
 	uint64_t	zc_createtxg;

@@ -45,7 +45,8 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-/* Based on $FreeBSD: src/crypto/openssh/auth2-pam-freebsd.c,v 1.11 2003/03/31 13:48:18 des Exp $ */
+/* Based on FreeBSD: src/crypto/openssh/auth2-pam-freebsd.c,v 1.11 2003/03/31 13:48:18 des */
+
 #include "includes.h"
 
 #include <sys/types.h>
@@ -97,6 +98,7 @@
 #include "ssh-gss.h"
 #endif
 #include "monitor_wrap.h"
+#include "blacklist_client.h"
 
 extern ServerOptions options;
 extern Buffer loginmsg;
@@ -793,6 +795,7 @@ sshpam_query(void *ctx, char **name, char **info,
 				free(msg);
 				return (0);
 			}
+			BLACKLIST_NOTIFY(BLACKLIST_AUTH_FAIL);
 			error("PAM: %s for %s%.100s from %.100s", msg,
 			    sshpam_authctxt->valid ? "" : "illegal user ",
 			    sshpam_authctxt->user,

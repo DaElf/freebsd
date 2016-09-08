@@ -72,7 +72,6 @@ __FBSDID("$FreeBSD$");
 #include <machine/asm.h>
 #include <machine/cpuregs.h>
 
-#include <machine/param.h>
 #include <machine/intr_machdep.h>
 #include <machine/clock.h>	/* for DELAY */
 #include <machine/bus.h>
@@ -176,8 +175,8 @@ static int nlm_xlpge_resume(device_t);
 static int nlm_xlpge_shutdown(device_t);
 
 /* mii override functions */
-static int nlm_xlpge_mii_read(struct device *, int, int);
-static int nlm_xlpge_mii_write(struct device *, int, int, int);
+static int nlm_xlpge_mii_read(device_t, int, int);
+static int nlm_xlpge_mii_write(device_t, int, int, int);
 static void nlm_xlpge_mii_statchg(device_t);
 
 static device_method_t nlm_xlpge_methods[] = {
@@ -1291,7 +1290,7 @@ nlm_xlpge_shutdown(device_t dev)
  * miibus function with custom implementation
  */
 static int
-nlm_xlpge_mii_read(struct device *dev, int phyaddr, int regidx)
+nlm_xlpge_mii_read(device_t dev, int phyaddr, int regidx)
 {
 	struct nlm_xlpge_softc *sc;
 	int val;
@@ -1307,7 +1306,7 @@ nlm_xlpge_mii_read(struct device *dev, int phyaddr, int regidx)
 }
 
 static int
-nlm_xlpge_mii_write(struct device *dev, int phyaddr, int regidx, int val)
+nlm_xlpge_mii_write(device_t dev, int phyaddr, int regidx, int val)
 {
 	struct nlm_xlpge_softc *sc;
 

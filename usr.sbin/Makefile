@@ -25,6 +25,7 @@ SUBDIR=	adduser \
 	digictl \
 	diskinfo \
 	dumpcis \
+	etcupdate \
 	extattr \
 	extattrctl \
 	fifolog \
@@ -96,7 +97,8 @@ SUBDIR=	adduser \
 	wake \
 	watch \
 	watchdogd \
-	zic
+	zic \
+	zonectl
 
 # NB: keep these sorted by MK_* knobs
 
@@ -112,6 +114,10 @@ SUBDIR.${MK_AUDIT}+=	auditreduce
 SUBDIR.${MK_AUDIT}+=	praudit
 SUBDIR.${MK_AUTHPF}+=	authpf
 SUBDIR.${MK_AUTOFS}+=	autofs
+.if ${MK_BLACKLIST} != "no"
+SUBDIR.${MK_BLACKLIST}+=	blacklistctl
+SUBDIR.${MK_BLACKLIST}+=	blacklistd
+.endif
 SUBDIR.${MK_BLUETOOTH}+=	bluetooth
 SUBDIR.${MK_BOOTPARAMD}+=	bootparamd
 SUBDIR.${MK_BSDINSTALL}+=	bsdinstall
@@ -176,13 +182,13 @@ SUBDIR.${MK_PKGBOOTSTRAP}+=	pkg
 SUBDIR.${MK_PMC}+=	pmcannotate
 SUBDIR.${MK_PMC}+=	pmccontrol
 SUBDIR.${MK_PMC}+=	pmcstat
+SUBDIR.${MK_PMC}+=	pmcstudy
 SUBDIR.${MK_PORTSNAP}+=	portsnap
 SUBDIR.${MK_PPP}+=	ppp
 SUBDIR.${MK_QUOTAS}+=	edquota
 SUBDIR.${MK_QUOTAS}+=	quotaon
 SUBDIR.${MK_QUOTAS}+=	repquota
 SUBDIR.${MK_RCMDS}+=	rwhod
-SUBDIR.${MK_RCS}+=	etcupdate
 SUBDIR.${MK_SENDMAIL}+=	editmap
 SUBDIR.${MK_SENDMAIL}+=	mailstats
 SUBDIR.${MK_SENDMAIL}+=	makemap
@@ -194,9 +200,7 @@ SUBDIR.${MK_TIMED}+=	timed
 SUBDIR.${MK_TOOLCHAIN}+=	config
 SUBDIR.${MK_TOOLCHAIN}+=	crunch
 SUBDIR.${MK_UNBOUND}+=	unbound
-.if !(${COMPILER_TYPE} == "gcc" && ${COMPILER_VERSION} >= 50200)
 SUBDIR.${MK_USB}+=	uathload
-.endif
 SUBDIR.${MK_USB}+=	uhsoctl
 SUBDIR.${MK_USB}+=	usbconfig
 SUBDIR.${MK_USB}+=	usbdump

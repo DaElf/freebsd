@@ -625,7 +625,8 @@ ufs_setattr(ap)
 			 */
 			return (0);
 		}
-		if ((error = UFS_TRUNCATE(vp, vap->va_size, IO_NORMAL,
+		if ((error = UFS_TRUNCATE(vp, vap->va_size, IO_NORMAL |
+		    ((vap->va_vaflags & VA_SYNC) != 0 ? IO_SYNC : 0),
 		    cred)) != 0)
 			return (error);
 	}
@@ -990,7 +991,7 @@ ufs_link(ap)
 	ip->i_flag |= IN_CHANGE;
 	if (DOINGSOFTDEP(vp))
 		softdep_setup_link(VTOI(tdvp), ip);
-	error = UFS_UPDATE(vp, !(DOINGSOFTDEP(vp) | DOINGASYNC(vp)));
+	error = UFS_UPDATE(vp, !DOINGSOFTDEP(vp) && !DOINGASYNC(vp));
 	if (!error) {
 		ufs_makedirentry(ip, cnp, &newdir);
 		error = ufs_direnter(tdvp, vp, &newdir, cnp, NULL, 0);
@@ -1334,7 +1335,7 @@ relock:
 	fip->i_flag |= IN_CHANGE;
 	if (DOINGSOFTDEP(fvp))
 		softdep_setup_link(tdp, fip);
-	error = UFS_UPDATE(fvp, !(DOINGSOFTDEP(fvp) | DOINGASYNC(fvp)));
+	error = UFS_UPDATE(fvp, !DOINGSOFTDEP(fvp) && !DOINGASYNC(fvp));
 	if (error)
 		goto bad;
 
@@ -1487,8 +1488,8 @@ relock:
 			tdp->i_flag |= IN_CHANGE;
 			if (DOINGSOFTDEP(tdvp))
 				softdep_setup_dotdot_link(tdp, fip);
-			error = UFS_UPDATE(tdvp, !(DOINGSOFTDEP(tdvp) |
-						   DOINGASYNC(tdvp)));
+			error = UFS_UPDATE(tdvp, !DOINGSOFTDEP(tdvp) &&
+			    !DOINGASYNC(tdvp));
 			/* Don't go to bad here as the new link exists. */
 			if (error)
 				goto unlockout;
@@ -1528,11 +1529,21 @@ unlockout:
 	 * are no longer needed.
 	 */
 	if (error == 0 && endoff != 0) {
+		error = UFS_TRUNCATE(tdvp, endoff, IO_NORMAL |
+		    (DOINGASYNC(tdvp) ? 0 : IO_SYNC), tcnp->cn_cred);
+		if (error != 0)
+			vn_printf(tdvp, "ufs_rename: failed to truncate "
+			    "err %d", error);
 #ifdef UFS_DIRHASH
-		if (tdp->i_dirhash != NULL)
+		else if (tdp->i_dirhash != NULL)
 			ufsdirhash_dirtrunc(tdp, endoff);
 #endif
-		UFS_TRUNCATE(tdvp, endoff, IO_NORMAL | IO_SYNC, tcnp->cn_cred);
+		/*
+		 * Even if the directory compaction failed, rename was
+		 * succesful.  Do not propagate a UFS_TRUNCATE() error
+		 * to the caller.
+		 */
+		error = 0;
 	}
 	if (error == 0 && tdp->i_flag & IN_NEEDSYNC)
 		error = VOP_FSYNC(tdvp, MNT_WAIT, td);
@@ -1877,7 +1888,7 @@ ufs_mkdir(ap)
 	dp->i_flag |= IN_CHANGE;
 	if (DOINGSOFTDEP(dvp))
 		softdep_setup_mkdir(dp, ip);
-	error = UFS_UPDATE(dvp, !(DOINGSOFTDEP(dvp) | DOINGASYNC(dvp)));
+	error = UFS_UPDATE(dvp, !DOINGSOFTDEP(dvp) && !DOINGASYNC(dvp));
 	if (error)
 		goto bad;
 #ifdef MAC
@@ -1912,13 +1923,13 @@ ufs_mkdir(ap)
 	dirtemplate = *dtp;
 	dirtemplate.dot_ino = ip->i_number;
 	dirtemplate.dotdot_ino = dp->i_number;
+	vnode_pager_setsize(tvp, DIRBLKSIZ);
 	if ((error = UFS_BALLOC(tvp, (off_t)0, DIRBLKSIZ, cnp->cn_cred,
 	    BA_CLRBUF, &bp)) != 0)
 		goto bad;
 	ip->i_size = DIRBLKSIZ;
 	DIP_SET(ip, i_size, DIRBLKSIZ);
 	ip->i_flag |= IN_CHANGE | IN_UPDATE;
-	vnode_pager_setsize(tvp, (u_long)ip->i_size);
 	bcopy((caddr_t)&dirtemplate, (caddr_t)bp->b_data, sizeof dirtemplate);
 	if (DOINGSOFTDEP(tvp)) {
 		/*
@@ -1934,8 +1945,8 @@ ufs_mkdir(ap)
 			blkoff += DIRBLKSIZ;
 		}
 	}
-	if ((error = UFS_UPDATE(tvp, !(DOINGSOFTDEP(tvp) |
-				       DOINGASYNC(tvp)))) != 0) {
+	if ((error = UFS_UPDATE(tvp, !DOINGSOFTDEP(tvp) &&
+	    !DOINGASYNC(tvp))) != 0) {
 		(void)bwrite(bp);
 		goto bad;
 	}
@@ -2669,7 +2680,7 @@ ufs_makeinode(mode, dvp, vpp, cnp)
 	/*
 	 * Make sure inode goes to disk before directory entry.
 	 */
-	error = UFS_UPDATE(tvp, !(DOINGSOFTDEP(tvp) | DOINGASYNC(tvp)));
+	error = UFS_UPDATE(tvp, !DOINGSOFTDEP(tvp) && !DOINGASYNC(tvp));
 	if (error)
 		goto bad;
 #ifdef MAC

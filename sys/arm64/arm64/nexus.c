@@ -39,6 +39,9 @@
  * and I/O memory address space.
  */
 
+#include "opt_acpi.h"
+#include "opt_platform.h"
+
 #include <sys/cdefs.h>
 __FBSDID("$FreeBSD$");
 
@@ -52,6 +55,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/rman.h>
 #include <sys/interrupt.h>
 
+#include <machine/machdep.h>
 #include <machine/vmparam.h>
 #include <machine/pcb.h>
 #include <vm/vm.h>
@@ -60,10 +64,8 @@ __FBSDID("$FreeBSD$");
 #include <machine/resource.h>
 #include <machine/intr.h>
 
-#include "opt_acpi.h"
-#include "opt_platform.h"
-
 #ifdef FDT
+#include <dev/ofw/ofw_bus_subr.h>
 #include <dev/ofw/openfirm.h>
 #include "ofw_bus_if.h"
 #endif
@@ -153,13 +155,14 @@ nexus_attach(device_t dev)
 {
 
 	mem_rman.rm_start = 0;
-	mem_rman.rm_end = ~0ul;
+	mem_rman.rm_end = BUS_SPACE_MAXADDR;
 	mem_rman.rm_type = RMAN_ARRAY;
 	mem_rman.rm_descr = "I/O memory addresses";
-	if (rman_init(&mem_rman) || rman_manage_region(&mem_rman, 0, ~0))
+	if (rman_init(&mem_rman) ||
+	    rman_manage_region(&mem_rman, 0, BUS_SPACE_MAXADDR))
 		panic("nexus_attach mem_rman");
 	irq_rman.rm_start = 0;
-	irq_rman.rm_end = ~0ul;
+	irq_rman.rm_end = ~0;
 	irq_rman.rm_type = RMAN_ARRAY;
 	irq_rman.rm_descr = "Interrupts";
 	if (rman_init(&irq_rman) || rman_manage_region(&irq_rman, 0, ~0))
@@ -249,7 +252,7 @@ nexus_alloc_resource(device_t bus, device_t child, int type, int *rid,
 	}
 
 	rv = rman_reserve_resource(rm, start, end, count, flags, child);
-	if (rv == 0)
+	if (rv == NULL)
 		return (NULL);
 
 	rman_set_rid(rv, *rid);
@@ -270,7 +273,9 @@ nexus_config_intr(device_t dev, int irq, enum intr_trigger trig,
     enum intr_polarity pol)
 {
 
-	return (arm_config_intr(irq, trig, pol));
+	/* TODO: This is wrong, it's needed for ACPI */
+	device_printf(dev, "bus_config_intr is obsolete and not supported!\n");
+	return (EOPNOTSUPP);
 }
 
 static int
@@ -287,8 +292,7 @@ nexus_setup_intr(device_t dev, device_t child, struct resource *res, int flags,
 	if (error)
 		return (error);
 
-	error = arm_setup_intr(device_get_nameunit(child), filt, intr,
-	    arg, rman_get_start(res), flags, cookiep);
+	error = intr_setup_irq(child, res, filt, intr, arg, flags, cookiep);
 
 	return (error);
 }
@@ -297,7 +301,7 @@ static int
 nexus_teardown_intr(device_t dev, device_t child, struct resource *r, void *ih)
 {
 
-	return (arm_teardown_intr(ih));
+	return (intr_teardown_irq(child, r, ih));
 }
 
 #ifdef SMP
@@ -305,7 +309,7 @@ static int
 nexus_bind_intr(device_t dev, device_t child, struct resource *irq, int cpu)
 {
 
-	return (arm_intr_bind(rman_get_start(irq), cpu));
+	return (intr_bind_irq(child, irq, cpu));
 }
 #endif
 
@@ -342,6 +346,8 @@ nexus_activate_resource(device_t bus, device_t child, int type, int rid,
 		rman_set_bustag(r, &memmap_bus);
 		rman_set_virtual(r, (void *)vaddr);
 		rman_set_bushandle(r, vaddr);
+	} else if (type == SYS_RES_IRQ) {
+		intr_activate_irq(child, r);
 	}
 	return (0);
 }
@@ -375,13 +381,17 @@ nexus_deactivate_resource(device_t bus, device_t child, int type, int rid,
 	bus_size_t psize;
 	bus_space_handle_t vaddr;
 
-	psize = (bus_size_t)rman_get_size(r);
-	vaddr = rman_get_bushandle(r);
+	if (type == SYS_RES_MEMORY || type == SYS_RES_IOPORT) {
+		psize = (bus_size_t)rman_get_size(r);
+		vaddr = rman_get_bushandle(r);
 
-	if (vaddr != 0) {
-		bus_space_unmap(&memmap_bus, vaddr, psize);
-		rman_set_virtual(r, NULL);
-		rman_set_bushandle(r, 0);
+		if (vaddr != 0) {
+			bus_space_unmap(&memmap_bus, vaddr, psize);
+			rman_set_virtual(r, NULL);
+			rman_set_bushandle(r, 0);
+		}
+	} else if (type == SYS_RES_IRQ) {
+		intr_deactivate_irq(child, r);
 	}
 
 	return (rman_deactivate_resource(r));
@@ -409,7 +419,7 @@ static int
 nexus_fdt_probe(device_t dev)
 {
 
-	if (OF_peer(0) == 0)
+	if (arm64_bus_method != ARM64_BUS_FDT)
 		return (ENXIO);
 
 	device_quiet(dev);
@@ -428,17 +438,17 @@ static int
 nexus_ofw_map_intr(device_t dev, device_t child, phandle_t iparent, int icells,
     pcell_t *intr)
 {
-	int irq;
+	u_int irq;
+	struct intr_map_data_fdt *fdt_data;
+	size_t len;
 
-	if (icells == 3) {
-		irq = intr[1];
-		if (intr[0] == 0)
-			irq += 32; /* SPI */
-		else
-			irq += 16; /* PPI */
-	} else
-		irq = intr[0];
-
+	len = sizeof(*fdt_data) + icells * sizeof(pcell_t);
+	fdt_data = (struct intr_map_data_fdt *)intr_alloc_map_data(
+	    INTR_MAP_DATA_FDT, len, M_WAITOK | M_ZERO);
+	fdt_data->iparent = iparent;
+	fdt_data->ncells = icells;
+	memcpy(fdt_data->cells, intr, icells * sizeof(pcell_t));
+	irq = intr_map_irq(NULL, iparent, (struct intr_map_data *)fdt_data);
 	return (irq);
 }
 #endif
@@ -463,7 +473,7 @@ static int
 nexus_acpi_probe(device_t dev)
 {
 
-	if (acpi_identify() != 0)
+	if (arm64_bus_method != ARM64_BUS_ACPI || acpi_identify() != 0)
 		return (ENXIO);
 
 	device_quiet(dev);

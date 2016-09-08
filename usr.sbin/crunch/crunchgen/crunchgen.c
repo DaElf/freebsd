@@ -670,8 +670,13 @@ fillin_program(prog_t *p)
 	* an object directory already exists.
 	*/
 	if (!makeobj && !p->objdir && p->srcdir) {
+		char *auto_obj;
+
+		auto_obj = NULL;
 		snprintf(line, sizeof line, "%s/%s", objprefix, p->realsrcdir);
-		if (is_dir(line)) {
+		if (is_dir(line) ||
+		    ((auto_obj = getenv("MK_AUTO_OBJ")) != NULL &&
+		    strcmp(auto_obj, "yes") == 0)) {
 			if ((p->objdir = strdup(line)) == NULL)
 			out_of_memory();
 		} else
@@ -1059,6 +1064,7 @@ prog_makefile_rules(FILE *outmk, prog_t *p)
 		}
 		fprintf(outmk, "\n");
 	}
+	fprintf(outmk, "$(%s_OBJPATHS): .NOMETA\n", p->ident);
 
 	if (p->srcdir && p->objs) {
 		fprintf(outmk, "%s_SRCDIR=%s\n", p->ident, p->srcdir);

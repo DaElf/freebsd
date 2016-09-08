@@ -469,7 +469,7 @@ chkdquot(struct inode *ip)
 			continue;
 		if (ip->i_dquot[i] == NODQUOT) {
 			UFS_UNLOCK(ump);
-			vprint("chkdquot: missing dquot", ITOV(ip));
+			vn_printf(ITOV(ip), "chkdquot: missing dquot ");
 			panic("chkdquot: missing dquot");
 		}
 	}
@@ -1538,8 +1538,13 @@ dqsync(struct vnode *vp, struct dquot *dq)
 	if ((ump = dq->dq_ump) == NULL)
 		return (0);
 	UFS_LOCK(ump);
-	if ((dqvp = ump->um_quotas[dq->dq_type]) == NULLVP)
-		panic("dqsync: file");
+	if ((dqvp = ump->um_quotas[dq->dq_type]) == NULLVP) {
+		if (vp == NULL) {
+			UFS_UNLOCK(ump);
+			return (0);
+		} else
+			panic("dqsync: file");
+	}
 	vref(dqvp);
 	UFS_UNLOCK(ump);
 

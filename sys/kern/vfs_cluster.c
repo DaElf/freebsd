@@ -45,6 +45,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/vnode.h>
 #include <sys/malloc.h>
 #include <sys/mount.h>
+#include <sys/racct.h>
 #include <sys/resourcevar.h>
 #include <sys/rwlock.h>
 #include <sys/vmmeter.h>
@@ -241,6 +242,13 @@ cluster_read(struct vnode *vp, u_quad_t filesize, daddr_t lblkno, long size,
 			BUF_KERNPROC(bp);
 		bp->b_iooffset = dbtob(bp->b_blkno);
 		bstrategy(bp);
+#ifdef RACCT
+		if (racct_enable) {
+			PROC_LOCK(curproc);
+			racct_add_buf(curproc, bp, 0);
+			PROC_UNLOCK(curproc);
+		}
+#endif /* RACCT */
 		curthread->td_ru.ru_inblock++;
 	}
 
@@ -294,6 +302,13 @@ cluster_read(struct vnode *vp, u_quad_t filesize, daddr_t lblkno, long size,
 			BUF_KERNPROC(rbp);
 		rbp->b_iooffset = dbtob(rbp->b_blkno);
 		bstrategy(rbp);
+#ifdef RACCT
+		if (racct_enable) {
+			PROC_LOCK(curproc);
+			racct_add_buf(curproc, rbp, 0);
+			PROC_UNLOCK(curproc);
+		}
+#endif /* RACCT */
 		curthread->td_ru.ru_inblock++;
 	}
 
@@ -353,7 +368,7 @@ cluster_rbuild(struct vnode *vp, u_quad_t filesize, daddr_t lbn,
 		return tbp;
 
 	bp = trypbuf(&cluster_pbuf_freecnt);
-	if (bp == 0)
+	if (bp == NULL)
 		return tbp;
 
 	/*
@@ -548,7 +563,7 @@ cluster_callback(bp)
 	int error = 0;
 
 	/*
-	 * Must propogate errors to all the components.
+	 * Must propagate errors to all the components.
 	 */
 	if (bp->b_ioflags & BIO_ERROR)
 		error = bp->b_error;
@@ -821,12 +836,6 @@ cluster_wbuild(struct vnode *vp, long size, daddr_t start_lbn, int len,
 			--len;
 			continue;
 		}
-		if (tbp->b_pin_count >  0) {
-			BUF_UNLOCK(tbp);
-			++start_lbn;
-			--len;
-			continue;
-		}
 		bremfree(tbp);
 		tbp->b_flags &= ~B_DONE;
 
@@ -934,14 +943,6 @@ cluster_wbuild(struct vnode *vp, long size, daddr_t start_lbn, int len,
 				    tbp->b_blkno) ||
 				  ((tbp->b_npages + bp->b_npages) >
 				    (vp->v_mount->mnt_iosize_max / PAGE_SIZE))) {
-					BUF_UNLOCK(tbp);
-					break;
-				}
-
-				/*
-				 * Do not pull in pinned buffers.
-				 */
-				if (tbp->b_pin_count > 0) {
 					BUF_UNLOCK(tbp);
 					break;
 				}
