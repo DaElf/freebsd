@@ -591,7 +591,7 @@ do_cmd(int optname, void *optval, uintptr_t optlen)
  * Returns 0 on success or errno otherwise.
  */
 int
-do_set3(int optname, ip_fw3_opheader *op3, uintptr_t optlen)
+do_set3(int optname, ip_fw3_opheader *op3, size_t optlen)
 {
 
 	if (co.test_only)
@@ -621,6 +621,7 @@ int
 do_get3(int optname, ip_fw3_opheader *op3, size_t *optlen)
 {
 	int error;
+	socklen_t len;
 
 	if (co.test_only)
 		return (0);
@@ -632,8 +633,9 @@ do_get3(int optname, ip_fw3_opheader *op3, size_t *optlen)
 
 	op3->opcode = optname;
 
-	error = getsockopt(ipfw_socket, IPPROTO_IP, IP_FW3, op3,
-	    (socklen_t *)optlen);
+	len = *optlen;
+	error = getsockopt(ipfw_socket, IPPROTO_IP, IP_FW3, op3, &len);
+	*optlen = len;
 
 	return (error);
 }
@@ -2910,8 +2912,9 @@ pack_table(struct tidx *tstate, char *name)
 	return (pack_object(tstate, name, IPFW_TLV_TBL_NAME));
 }
 
-static void
-fill_table(ipfw_insn *cmd, char *av, uint8_t opcode, struct tidx *tstate)
+void
+fill_table(struct _ipfw_insn *cmd, char *av, uint8_t opcode,
+    struct tidx *tstate)
 {
 	uint32_t *d = ((ipfw_insn_u32 *)cmd)->d;
 	uint16_t uidx;
@@ -3220,7 +3223,7 @@ ipfw_delete(char *av[])
 				exitval = EX_UNAVAILABLE;
 				warn("rule %u: setsockopt(IP_FW_XDEL)",
 				    rt.start_rule);
-			} else if (rt.new_set == 0) {
+			} else if (rt.new_set == 0 && do_set == 0) {
 				exitval = EX_UNAVAILABLE;
 				if (rt.start_rule != rt.end_rule)
 					warnx("no rules rules in %u-%u range",
@@ -3570,7 +3573,7 @@ add_src(ipfw_insn *cmd, char *av, u_char proto, int cblen, struct tidx *tstate)
 
 	if (proto == IPPROTO_IPV6  || strcmp(av, "me6") == 0 ||
 	    inet_pton(AF_INET6, host, &a) == 1)
-		ret = add_srcip6(cmd, av, cblen);
+		ret = add_srcip6(cmd, av, cblen, tstate);
 	/* XXX: should check for IPv4, not !IPv6 */
 	if (ret == NULL && (proto == IPPROTO_IP || strcmp(av, "me") == 0 ||
 	    inet_pton(AF_INET6, host, &a) != 1))
@@ -3601,7 +3604,7 @@ add_dst(ipfw_insn *cmd, char *av, u_char proto, int cblen, struct tidx *tstate)
 
 	if (proto == IPPROTO_IPV6  || strcmp(av, "me6") == 0 ||
 	    inet_pton(AF_INET6, host, &a) == 1)
-		ret = add_dstip6(cmd, av, cblen);
+		ret = add_dstip6(cmd, av, cblen, tstate);
 	/* XXX: should check for IPv4, not !IPv6 */
 	if (ret == NULL && (proto == IPPROTO_IP || strcmp(av, "me") == 0 ||
 	    inet_pton(AF_INET6, host, &a) != 1))
@@ -4670,14 +4673,14 @@ read_options:
 
 		case TOK_SRCIP6:
 			NEED1("missing source IP6");
-			if (add_srcip6(cmd, *av, cblen)) {
+			if (add_srcip6(cmd, *av, cblen, tstate)) {
 				av++;
 			}
 			break;
 
 		case TOK_DSTIP6:
 			NEED1("missing destination IP6");
-			if (add_dstip6(cmd, *av, cblen)) {
+			if (add_dstip6(cmd, *av, cblen, tstate)) {
 				av++;
 			}
 			break;

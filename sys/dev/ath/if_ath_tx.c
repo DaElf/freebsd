@@ -1042,6 +1042,14 @@ ath_tx_calc_protection(struct ath_softc *sc, struct ath_buf *bf)
 	shortPreamble = bf->bf_state.bfs_shpream;
 	wh = mtod(bf->bf_m, struct ieee80211_frame *);
 
+	/* Disable frame protection for TOA probe frames */
+	if (bf->bf_flags & ATH_BUF_TOA_PROBE) {
+		/* XXX count */
+		flags &= ~(HAL_TXDESC_CTSENA | HAL_TXDESC_RTSENA);
+		bf->bf_state.bfs_doprot = 0;
+		goto finish;
+	}
+
 	/*
 	 * If 802.11g protection is enabled, determine whether
 	 * to use RTS/CTS or just CTS.  Note that this is only
@@ -1081,6 +1089,8 @@ ath_tx_calc_protection(struct ath_softc *sc, struct ath_buf *bf)
 		flags |= HAL_TXDESC_RTSENA;
 		sc->sc_stats.ast_tx_htprotect++;
 	}
+
+finish:
 	bf->bf_state.bfs_txflags = flags;
 }
 
@@ -1528,7 +1538,6 @@ ath_tx_normal_setup(struct ath_softc *sc, struct ieee80211_node *ni,
     struct ath_buf *bf, struct mbuf *m0, struct ath_txq *txq)
 {
 	struct ieee80211vap *vap = ni->ni_vap;
-	struct ath_hal *ah = sc->sc_ah;
 	struct ieee80211com *ic = &sc->sc_ic;
 	const struct chanAccParams *cap = &ic->ic_wme.wme_chanParams;
 	int error, iswep, ismcast, isfrag, ismrr;
@@ -1739,6 +1748,34 @@ ath_tx_normal_setup(struct ath_softc *sc, struct ieee80211_node *ni,
 	}
 #endif
 
+	/*
+	 * If it's a frame to do location reporting on,
+	 * communicate it to the HAL.
+	 */
+	if (ieee80211_get_toa_params(m0, NULL)) {
+		device_printf(sc->sc_dev,
+		    "%s: setting TX positioning bit\n", __func__);
+		flags |= HAL_TXDESC_POS;
+
+		/*
+		 * Note: The hardware reports timestamps for
+		 * each of the RX'ed packets as part of the packet
+		 * exchange.  So this means things like RTS/CTS
+		 * exchanges, as well as the final ACK.
+		 *
+		 * So, if you send a RTS-protected NULL data frame,
+		 * you'll get an RX report for the RTS response, then
+		 * an RX report for the NULL frame, and then the TX
+		 * completion at the end.
+		 *
+		 * NOTE: it doesn't work right for CCK frames;
+		 * there's no channel info data provided unless
+		 * it's OFDM or HT.  Will have to dig into it.
+		 */
+		flags &= ~(HAL_TXDESC_RTSENA | HAL_TXDESC_CTSENA);
+		bf->bf_flags |= ATH_BUF_TOA_PROBE;
+	}
+
 #if 0
 	/*
 	 * Placeholder: if you want to transmit with the azimuth
@@ -1784,9 +1821,6 @@ ath_tx_normal_setup(struct ath_softc *sc, struct ieee80211_node *ni,
 		    sc->sc_hwmap[rix].ieeerate, -1);
 
 	if (ieee80211_radiotap_active_vap(vap)) {
-		u_int64_t tsf = ath_hal_gettsf64(ah);
-
-		sc->sc_tx_th.wt_tsf = htole64(tsf);
 		sc->sc_tx_th.wt_flags = sc->sc_hwmap[rix].txflags;
 		if (iswep)
 			sc->sc_tx_th.wt_flags |= IEEE80211_RADIOTAP_F_WEP;
@@ -2067,7 +2101,6 @@ ath_tx_raw_start(struct ath_softc *sc, struct ieee80211_node *ni,
 	const struct ieee80211_bpf_params *params)
 {
 	struct ieee80211com *ic = &sc->sc_ic;
-	struct ath_hal *ah = sc->sc_ah;
 	struct ieee80211vap *vap = ni->ni_vap;
 	int error, ismcast, ismrr;
 	int keyix, hdrlen, pktlen, try0, txantenna;
@@ -2175,6 +2208,18 @@ ath_tx_raw_start(struct ath_softc *sc, struct ieee80211_node *ni,
 		try0 = ATH_TXMAXTRY;	/* XXX?too many? */
 	}
 
+	/*
+	 * If it's a frame to do location reporting on,
+	 * communicate it to the HAL.
+	 */
+	if (ieee80211_get_toa_params(m0, NULL)) {
+		device_printf(sc->sc_dev,
+		    "%s: setting TX positioning bit\n", __func__);
+		flags |= HAL_TXDESC_POS;
+		flags &= ~(HAL_TXDESC_RTSENA | HAL_TXDESC_CTSENA);
+		bf->bf_flags |= ATH_BUF_TOA_PROBE;
+	}
+
 	txrate = rt->info[rix].rateCode;
 	if (params->ibp_flags & IEEE80211_BPF_SHORTPRE)
 		txrate |= rt->info[rix].shortPreamble;
@@ -2202,9 +2247,6 @@ ath_tx_raw_start(struct ath_softc *sc, struct ieee80211_node *ni,
 		    sc->sc_hwmap[rix].ieeerate, -1);
 
 	if (ieee80211_radiotap_active_vap(vap)) {
-		u_int64_t tsf = ath_hal_gettsf64(ah);
-
-		sc->sc_tx_th.wt_tsf = htole64(tsf);
 		sc->sc_tx_th.wt_flags = sc->sc_hwmap[rix].txflags;
 		if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED)
 			sc->sc_tx_th.wt_flags |= IEEE80211_RADIOTAP_F_WEP;
@@ -2937,7 +2979,9 @@ ath_tx_tid_seqno_assign(struct ath_softc *sc, struct ieee80211_node *ni,
 	M_SEQNO_SET(m0, seqno);
 
 	/* Return so caller can do something with it if needed */
-	DPRINTF(sc, ATH_DEBUG_SW_TX, "%s:  -> seqno=%d\n", __func__, seqno);
+	DPRINTF(sc, ATH_DEBUG_SW_TX,
+	    "%s:  -> subtype=0x%x, tid=%d, seqno=%d\n",
+	    __func__, subtype, tid, seqno);
 	return seqno;
 }
 
@@ -3087,7 +3131,21 @@ ath_tx_swq(struct ath_softc *sc, struct ieee80211_node *ni,
 		ATH_TID_INSERT_TAIL(atid, bf, bf_list);
 		/* XXX sched? */
 	} else if (ath_tx_ampdu_running(sc, an, tid)) {
-		/* AMPDU running, attempt direct dispatch if possible */
+		/*
+		 * AMPDU running, queue single-frame if the hardware queue
+		 * isn't busy.
+		 *
+		 * If the hardware queue is busy, sending an aggregate frame
+		 * then just hold off so we can queue more aggregate frames.
+		 *
+		 * Otherwise we may end up with single frames leaking through
+		 * because we are dispatching them too quickly.
+		 *
+		 * TODO: maybe we should treat this as two policies - minimise
+		 * latency, or maximise throughput.  Then for BE/BK we can
+		 * maximise throughput, and VO/VI (if AMPDU is enabled!)
+		 * minimise latency.
+		 */
 
 		/*
 		 * Always queue the frame to the tail of the list.
@@ -3096,18 +3154,18 @@ ath_tx_swq(struct ath_softc *sc, struct ieee80211_node *ni,
 
 		/*
 		 * If the hardware queue isn't busy, direct dispatch
-		 * the head frame in the list.  Don't schedule the
-		 * TID - let it build some more frames first?
+		 * the head frame in the list.
 		 *
-		 * When running A-MPDU, always just check the hardware
-		 * queue depth against the aggregate frame limit.
-		 * We don't want to burst a large number of single frames
-		 * out to the hardware; we want to aggressively hold back.
+		 * Note: if we're say, configured to do ADDBA but not A-MPDU
+		 * then maybe we want to still queue two non-aggregate frames
+		 * to the hardware.  Again with the per-TID policy
+		 * configuration..)
 		 *
 		 * Otherwise, schedule the TID.
 		 */
 		/* XXX TXQ locking */
-		if (txq->axq_depth + txq->fifo.axq_depth < sc->sc_hwq_limit_aggr) {
+		if (txq->axq_depth + txq->fifo.axq_depth == 0) {
+
 			bf = ATH_TID_FIRST(atid);
 			ATH_TID_REMOVE(atid, bf, bf_list);
 
@@ -5573,19 +5631,40 @@ ath_txq_sched(struct ath_softc *sc, struct ath_txq *txq)
 	ATH_TX_LOCK_ASSERT(sc);
 
 	/*
-	 * Don't schedule if the hardware queue is busy.
-	 * This (hopefully) gives some more time to aggregate
-	 * some packets in the aggregation queue.
+	 * For non-EDMA chips, aggr frames that have been built are
+	 * in axq_aggr_depth, whether they've been scheduled or not.
+	 * There's no FIFO, so txq->axq_depth is what's been scheduled
+	 * to the hardware.
 	 *
-	 * XXX It doesn't stop a parallel sender from sneaking
-	 * in transmitting a frame!
+	 * For EDMA chips, we do it in two stages.  The existing code
+	 * builds a list of frames to go to the hardware and the EDMA
+	 * code turns it into a single entry to push into the FIFO.
+	 * That way we don't take up one packet per FIFO slot.
+	 * We do push one aggregate per FIFO slot though, just to keep
+	 * things simple.
+	 *
+	 * The FIFO depth is what's in the hardware; the txq->axq_depth
+	 * is what's been scheduled to the FIFO.
+	 *
+	 * fifo.axq_depth is the number of frames (or aggregates) pushed
+	 *  into the EDMA FIFO.  For multi-frame lists, this is the number
+	 *  of frames pushed in.
+	 * axq_fifo_depth is the number of FIFO slots currently busy.
 	 */
-	/* XXX TXQ locking */
-	if (txq->axq_aggr_depth + txq->fifo.axq_depth >= sc->sc_hwq_limit_aggr) {
+
+	/* For EDMA and non-EDMA, check built/scheduled against aggr limit */
+	if (txq->axq_aggr_depth >= sc->sc_hwq_limit_aggr) {
 		sc->sc_aggr_stats.aggr_sched_nopkt++;
 		return;
 	}
-	if (txq->axq_depth >= sc->sc_hwq_limit_nonaggr) {
+
+	/*
+	 * For non-EDMA chips, axq_depth is the "what's scheduled to
+	 * the hardware list".  For EDMA it's "What's built for the hardware"
+	 * and fifo.axq_depth is how many frames have been dispatched
+	 * already to the hardware.
+	 */
+	if (txq->axq_depth + txq->fifo.axq_depth >= sc->sc_hwq_limit_nonaggr) {
 		sc->sc_aggr_stats.aggr_sched_nopkt++;
 		return;
 	}

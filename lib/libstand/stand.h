@@ -139,11 +139,11 @@ struct devsw {
     int		dv_type;		/* opaque type constant, arch-dependant */
     int		(*dv_init)(void);	/* early probe call */
     int		(*dv_strategy)(void *devdata, int rw, daddr_t blk,
-			size_t offset, size_t size, char *buf, size_t *rsize);
+			size_t size, char *buf, size_t *rsize);
     int		(*dv_open)(struct open_file *f, ...);
     int		(*dv_close)(struct open_file *f);
     int		(*dv_ioctl)(struct open_file *f, u_long cmd, void *data);
-    void	(*dv_print)(int verbose);	/* print device information */
+    int		(*dv_print)(int verbose);	/* print device information */
     void	(*dv_cleanup)(void);
 };
 
@@ -168,6 +168,7 @@ struct devdesc
 #define DEVT_NET	2
 #define DEVT_CD		3
 #define DEVT_ZFS	4
+#define DEVT_FD		5
     int			d_unit;
     void		*d_opendata;
 };

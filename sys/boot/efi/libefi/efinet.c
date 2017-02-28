@@ -131,13 +131,13 @@ efinet_put(struct iodesc *desc, void *pkt, size_t len)
 
 	/* Wait for the buffer to be transmitted */
 	do {
-		buf = 0;	/* XXX Is this needed? */
+		buf = NULL;	/* XXX Is this needed? */
 		status = net->GetStatus(net, 0, &buf);
 		/*
 		 * XXX EFI1.1 and the E1000 card returns a different 
 		 * address than we gave.  Sigh.
 		 */
-	} while (status == EFI_SUCCESS && buf == 0);
+	} while (status == EFI_SUCCESS && buf == NULL);
 
 	/* XXX How do we deal with status != EFI_SUCCESS now? */
 	return ((status == EFI_SUCCESS) ? len : -1);
@@ -252,7 +252,7 @@ efinet_end(struct netif *nif)
 }
 
 static int efinet_dev_init(void);
-static void efinet_dev_print(int);
+static int efinet_dev_print(int);
 
 struct devsw efinet_dev = {
 	.dv_name = "net",
@@ -291,12 +291,18 @@ efinet_dev_init()
 	if (EFI_ERROR(status))
 		return (efi_status_to_errno(status));
 	handles2 = (EFI_HANDLE *)malloc(sz);
+	if (handles2 == NULL) {
+		free(handles);
+		return (ENOMEM);
+	}
 	nifs = 0;
 	for (i = 0; i < sz / sizeof(EFI_HANDLE); i++) {
 		devpath = efi_lookup_devpath(handles[i]);
 		if (devpath == NULL)
 			continue;
-		node = efi_devpath_last_node(devpath);
+		if ((node = efi_devpath_last_node(devpath)) == NULL)
+			continue;
+
 		if (DevicePathType(node) != MESSAGING_DEVICE_PATH ||
 		    DevicePathSubType(node) != MSG_MAC_ADDR_DP)
 			continue;
@@ -318,20 +324,24 @@ efinet_dev_init()
 	}
 	free(handles);
 	if (nifs == 0) {
-		free(handles2);
-		return (ENOENT);
+		err = ENOENT;
+		goto done;
 	}
 
 	err = efi_register_handles(&efinet_dev, handles2, NULL, nifs);
-	if (err != 0) {
-		free(handles2);
-		return (err);
-	}
+	if (err != 0)
+		goto done;
 
-	efinetif.netif_nifs = nifs;
 	efinetif.netif_ifs = calloc(nifs, sizeof(struct netif_dif));
-
 	stats = calloc(nifs, sizeof(struct netif_stats));
+	if (efinetif.netif_ifs == NULL || stats == NULL) {
+		free(efinetif.netif_ifs);
+		free(stats);
+		efinetif.netif_ifs = NULL;
+		err = ENOMEM;
+		goto done;
+	}
+	efinetif.netif_nifs = nifs;
 
 	for (i = 0; i < nifs; i++) {
 
@@ -341,29 +351,34 @@ efinet_dev_init()
 		dif->dif_stats = &stats[i];
 		dif->dif_private = handles2[i];
 	}
+done:
 	free(handles2);
-
-	return (0);
+	return (err);
 }
 
-static void
+static int
 efinet_dev_print(int verbose)
 {
 	CHAR16 *text;
 	EFI_HANDLE h;
-	int unit;
+	int unit, ret = 0;
 
-	pager_open();
+	printf("%s devices:", efinet_dev.dv_name);
+	if ((ret = pager_output("\n")) != 0)
+		return (ret);
+
 	for (unit = 0, h = efi_find_handle(&efinet_dev, 0);
 	    h != NULL; h = efi_find_handle(&efinet_dev, ++unit)) {
 		printf("    %s%d:", efinet_dev.dv_name, unit);
-		text = efi_devpath_name(efi_lookup_devpath(h));
-		if (text != NULL) {
-			printf("    %S", text);
-			efi_free_devpath_name(text);
+		if (verbose) {
+			text = efi_devpath_name(efi_lookup_devpath(h));
+			if (text != NULL) {
+				printf("    %S", text);
+				efi_free_devpath_name(text);
+			}
 		}
-		if (pager_output("\n"))
+		if ((ret = pager_output("\n")) != 0)
 			break;
 	}
-	pager_close();
+	return (ret);
 }

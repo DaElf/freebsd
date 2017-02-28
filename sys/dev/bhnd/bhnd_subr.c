@@ -68,7 +68,7 @@ static const struct bhnd_core_desc {
 	BHND_CDESC(BCM, SRAM,		RAM,		"SRAM"),
 	BHND_CDESC(BCM, SDRAM,		RAM,		"SDRAM"),
 	BHND_CDESC(BCM, PCI,		PCI,		"PCI Bridge"),
-	BHND_CDESC(BCM, MIPS,		CPU,		"MIPS Core"),
+	BHND_CDESC(BCM, MIPS,		CPU,		"BMIPS CPU"),
 	BHND_CDESC(BCM, ENET,		ENET_MAC,	"Fast Ethernet MAC"),
 	BHND_CDESC(BCM, CODEC,		OTHER,		"V.90 Modem Codec"),
 	BHND_CDESC(BCM, USB,		USB_DUAL,	"USB 1.1 Device/Host Controller"),
@@ -85,7 +85,7 @@ static const struct bhnd_core_desc {
 	BHND_CDESC(BCM, APHY,		WLAN_PHY,	"802.11a PHY"),
 	BHND_CDESC(BCM, BPHY,		WLAN_PHY,	"802.11b PHY"),
 	BHND_CDESC(BCM, GPHY,		WLAN_PHY,	"802.11g PHY"),
-	BHND_CDESC(BCM, MIPS33,		CPU,		"MIPS3302 Core"),
+	BHND_CDESC(BCM, MIPS33,		CPU,		"BMIPS33 CPU"),
 	BHND_CDESC(BCM, USB11H,		USB_HOST,	"USB 1.1 Host Controller"),
 	BHND_CDESC(BCM, USB11D,		USB_DEV,	"USB 1.1 Device Controller"),
 	BHND_CDESC(BCM, USB20H,		USB_HOST,	"USB 2.0 Host Controller"),
@@ -1057,7 +1057,8 @@ bhnd_nvram_getvar_str(device_t dev, const char *name, char *buf, size_t len,
 	int	error;
 
 	larg = len;
-	error = bhnd_nvram_getvar(dev, name, buf, &larg, BHND_NVRAM_TYPE_CSTR);
+	error = bhnd_nvram_getvar(dev, name, buf, &larg,
+	    BHND_NVRAM_TYPE_STRING);
 	if (rlen != NULL)
 		*rlen = larg;
 

@@ -70,7 +70,10 @@ print-dir:	.PHONY
 .endif
 
 .if !defined(NEED_SUBDIR)
-.if ${.MAKE.LEVEL} == 0 && ${MK_DIRDEPS_BUILD} == "yes" && !empty(SUBDIR) && !(make(clean*) || make(destroy*))
+# .MAKE.DEPENDFILE==/dev/null is set by bsd.dep.mk to avoid reading
+# Makefile.depend
+.if ${.MAKE.LEVEL} == 0 && ${MK_DIRDEPS_BUILD} == "yes" && !empty(SUBDIR) && \
+    ${.MAKE.DEPENDFILE} != "/dev/null"
 .include <meta.subdir.mk>
 # ignore this
 _SUBDIR:
@@ -110,7 +113,7 @@ install:	beforeinstall realinstall afterinstall
 # SUBDIR recursing may be disabled for MK_DIRDEPS_BUILD
 .if !target(_SUBDIR)
 
-.if defined(SUBDIR)
+.if defined(SUBDIR) || defined(SUBDIR.yes)
 SUBDIR:=${SUBDIR} ${SUBDIR.yes}
 SUBDIR:=${SUBDIR:u}
 .endif
@@ -141,12 +144,13 @@ ${__dir}: all_subdir_${DIRPRFX}${__dir} .PHONY
 # Can ordering be skipped for this and SUBDIR_PARALLEL forced?
 .if ${STANDALONE_SUBDIR_TARGETS:M${__target}}
 _is_standalone_target=	1
-SUBDIR:=	${SUBDIR:N.WAIT}
+_subdir_filter=	N.WAIT
 .else
 _is_standalone_target=	0
+_subdir_filter=
 .endif
 __subdir_targets=
-.for __dir in ${SUBDIR}
+.for __dir in ${SUBDIR:${_subdir_filter}}
 .if ${__dir} == .WAIT
 __subdir_targets+= .WAIT
 .else

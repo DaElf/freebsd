@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -145,6 +145,10 @@
 /* Address Range lists are per-SpaceId (Memory and I/O only) */
 
 #define ACPI_ADDRESS_RANGE_MAX          2
+
+/* Maximum number of While() loops before abort */
+
+#define ACPI_MAX_LOOP_COUNT             0x000FFFFF
 
 
 /******************************************************************************

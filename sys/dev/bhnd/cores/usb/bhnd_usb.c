@@ -44,7 +44,6 @@ __FBSDID("$FreeBSD$");
 #include <machine/resource.h>
 
 #include <dev/bhnd/bhnd.h>
-#include <dev/bhnd/bhnd_core.h>
 
 #include <dev/bhnd/cores/pmu/bhnd_pmureg.h>
 
@@ -103,7 +102,7 @@ bhnd_usb_attach(device_t dev)
 
 	sc = device_get_softc(dev);
 
-	BHND_BUS_RESET_CORE(device_get_parent(dev), dev, 0);
+	bhnd_reset_hw(dev, 0);
 
 	/*
 	 * Allocate the resources which the parent bus has already
@@ -292,7 +291,7 @@ bhnd_usb_alloc_resource(device_t bus, device_t child, int type, int *rid,
 
 		rv = rman_reserve_resource(&sc->mem_rman, start, end, count,
 		    flags, child);
-		if (rv == 0) {
+		if (rv == NULL) {
 			BHND_ERROR_DEV(bus, "could not reserve resource");
 			return (0);
 		}
@@ -313,7 +312,7 @@ bhnd_usb_alloc_resource(device_t bus, device_t child, int type, int *rid,
 
 		rv = rman_reserve_resource(&sc->irq_rman, start, end, count,
 		    flags, child);
-		if (rv == 0) {
+		if (rv == NULL) {
 			BHND_ERROR_DEV(bus, "could not reserve resource");
 			return (0);
 		}

@@ -19,7 +19,7 @@
         aout
         ..
         clang
-            3.8.0
+            3.9.1
                 include
                     sanitizer
                     ..
@@ -227,8 +227,6 @@
                 06.Clang
                 ..
                 12.make
-                ..
-                13.rcs
                 ..
                 15.yacc
                 ..

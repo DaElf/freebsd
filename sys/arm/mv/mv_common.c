@@ -42,6 +42,7 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/fdt/fdt_common.h>
 #include <dev/ofw/openfirm.h>
+#include <dev/ofw/ofw_bus_subr.h>
 
 #include <machine/bus.h>
 #include <machine/fdt.h>
@@ -97,6 +98,7 @@ static void decode_win_usb_setup(u_long);
 static void decode_win_usb3_setup(u_long);
 static void decode_win_eth_setup(u_long);
 static void decode_win_sata_setup(u_long);
+static void decode_win_ahci_setup(u_long);
 
 static void decode_win_idma_setup(u_long);
 static void decode_win_xor_setup(u_long);
@@ -106,6 +108,7 @@ static void decode_win_usb3_dump(u_long);
 static void decode_win_eth_dump(u_long base);
 static void decode_win_idma_dump(u_long base);
 static void decode_win_xor_dump(u_long base);
+static void decode_win_ahci_dump(u_long base);
 
 static int fdt_get_ranges(const char *, void *, int, int *, int *);
 #ifdef SOC_MV_ARMADA38X
@@ -138,6 +141,7 @@ static struct soc_node_spec soc_nodes[] = {
 	{ "mrvl,ge", &decode_win_eth_setup, &decode_win_eth_dump },
 	{ "mrvl,usb-ehci", &decode_win_usb_setup, &decode_win_usb_dump },
 	{ "marvell,armada-380-xhci", &decode_win_usb3_setup, &decode_win_usb3_dump },
+	{ "marvell,armada-380-ahci", &decode_win_ahci_setup, &decode_win_ahci_dump },
 	{ "mrvl,sata", &decode_win_sata_setup, NULL },
 	{ "mrvl,xor", &decode_win_xor_setup, &decode_win_xor_dump },
 	{ "mrvl,idma", &decode_win_idma_setup, &decode_win_idma_dump },
@@ -145,7 +149,12 @@ static struct soc_node_spec soc_nodes[] = {
 	{ NULL, NULL, NULL },
 };
 
-struct fdt_pm_mask_entry fdt_pm_mask_table[] = {
+struct fdt_pm_mask_entry {
+	char		*compat;
+	uint32_t	mask;
+};
+
+static struct fdt_pm_mask_entry fdt_pm_mask_table[] = {
 	{ "mrvl,ge",		CPU_PM_CTRL_GE(0) },
 	{ "mrvl,ge",		CPU_PM_CTRL_GE(1) },
 	{ "mrvl,usb-ehci",	CPU_PM_CTRL_USB(0) },
@@ -230,7 +239,8 @@ fdt_pm(phandle_t node)
 		if (dev_mask & (1 << i))
 			continue;
 
-		compat = fdt_is_compatible(node, fdt_pm_mask_table[i].compat);
+		compat = ofw_bus_node_is_compatible(node,
+		    fdt_pm_mask_table[i].compat);
 #if defined(SOC_MV_KIRKWOOD)
 		if (compat && (cpu_pm_ctrl & fdt_pm_mask_table[i].mask)) {
 			dev_mask |= (1 << i);
@@ -658,6 +668,11 @@ WIN_REG_BASE_IDX_RD(win_sata, cr, MV_WIN_SATA_CTRL);
 WIN_REG_BASE_IDX_RD(win_sata, br, MV_WIN_SATA_BASE);
 WIN_REG_BASE_IDX_WR(win_sata, cr, MV_WIN_SATA_CTRL);
 WIN_REG_BASE_IDX_WR(win_sata, br, MV_WIN_SATA_BASE);
+#if defined(SOC_MV_ARMADA38X)
+WIN_REG_BASE_IDX_RD(win_sata, sz, MV_WIN_SATA_SIZE);
+WIN_REG_BASE_IDX_WR(win_sata, sz, MV_WIN_SATA_SIZE);
+#endif
+
 #ifndef SOC_MV_DOVE
 WIN_REG_IDX_RD(ddr, br, MV_WIN_DDR_BASE, MV_DDR_CADR_BASE)
 WIN_REG_IDX_RD(ddr, sz, MV_WIN_DDR_SIZE, MV_DDR_CADR_BASE)
@@ -1997,6 +2012,75 @@ decode_win_sata_setup(u_long base)
 		}
 }
 
+#ifdef SOC_MV_ARMADA38X
+/*
+ * Configure AHCI decoding windows
+ */
+static void
+decode_win_ahci_setup(u_long base)
+{
+	uint32_t br, cr, sz;
+	int i, j;
+
+	for (i = 0; i < MV_WIN_SATA_MAX; i++) {
+		win_sata_cr_write(base, i, 0);
+		win_sata_br_write(base, i, 0);
+		win_sata_sz_write(base, i, 0);
+	}
+
+	for (i = 0; i < MV_WIN_DDR_MAX; i++) {
+		if (ddr_is_active(i)) {
+			cr = (ddr_attr(i) << IO_WIN_ATTR_SHIFT) |
+			    (ddr_target(i) << IO_WIN_TGT_SHIFT) |
+			    IO_WIN_ENA_MASK;
+			br = ddr_base(i);
+			sz = (ddr_size(i) - 1) &
+			    (IO_WIN_SIZE_MASK << IO_WIN_SIZE_SHIFT);
+
+			/* Use first available SATA window */
+			for (j = 0; j < MV_WIN_SATA_MAX; j++) {
+				if (win_sata_cr_read(base, j) & IO_WIN_ENA_MASK)
+					continue;
+
+				/* BASE is set to DRAM base (0x00000000) */
+				win_sata_br_write(base, j, br);
+				/* CTRL targets DRAM ctrl with 0x0E or 0x0D */
+				win_sata_cr_write(base, j, cr);
+				/* SIZE is set to 16MB - max value */
+				win_sata_sz_write(base, j, sz);
+				break;
+			}
+		}
+	}
+}
+
+static void
+decode_win_ahci_dump(u_long base)
+{
+	int i;
+
+	for (i = 0; i < MV_WIN_SATA_MAX; i++)
+		printf("SATA window#%d: cr 0x%08x, br 0x%08x, sz 0x%08x\n", i,
+		    win_sata_cr_read(base, i), win_sata_br_read(base, i),
+		    win_sata_sz_read(base,i));
+}
+
+#else
+/*
+ * Provide dummy functions to satisfy the build
+ * for SoC's not equipped with AHCI controller
+ */
+static void
+decode_win_ahci_setup(u_long base)
+{
+}
+
+static void
+decode_win_ahci_dump(u_long base)
+{
+}
+#endif
+
 static int
 decode_win_sata_valid(void)
 {
@@ -2092,7 +2176,7 @@ win_cpu_from_dt(void)
 	 * Retrieve CESA SRAM data.
 	 */
 	if ((node = OF_finddevice("sram")) != -1)
-		if (fdt_is_compatible(node, "mrvl,cesa-sram"))
+		if (ofw_bus_node_is_compatible(node, "mrvl,cesa-sram"))
 			goto moveon;
 
 	if ((node = OF_finddevice("/")) == 0)
@@ -2120,7 +2204,7 @@ moveon:
 
 	/* Check if there is a second CESA node */
 	while ((node = OF_peer(node)) != 0) {
-		if (fdt_is_compatible(node, "mrvl,cesa-sram")) {
+		if (ofw_bus_node_is_compatible(node, "mrvl,cesa-sram")) {
 			if (fdt_regsize(node, &sram_base, &sram_size) != 0)
 				return (EINVAL);
 			break;
@@ -2170,7 +2254,11 @@ fdt_win_setup(void)
 
 			soc_node = &soc_nodes[i];
 
-			if (!fdt_is_compatible(child, soc_node->compat))
+			/* Setup only for enabled devices */
+			if (ofw_bus_node_status_okay(child) == 0)
+				continue;
+
+			if (!ofw_bus_node_is_compatible(child,soc_node->compat))
 				continue;
 
 			err = fdt_regsize(child, &base, &size);
@@ -2319,8 +2407,8 @@ fdt_pic_decode_ic(phandle_t node, pcell_t *intr, int *interrupt, int *trig,
     int *pol)
 {
 
-	if (!fdt_is_compatible(node, "mrvl,pic") &&
-	    !fdt_is_compatible(node, "mrvl,mpic"))
+	if (!ofw_bus_node_is_compatible(node, "mrvl,pic") &&
+	    !ofw_bus_node_is_compatible(node, "mrvl,mpic"))
 		return (ENXIO);
 
 	*interrupt = fdt32_to_cpu(intr[0]);

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -45,9 +45,6 @@
 #define __ACFREEBSD_H__
 
 
-/* FreeBSD uses GCC */
-
-#include <contrib/dev/acpica/include/platform/acgcc.h>
 #include <sys/types.h>
 
 #ifdef __LP64__

@@ -325,6 +325,7 @@ DIRDEPS+= \
 	usr.bin/pr \
 	usr.bin/printenv \
 	usr.bin/printf \
+	usr.bin/proccontrol \
 	usr.bin/procstat \
 	usr.bin/protect \
 	usr.bin/quota \
@@ -876,11 +877,6 @@ DIRDEPS.arm64= \
 DIRDEPS.mips= \
 	sbin/bsdlabel \
 	sbin/fdisk
-
-DIRDEPS.pc98= \
-	sbin/bsdlabel \
-	sbin/fdisk_pc98 \
-	sbin/sconfig
 
 DIRDEPS.sparc64= \
 	sbin/bsdlabel \

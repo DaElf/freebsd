@@ -5,7 +5,7 @@
  ******************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -516,7 +516,7 @@ AcpiDmI2cSerialBusDescriptor (
     ResourceSourceOffset = sizeof (AML_RESOURCE_COMMON_SERIALBUS) +
         Resource->CommonSerialBus.TypeDataLength;
 
-    DeviceName = ACPI_ADD_PTR (char, Resource, ResourceSourceOffset),
+    DeviceName = ACPI_ADD_PTR (char, Resource, ResourceSourceOffset);
     AcpiUtPrintString (DeviceName, ACPI_UINT16_MAX);
 
     /* ResourceSourceIndex, ResourceUsage */
@@ -601,7 +601,7 @@ AcpiDmSpiSerialBusDescriptor (
     ResourceSourceOffset = sizeof (AML_RESOURCE_COMMON_SERIALBUS) +
         Resource->CommonSerialBus.TypeDataLength;
 
-    DeviceName = ACPI_ADD_PTR (char, Resource, ResourceSourceOffset),
+    DeviceName = ACPI_ADD_PTR (char, Resource, ResourceSourceOffset);
     AcpiUtPrintString (DeviceName, ACPI_UINT16_MAX);
 
     /* ResourceSourceIndex, ResourceUsage */
@@ -689,7 +689,7 @@ AcpiDmUartSerialBusDescriptor (
     ResourceSourceOffset = sizeof (AML_RESOURCE_COMMON_SERIALBUS) +
         Resource->CommonSerialBus.TypeDataLength;
 
-    DeviceName = ACPI_ADD_PTR (char, Resource, ResourceSourceOffset),
+    DeviceName = ACPI_ADD_PTR (char, Resource, ResourceSourceOffset);
     AcpiUtPrintString (DeviceName, ACPI_UINT16_MAX);
 
     /* ResourceSourceIndex, ResourceUsage */

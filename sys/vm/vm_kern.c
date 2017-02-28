@@ -97,6 +97,9 @@ CTASSERT((ZERO_REGION_SIZE & PAGE_MASK) == 0);
 /* NB: Used by kernel debuggers. */
 const u_long vm_maxuser_address = VM_MAXUSER_ADDRESS;
 
+u_int exec_map_entry_size;
+u_int exec_map_entries;
+
 SYSCTL_ULONG(_vm, OID_AUTO, min_kernel_address, CTLFLAG_RD,
     SYSCTL_NULL_ULONG_PTR, VM_MIN_KERNEL_ADDRESS, "Min kernel address");
 
@@ -549,11 +552,13 @@ debug_vm_lowmem(SYSCTL_HANDLER_ARGS)
 	error = sysctl_handle_int(oidp, &i, 0, req);
 	if (error)
 		return (error);
-	if (i)	 
-		EVENTHANDLER_INVOKE(vm_lowmem, 0);
+	if ((i & ~(VM_LOW_KMEM | VM_LOW_PAGES)) != 0)
+		return (EINVAL);
+	if (i != 0)
+		EVENTHANDLER_INVOKE(vm_lowmem, i);
 	return (0);
 }
 
 SYSCTL_PROC(_debug, OID_AUTO, vm_lowmem, CTLTYPE_INT | CTLFLAG_RW, 0, 0,
-    debug_vm_lowmem, "I", "set to trigger vm_lowmem event");
+    debug_vm_lowmem, "I", "set to trigger vm_lowmem event with given flags");
 #endif

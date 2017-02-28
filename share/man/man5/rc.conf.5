@@ -24,7 +24,7 @@
 .\"
 .\" $FreeBSD$
 .\"
-.Dd July 13, 2016
+.Dd February 26, 2017
 .Dt RC.CONF 5
 .Os
 .Sh NAME
@@ -3502,6 +3502,18 @@ to not run
 at boot time when
 .Va dumpdir
 is set.
+.It Va dumppubkey
+.Pq Vt str
+Path to a public key.
+It is used by
+.Xr dumpon 8
+to encrypt a one-time key for a crash dump.
+The public key has to match a private key used by
+.Xr decryptcore 8
+to decrypt a crash dump after reboot.
+See
+.Xr dumpon 8
+for more details.
 .It Va savecore_enable
 .Pq Vt bool
 If set to
@@ -3619,11 +3631,6 @@ Set to
 .Dq Li YES
 to enable Linux/ELF binary emulation at system initial
 boot time.
-.It Va svr4_enable
-.Pq Vt bool
-If set to
-.Dq Li YES ,
-enable SysVR4 emulation at boot time.
 .It Va sysvipc_enable
 .Pq Vt bool
 If set to

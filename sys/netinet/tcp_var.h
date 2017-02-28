@@ -192,13 +192,13 @@ struct tcpcb {
 
 	tcp_seq	rcv_nxt;		/* receive next */
 	tcp_seq	rcv_adv;		/* advertised window */
-	u_long	rcv_wnd;		/* receive window */
+	uint32_t  rcv_wnd;		/* receive window */
 	tcp_seq	rcv_up;			/* receive urgent pointer */
 
-	u_long	snd_wnd;		/* send window */
-	u_long	snd_cwnd;		/* congestion-controlled window */
+	uint32_t  snd_wnd;		/* send window */
+	uint32_t  snd_cwnd;		/* congestion-controlled window */
 	u_long	snd_spare1;		/* unused */
-	u_long	snd_ssthresh;		/* snd_cwnd size threshold for
+	uint32_t  snd_ssthresh;		/* snd_cwnd size threshold for
 					 * for slow start exponential to
 					 * linear switch
 					 */
@@ -223,7 +223,7 @@ struct tcpcb {
 	u_int	t_rttmin;		/* minimum rtt allowed */
 	u_int	t_rttbest;		/* best rtt we've seen */
 	u_long	t_rttupdated;		/* number of times rtt sampled */
-	u_long	max_sndwnd;		/* largest window peer has offered */
+	uint32_t  max_sndwnd;		/* largest window peer has offered */
 
 	int	t_softerror;		/* possible error not yet reported */
 /* out-of-band data */
@@ -239,8 +239,8 @@ struct tcpcb {
 
 	tcp_seq	last_ack_sent;
 /* experimental */
-	u_long	snd_cwnd_prev;		/* cwnd prior to retransmit */
-	u_long	snd_ssthresh_prev;	/* ssthresh prior to retransmit */
+	uint32_t  snd_cwnd_prev;	/* cwnd prior to retransmit */
+	uint32_t  snd_ssthresh_prev;	/* ssthresh prior to retransmit */
 	tcp_seq	snd_recover_prev;	/* snd_recover prior to retransmit */
 	int	t_sndzerowin;		/* zero-window updates sent */
 	u_int	t_badrxtwin;		/* window for retransmit recovery */
@@ -349,6 +349,12 @@ struct tcpcb {
 #define	ENTER_RECOVERY(t_flags) t_flags |= (TF_CONGRECOVERY | TF_FASTRECOVERY)
 #define	EXIT_RECOVERY(t_flags) t_flags &= ~(TF_CONGRECOVERY | TF_FASTRECOVERY)
 
+#if defined(_KERNEL) && !defined(TCP_RFC7413)
+#define	IS_FASTOPEN(t_flags)		(false)
+#else
+#define	IS_FASTOPEN(t_flags)		(t_flags & TF_FASTOPEN)
+#endif
+
 #define	BYTES_THIS_ACK(tp, th)	(th->th_ack - tp->snd_una)
 
 /*
@@ -356,21 +362,6 @@ struct tcpcb {
  */
 #define	TCPOOB_HAVEDATA	0x01
 #define	TCPOOB_HADDATA	0x02
-
-#ifdef TCP_SIGNATURE
-/*
- * Defines which are needed by the xform_tcp module and tcp_[in|out]put
- * for SADB verification and lookup.
- */
-#define	TCP_SIGLEN	16	/* length of computed digest in bytes */
-#define	TCP_KEYLEN_MIN	1	/* minimum length of TCP-MD5 key */
-#define	TCP_KEYLEN_MAX	80	/* maximum length of TCP-MD5 key */
-/*
- * Only a single SA per host may be specified at this time. An SPI is
- * needed in order for the KEY_ALLOCSA() lookup to work.
- */
-#define	TCP_SIG_SPI	0x1000
-#endif /* TCP_SIGNATURE */
 
 /*
  * Flags for PLPMTU handling, t_flags2
@@ -415,13 +406,13 @@ struct tcpopt {
 #define	TO_SYN		0x01		/* parse SYN-only options */
 
 struct hc_metrics_lite {	/* must stay in sync with hc_metrics */
-	u_long	rmx_mtu;	/* MTU for this path */
-	u_long	rmx_ssthresh;	/* outbound gateway buffer limit */
-	u_long	rmx_rtt;	/* estimated round trip time */
-	u_long	rmx_rttvar;	/* estimated rtt variance */
-	u_long	rmx_cwnd;	/* congestion window */
-	u_long	rmx_sendpipe;   /* outbound delay-bandwidth product */
-	u_long	rmx_recvpipe;   /* inbound delay-bandwidth product */
+	uint32_t	rmx_mtu;	/* MTU for this path */
+	uint32_t	rmx_ssthresh;	/* outbound gateway buffer limit */
+	uint32_t	rmx_rtt;	/* estimated round trip time */
+	uint32_t	rmx_rttvar;	/* estimated rtt variance */
+	uint32_t	rmx_cwnd;	/* congestion window */
+	uint32_t	rmx_sendpipe;   /* outbound delay-bandwidth product */
+	uint32_t	rmx_recvpipe;   /* inbound delay-bandwidth product */
 };
 
 /*
@@ -446,7 +437,7 @@ struct tcptw {
 	tcp_seq		iss;
 	tcp_seq		irs;
 	u_short		last_win;	/* cached window value */
-	u_short		tw_so_options;	/* copy of so_options */
+	short		tw_so_options;	/* copy of so_options */
 	struct ucred	*tw_cred;	/* user credentials */
 	u_int32_t	t_recent;
 	u_int32_t	ts_offset;	/* our timestamp offset */
@@ -608,7 +599,7 @@ struct	tcpstat {
 	/* TCP_SIGNATURE related stats */
 	uint64_t tcps_sig_rcvgoodsig;	/* Total matching signature received */
 	uint64_t tcps_sig_rcvbadsig;	/* Total bad signature received */
-	uint64_t tcps_sig_err_buildsig;	/* Mismatching signature received */
+	uint64_t tcps_sig_err_buildsig;	/* Failed to make signature */
 	uint64_t tcps_sig_err_sigopt;	/* No signature expected by socket */
 	uint64_t tcps_sig_err_nosigopt;	/* No signature provided by segment */
 
@@ -657,7 +648,7 @@ struct tcp_hhook_data {
 	struct tcpcb	*tp;
 	struct tcphdr	*th;
 	struct tcpopt	*to;
-	long		len;
+	uint32_t	len;
 	int		tso;
 	tcp_seq		curack;
 };
@@ -749,8 +740,10 @@ VNET_DECLARE(int, tcp_ecn_maxretries);
 #define	V_tcp_do_ecn		VNET(tcp_do_ecn)
 #define	V_tcp_ecn_maxretries	VNET(tcp_ecn_maxretries)
 
+#ifdef TCP_HHOOK
 VNET_DECLARE(struct hhook_head *, tcp_hhh[HHOOK_TCP_LAST + 1]);
 #define	V_tcp_hhh		VNET(tcp_hhh)
+#endif
 
 VNET_DECLARE(int, tcp_do_rfc6675_pipe);
 #define V_tcp_do_rfc6675_pipe	VNET(tcp_do_rfc6675_pipe)
@@ -788,8 +781,10 @@ void	cc_ack_received(struct tcpcb *tp, struct tcphdr *th,
 void 	cc_conn_init(struct tcpcb *tp);
 void 	cc_post_recovery(struct tcpcb *tp, struct tcphdr *th);
 void	cc_cong_signal(struct tcpcb *tp, struct tcphdr *th, uint32_t type);
+#ifdef TCP_HHOOK
 void	hhook_run_tcp_est_in(struct tcpcb *tp,
 			    struct tcphdr *th, struct tcpopt *to);
+#endif
 
 int	 tcp_input(struct mbuf **, int *, int);
 void	 tcp_do_segment(struct mbuf *, struct tcphdr *,
@@ -802,8 +797,8 @@ struct tcp_function_block *find_and_ref_tcp_functions(struct tcp_function_set *f
 struct tcp_function_block *find_and_ref_tcp_fb(struct tcp_function_block *blk);
 int tcp_default_ctloutput(struct socket *so, struct sockopt *sopt, struct inpcb *inp, struct tcpcb *tp);
 
-u_long	 tcp_maxmtu(struct in_conninfo *, struct tcp_ifcap *);
-u_long	 tcp_maxmtu6(struct in_conninfo *, struct tcp_ifcap *);
+uint32_t tcp_maxmtu(struct in_conninfo *, struct tcp_ifcap *);
+uint32_t tcp_maxmtu6(struct in_conninfo *, struct tcp_ifcap *);
 u_int	 tcp_maxseg(const struct tcpcb *);
 void	 tcp_mss_update(struct tcpcb *, int, int, struct hc_metrics_lite *,
 	    struct tcp_ifcap *);
@@ -825,17 +820,6 @@ void	 tcp_tw_zone_change(void);
 int	 tcp_twcheck(struct inpcb *, struct tcpopt *, struct tcphdr *,
 	    struct mbuf *, int);
 void	 tcp_setpersist(struct tcpcb *);
-#ifdef TCP_SIGNATURE
-struct secasvar;
-struct secasvar *tcp_get_sav(struct mbuf *, u_int);
-int	 tcp_signature_do_compute(struct mbuf *, int, int, u_char *,
-	    struct secasvar *);
-int	 tcp_signature_compute(struct mbuf *, int, int, int, u_char *, u_int);
-int	 tcp_signature_verify(struct mbuf *, int, int, int, struct tcpopt *,
-	    struct tcphdr *, u_int);
-int	tcp_signature_check(struct mbuf *m, int off0, int tlen, int optlen,
-	    struct tcpopt *to, struct tcphdr *th, u_int tcpbflag);
-#endif
 void	 tcp_slowtimo(void);
 struct tcptemp *
 	 tcpip_maketemplate(struct inpcb *);
@@ -852,8 +836,8 @@ void	 tcp_hc_init(void);
 void	 tcp_hc_destroy(void);
 #endif
 void	 tcp_hc_get(struct in_conninfo *, struct hc_metrics_lite *);
-u_long	 tcp_hc_getmtu(struct in_conninfo *);
-void	 tcp_hc_updatemtu(struct in_conninfo *, u_long);
+uint32_t tcp_hc_getmtu(struct in_conninfo *);
+void	 tcp_hc_updatemtu(struct in_conninfo *, uint32_t);
 void	 tcp_hc_update(struct in_conninfo *, struct hc_metrics_lite *);
 
 extern	struct pr_usrreqs tcp_usrreqs;
@@ -867,7 +851,6 @@ struct sackhole *tcp_sack_output(struct tcpcb *tp, int *sack_bytes_rexmt);
 void	 tcp_sack_partialack(struct tcpcb *, struct tcphdr *);
 void	 tcp_free_sackholes(struct tcpcb *tp);
 int	 tcp_newreno(struct tcpcb *, struct tcphdr *);
-u_long	 tcp_seq_subtract(u_long, u_long );
 int	 tcp_compute_pipe(struct tcpcb *);
 
 static inline void
@@ -880,7 +863,6 @@ tcp_fields_to_host(struct tcphdr *th)
 	th->th_urp = ntohs(th->th_urp);
 }
 
-#ifdef TCP_SIGNATURE
 static inline void
 tcp_fields_to_net(struct tcphdr *th)
 {
@@ -890,7 +872,6 @@ tcp_fields_to_net(struct tcphdr *th)
 	th->th_win = htons(th->th_win);
 	th->th_urp = htons(th->th_urp);
 }
-#endif
 #endif /* _KERNEL */
 
 #endif /* _NETINET_TCP_VAR_H_ */

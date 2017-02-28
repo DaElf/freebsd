@@ -278,11 +278,6 @@ char *trap_type[] = {
 struct trapdebug trapdebug[TRAPSIZE], *trp = trapdebug;
 #endif
 
-#if defined(DDB) || defined(DEBUG)
-void stacktrace(struct trapframe *);
-void logstacktrace(struct trapframe *);
-#endif
-
 #define	KERNLAND(x)	((vm_offset_t)(x) >= VM_MIN_KERNEL_ADDRESS && (vm_offset_t)(x) < VM_MAX_KERNEL_ADDRESS)
 #define	DELAYBRANCH(x)	((int)(x) < 0)
 
@@ -590,7 +585,8 @@ trap(struct trapframe *trapframe)
 			break;
 		}
 		if ((last_badvaddr == this_badvaddr) &&
-		    ((type & ~T_USER) != T_SYSCALL)) {
+		    ((type & ~T_USER) != T_SYSCALL) &&
+		    ((type & ~T_USER) != T_COP_UNUSABLE)) {
 			if (++count == 3) {
 				trap_frame_dump(trapframe);
 				panic("too many faults at %p\n", (void *)last_badvaddr);
@@ -741,8 +737,11 @@ dofault:
 				}
 				goto err;
 			}
-			ucode = ftype;
-			i = ((rv == KERN_PROTECTION_FAILURE) ? SIGBUS : SIGSEGV);
+			i = SIGSEGV;
+			if (rv == KERN_PROTECTION_FAILURE)
+				ucode = SEGV_ACCERR;
+			else
+				ucode = SEGV_MAPERR;
 			addr = trapframe->pc;
 
 			msg = "BAD_PAGE_FAULT";
@@ -909,12 +908,7 @@ dofault:
 					if (inst.RType.rd == 29) {
 						frame_regs = &(trapframe->zero);
 						frame_regs[inst.RType.rt] = (register_t)(intptr_t)td->td_md.md_tls;
-#if defined(__mips_n64) && defined(COMPAT_FREEBSD32)
-						if (SV_PROC_FLAG(td->td_proc, SV_ILP32))
-							frame_regs[inst.RType.rt] += TLS_TP_OFFSET + TLS_TCB_SIZE32;
-						else
-#endif
-						frame_regs[inst.RType.rt] += TLS_TP_OFFSET + TLS_TCB_SIZE;
+						frame_regs[inst.RType.rt] += td->td_md.md_tls_tcb_offset;
 						trapframe->pc += sizeof(int);
 						goto out;
 					}
@@ -982,7 +976,11 @@ dofault:
 			addr = trapframe->pc;
 			MipsSwitchFPState(PCPU_GET(fpcurthread), td->td_frame);
 			PCPU_SET(fpcurthread, td);
+#if defined(__mips_n64)
+			td->td_frame->sr |= MIPS_SR_COP_1_BIT | MIPS_SR_FR;
+#else
 			td->td_frame->sr |= MIPS_SR_COP_1_BIT;
+#endif
 			td->td_md.md_flags |= MDTD_FPUSED;
 			goto out;
 #endif
@@ -1030,7 +1028,7 @@ dofault:
 
 	case T_FPE + T_USER:
 		if (!emulate_fp) {
-			i = SIGILL;
+			i = SIGFPE;
 			addr = trapframe->pc;
 			break;
 		}
@@ -1079,7 +1077,6 @@ dofault:
 err:
 
 #if !defined(SMP) && defined(DEBUG)
-		stacktrace(!usermode ? trapframe : td->td_frame);
 		trapDump("trap");
 #endif
 #ifdef SMP
@@ -1298,18 +1295,6 @@ MipsEmulateBranch(struct trapframe *framePtr, uintptr_t instPC, int fpcCSR,
 	}
 	return (retAddr);
 }
-
-
-#if defined(DDB) || defined(DEBUG)
-/*
- * Print a stack backtrace.
- */
-void
-stacktrace(struct trapframe *regs)
-{
-	stacktrace_subr(regs->pc, regs->sp, regs->ra, printf);
-}
-#endif
 
 static void
 log_frame_dump(struct trapframe *frame)

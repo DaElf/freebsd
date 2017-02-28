@@ -25,6 +25,8 @@ SRCS=	autoload.c \
 SRCS+=		zfs.c
 .PATH:		${.CURDIR}/../../zfs
 SRCS+=		skein.c skein_block.c
+# Do not unroll skein loops, reduce code size
+CFLAGS+=	-DSKEIN_LOOP=111
 .PATH:		${.CURDIR}/../../../crypto/skein
 
 # Disable warnings that are currently incompatible with the zfs boot code
@@ -113,12 +115,9 @@ FILESMODE_loader.efi=	${BINMODE}
 LDSCRIPT=	${.CURDIR}/arch/${MACHINE}/ldscript.${MACHINE}
 LDFLAGS+=	-Wl,-T${LDSCRIPT} -Wl,-Bsymbolic -shared
 
-CLEANFILES+=	vers.c loader.efi
+CLEANFILES+=	loader.efi
 
 NEWVERSWHAT=	"EFI loader" ${MACHINE}
-
-vers.c:	${.CURDIR}/../../common/newvers.sh ${.CURDIR}/../../efi/loader/version
-	sh ${.CURDIR}/../../common/newvers.sh ${.CURDIR}/version ${NEWVERSWHAT}
 
 NM?=		nm
 OBJCOPY?=	objcopy
@@ -143,6 +142,7 @@ loader.efi: ${PROG}
 	${OBJCOPY} -j .peheader -j .text -j .sdata -j .data \
 		-j .dynamic -j .dynsym -j .rel.dyn \
 		-j .rela.dyn -j .reloc -j .eh_frame -j set_Xcommand_set \
+		-j set_Xficl_compile_set \
 		--output-target=${EFI_TARGET} ${.ALLSRC} ${.TARGET}
 
 LIBEFI=		${.OBJDIR}/../libefi/libefi.a

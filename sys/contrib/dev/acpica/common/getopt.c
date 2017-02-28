@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -57,7 +57,7 @@
 #include <contrib/dev/acpica/include/acapps.h>
 
 #define ACPI_OPTION_ERROR(msg, badchar) \
-    if (AcpiGbl_Opterr) {AcpiLogError ("%s%c\n", msg, badchar);}
+    if (AcpiGbl_Opterr) {fprintf (stderr, "%s%c\n", msg, badchar);}
 
 
 int                 AcpiGbl_Opterr = 1;
@@ -101,7 +101,7 @@ AcpiGetoptArgument (
     }
     else if (++AcpiGbl_Optind >= argc)
     {
-        ACPI_OPTION_ERROR ("Option requires an argument: -", 'v');
+        ACPI_OPTION_ERROR ("\nOption requires an argument", 0);
 
         CurrentCharPtr = 1;
         return (-1);

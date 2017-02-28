@@ -78,7 +78,9 @@ struct cpu_release {
 #endif
 
 extern uint32_t *bootinfo;
+vm_paddr_t ccsrbar_pa;
 vm_offset_t ccsrbar_va;
+vm_size_t ccsrbar_size;
 
 static int cpu, maxcpu;
 
@@ -194,6 +196,8 @@ mpc85xx_attach(platform_t plat)
 		ccsrsize |= ranges[i];
 	}
 	ccsrbar_va = pmap_early_io_map(ccsrbar, ccsrsize);
+	ccsrbar_pa = ccsrbar;
+	ccsrbar_size = ccsrsize;
 
 #if 0
 	mpc85xx_fix_errata(ccsrbar_va);
@@ -530,9 +534,11 @@ mpc85xx_idle(platform_t plat, int cpu)
 	uint32_t reg;
 
 	if (mpc85xx_is_qoriq()) {
-		reg = ccsr_read4(OCP85XX_RCPM_CDOZCR);
-		ccsr_write4(OCP85XX_RCPM_CDOZCR, reg | (1 << cpu));
-		ccsr_read4(OCP85XX_RCPM_CDOZCR);
+		/*
+		 * Base binutils doesn't know what the 'wait' instruction is, so
+		 * use the opcode encoding here.
+		 */
+		__asm __volatile("wrteei 1; .long 0x7c00007c");
 	} else {
 		reg = mfmsr();
 		/* Freescale E500 core RM section 6.4.1. */
@@ -544,15 +550,6 @@ mpc85xx_idle(platform_t plat, int cpu)
 static int
 mpc85xx_idle_wakeup(platform_t plat, int cpu)
 {
-	uint32_t reg;
-
-	if (mpc85xx_is_qoriq()) {
-		reg = ccsr_read4(OCP85XX_RCPM_CDOZCR);
-		ccsr_write4(OCP85XX_RCPM_CDOZCR, reg & ~(1 << cpu));
-		ccsr_read4(OCP85XX_RCPM_CDOZCR);
-
-		return (1);
-	}
 
 	return (0);
 }

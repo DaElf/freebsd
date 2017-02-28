@@ -190,7 +190,7 @@ static int c4iw_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 			    "%s:6 USER DB-GTS addr %p region %p, reglen %u",
 			    __func__, addr, va_udbs_res, len_udbs_res);
 #ifdef DOT5
-			if (is_t5(rdev->lldi.adapter_type) && map_udb_as_wc)
+			if (!is_t4(rdev->lldi.adapter_type) && map_udb_as_wc)
 				vma->vm_page_prot = t4_pgprot_wc(vma->vm_page_prot);
 			else
 #endif
@@ -429,7 +429,7 @@ c4iw_register_device(struct c4iw_dev *dev)
 	strlcpy(ibdev->node_desc, C4IW_NODE_DESC, sizeof(ibdev->node_desc));
 	ibdev->phys_port_cnt = sc->params.nports;
 	ibdev->num_comp_vectors = 1;
-	ibdev->dma_device = sc->dev;
+	ibdev->dma_device = NULL;
 	ibdev->query_device = c4iw_query_device;
 	ibdev->query_port = c4iw_query_port;
 	ibdev->modify_port = c4iw_modify_port;

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -373,11 +373,6 @@ DtFatal (
     DT_FIELD                *FieldObject,
     char                    *ExtraMessage);
 
-ACPI_STATUS
-DtStrtoul64 (
-    char                    *String,
-    UINT64                  *ReturnInteger);
-
 char*
 DtGetFieldValue (
     DT_FIELD                *Field);
@@ -609,6 +604,7 @@ extern const unsigned char  TemplateMtmr[];
 extern const unsigned char  TemplateNfit[];
 extern const unsigned char  TemplatePcct[];
 extern const unsigned char  TemplatePmtt[];
+extern const unsigned char  TemplateRasf[];
 extern const unsigned char  TemplateRsdt[];
 extern const unsigned char  TemplateS3pt[];
 extern const unsigned char  TemplateSbst[];

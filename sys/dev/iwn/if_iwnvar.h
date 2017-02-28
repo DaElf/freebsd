@@ -238,6 +238,7 @@ struct iwn_softc {
 	struct cdev		*sc_cdev;
 	struct mtx		sc_mtx;
 	struct ieee80211com	sc_ic;
+	struct ieee80211_ratectl_tx_status sc_txs;
 
 	u_int			sc_flags;
 #define IWN_FLAG_HAS_OTPROM	(1 << 1)
@@ -304,8 +305,7 @@ struct iwn_softc {
 	int			sc_cap_off;	/* PCIe Capabilities. */
 
 	/* Tasks used by the driver */
-	struct task		sc_radioon_task;
-	struct task		sc_radiooff_task;
+	struct task		sc_rftoggle_task;
 	struct task		sc_panic_task;
 	struct task		sc_xmit_task;
 

@@ -38,14 +38,18 @@ __FBSDID("$FreeBSD$");
 
 #include <dev/uart/uart.h>
 #include <dev/uart/uart_cpu.h>
-#ifdef DEV_ACPI
-#include <dev/uart/uart_cpu_acpi.h>
-#endif
 #ifdef FDT
 #include <dev/uart/uart_cpu_fdt.h>
 #endif
 #include <dev/uart/uart_bus.h>
 #include "uart_if.h"
+
+#ifdef DEV_ACPI
+#include <dev/uart/uart_cpu_acpi.h>
+#include <contrib/dev/acpica/include/acpi.h>
+#include <contrib/dev/acpica/include/accommon.h>
+#include <contrib/dev/acpica/include/actables.h>
+#endif
 
 #include <sys/kdb.h>
 
@@ -57,6 +61,7 @@ __FBSDID("$FreeBSD$");
 #define	DR_OE		(1 << 11)	/* Overrun error */
 
 #define	UART_FR		0x06		/* Flag register */
+#define	FR_RXFE		(1 << 4)	/* Receive FIFO/reg empty */
 #define	FR_TXFF		(1 << 5)	/* Transmit FIFO/reg full */
 #define	FR_RXFF		(1 << 6)	/* Receive FIFO/reg full */
 #define	FR_TXFE		(1 << 7)	/* Transmit FIFO/reg empty */
@@ -167,9 +172,9 @@ uart_pl011_param(struct uart_bas *bas, int baudrate, int databits, int stopbits,
 		line |= LCR_H_PEN;
 	else
 		line &= ~LCR_H_PEN;
+	line |= LCR_H_FEN;
 
 	/* Configure the rest */
-	line &=  ~LCR_H_FEN;
 	ctrl |= (CR_RXE | CR_TXE | CR_UARTEN);
 
 	if (bas->rclk != 0 && baudrate != 0) {
@@ -192,7 +197,7 @@ uart_pl011_init(struct uart_bas *bas, int baudrate, int databits, int stopbits,
 	/* Mask all interrupts */
 	__uart_setreg(bas, UART_IMSC, __uart_getreg(bas, UART_IMSC) &
 	    ~IMSC_MASK_ALL);
-	
+
 	uart_pl011_param(bas, baudrate, databits, stopbits, parity);
 }
 
@@ -215,7 +220,7 @@ static int
 uart_pl011_rxready(struct uart_bas *bas)
 {
 
-	return (__uart_getreg(bas, UART_FR) & FR_RXFF);
+	return !(__uart_getreg(bas, UART_FR) & FR_RXFE);
 }
 
 static int
@@ -234,13 +239,8 @@ uart_pl011_getc(struct uart_bas *bas, struct mtx *hwmtx)
  * High-level UART interface.
  */
 struct uart_pl011_softc {
-	struct uart_softc base;
-	uint8_t		fcr;
-	uint8_t		ier;
-	uint8_t		mcr;
-
-	uint8_t		ier_mask;
-	uint8_t		ier_rxbits;
+	struct uart_softc	base;
+	uint16_t		imsc; /* Interrupt mask */
 };
 
 static int uart_pl011_bus_attach(struct uart_softc *);
@@ -296,8 +296,8 @@ UART_FDT_CLASS_AND_DEVICE(compat_data);
 
 #ifdef DEV_ACPI
 static struct acpi_uart_compat_data acpi_compat_data[] = {
-	{"ARMH0011", &uart_pl011_class},
-	{NULL, NULL},
+	{"ARMH0011", &uart_pl011_class, ACPI_DBG2_ARM_PL011},
+	{NULL, NULL, 0},
 };
 UART_ACPI_CLASS_AND_DEVICE(acpi_compat_data);
 #endif
@@ -305,14 +305,15 @@ UART_ACPI_CLASS_AND_DEVICE(acpi_compat_data);
 static int
 uart_pl011_bus_attach(struct uart_softc *sc)
 {
+	struct uart_pl011_softc *psc;
 	struct uart_bas *bas;
-	int reg;
 
+	psc = (struct uart_pl011_softc *)sc;
 	bas = &sc->sc_bas;
 
 	/* Enable interrupts */
-	reg = (UART_RXREADY | RIS_RTIM | UART_TXEMPTY);
-	__uart_setreg(bas, UART_IMSC, reg);
+	psc->imsc = (UART_RXREADY | RIS_RTIM | UART_TXEMPTY);
+	__uart_setreg(bas, UART_IMSC, psc->imsc);
 
 	/* Clear interrupts */
 	__uart_setreg(bas, UART_ICR, IMSC_MASK_ALL);
@@ -368,12 +369,14 @@ uart_pl011_bus_ioctl(struct uart_softc *sc, int request, intptr_t data)
 static int
 uart_pl011_bus_ipend(struct uart_softc *sc)
 {
+	struct uart_pl011_softc *psc;
 	struct uart_bas *bas;
 	uint32_t ints;
 	int ipend;
-	int reg;
 
+	psc = (struct uart_pl011_softc *)sc;
 	bas = &sc->sc_bas;
+
 	uart_lock(sc->sc_hwmtx);
 	ints = __uart_getreg(bas, UART_MIS);
 	ipend = 0;
@@ -389,9 +392,7 @@ uart_pl011_bus_ipend(struct uart_softc *sc)
 			ipend |= SER_INT_TXIDLE;
 
 		/* Disable TX interrupt */
-		reg = __uart_getreg(bas, UART_IMSC);
-		reg &= ~(UART_TXEMPTY);
-		__uart_setreg(bas, UART_IMSC, reg);
+		__uart_setreg(bas, UART_IMSC, psc->imsc & ~UART_TXEMPTY);
 	}
 
 	uart_unlock(sc->sc_hwmtx);
@@ -417,8 +418,8 @@ uart_pl011_bus_probe(struct uart_softc *sc)
 
 	device_set_desc(sc->sc_dev, "PrimeCell UART (PL011)");
 
-	sc->sc_rxfifosz = 1;
-	sc->sc_txfifosz = 1;
+	sc->sc_rxfifosz = 16;
+	sc->sc_txfifosz = 16;
 
 	return (0);
 }
@@ -439,6 +440,7 @@ uart_pl011_bus_receive(struct uart_softc *sc)
 			sc->sc_rxbuf[sc->sc_rxput] = UART_STAT_OVERRUN;
 			break;
 		}
+
 		xc = __uart_getreg(bas, UART_DR);
 		rx = xc & 0xff;
 
@@ -446,8 +448,6 @@ uart_pl011_bus_receive(struct uart_softc *sc)
 			rx |= UART_STAT_FRAMERR;
 		if (xc & DR_PE)
 			rx |= UART_STAT_PARERR;
-
-		__uart_setreg(bas, UART_ICR, (UART_RXREADY | RIS_RTIM));
 
 		uart_rx_put(sc, rx);
 		ints = __uart_getreg(bas, UART_MIS);
@@ -468,10 +468,11 @@ uart_pl011_bus_setsig(struct uart_softc *sc, int sig)
 static int
 uart_pl011_bus_transmit(struct uart_softc *sc)
 {
+	struct uart_pl011_softc *psc;
 	struct uart_bas *bas;
-	int reg;
 	int i;
 
+	psc = (struct uart_pl011_softc *)sc;
 	bas = &sc->sc_bas;
 	uart_lock(sc->sc_hwmtx);
 
@@ -480,21 +481,11 @@ uart_pl011_bus_transmit(struct uart_softc *sc)
 		uart_barrier(bas);
 	}
 
-	/* If not empty wait until it is */
-	if ((__uart_getreg(bas, UART_FR) & FR_TXFE) != FR_TXFE) {
-		sc->sc_txbusy = 1;
-
-		/* Enable TX interrupt */
-		reg = __uart_getreg(bas, UART_IMSC);
-		reg |= (UART_TXEMPTY);
-		__uart_setreg(bas, UART_IMSC, reg);
-	}
+	/* Mark busy and enable TX interrupt */
+	sc->sc_txbusy = 1;
+	__uart_setreg(bas, UART_IMSC, psc->imsc);
 
 	uart_unlock(sc->sc_hwmtx);
-
-	/* No interrupt expected, schedule the next fifo write */
-	if (!sc->sc_txbusy)
-		uart_sched_softih(sc, SER_INT_TXIDLE);
 
 	return (0);
 }
@@ -502,23 +493,29 @@ uart_pl011_bus_transmit(struct uart_softc *sc)
 static void
 uart_pl011_bus_grab(struct uart_softc *sc)
 {
+	struct uart_pl011_softc *psc;
 	struct uart_bas *bas;
 
+	psc = (struct uart_pl011_softc *)sc;
 	bas = &sc->sc_bas;
+
+	/* Disable interrupts on switch to polling */
 	uart_lock(sc->sc_hwmtx);
-	__uart_setreg(bas, UART_IMSC, 	/* Switch to RX polling while grabbed */
-	    ~UART_RXREADY & __uart_getreg(bas, UART_IMSC));
+	__uart_setreg(bas, UART_IMSC, psc->imsc & ~IMSC_MASK_ALL);
 	uart_unlock(sc->sc_hwmtx);
 }
 
 static void
 uart_pl011_bus_ungrab(struct uart_softc *sc)
 {
+	struct uart_pl011_softc *psc;
 	struct uart_bas *bas;
 
+	psc = (struct uart_pl011_softc *)sc;
 	bas = &sc->sc_bas;
+
+	/* Switch to using interrupts while not grabbed */
 	uart_lock(sc->sc_hwmtx);
-	__uart_setreg(bas, UART_IMSC,	/* Switch to RX interrupts while not grabbed */
-	    UART_RXREADY | __uart_getreg(bas, UART_IMSC));
+	__uart_setreg(bas, UART_IMSC, psc->imsc);
 	uart_unlock(sc->sc_hwmtx);
 }

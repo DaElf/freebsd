@@ -349,7 +349,7 @@ mprsas_log_command(struct mpr_command *cm, u_int level, const char *fmt, ...)
 	sbuf_printf(&sb, "SMID %u ", cm->cm_desc.Default.SMID);
 	sbuf_vprintf(&sb, fmt, ap);
 	sbuf_finish(&sb);
-	mpr_dprint_field(cm->cm_sc, level, "%s", sbuf_data(&sb));
+	mpr_print_field(cm->cm_sc, "%s", sbuf_data(&sb));
 
 	va_end(ap);
 }
@@ -987,9 +987,9 @@ mprsas_action(struct cam_sim *sim, union ccb *ccb)
 		cpi->max_target = sassc->maxtargets - 1;
 		cpi->max_lun = 255;
 		cpi->initiator_id = sassc->maxtargets - 1;
-		strncpy(cpi->sim_vid, "FreeBSD", SIM_IDLEN);
-		strncpy(cpi->hba_vid, "Avago Tech (LSI)", HBA_IDLEN);
-		strncpy(cpi->dev_name, cam_sim_name(sim), DEV_IDLEN);
+		strlcpy(cpi->sim_vid, "FreeBSD", SIM_IDLEN);
+		strlcpy(cpi->hba_vid, "Avago Tech", HBA_IDLEN);
+		strlcpy(cpi->dev_name, cam_sim_name(sim), DEV_IDLEN);
 		cpi->unit_number = cam_sim_unit(sim);
 		cpi->bus_id = cam_sim_bus(sim);
 		/*
@@ -1846,8 +1846,12 @@ mprsas_action_scsiio(struct mprsas_softc *sassc, union ccb *ccb)
 
 	if (csio->ccb_h.flags & CAM_CDB_POINTER)
 		bcopy(csio->cdb_io.cdb_ptr, &req->CDB.CDB32[0], csio->cdb_len);
-	else
+	else {
+		KASSERT(csio->cdb_len <= IOCDBLEN,
+		    ("cdb_len %d is greater than IOCDBLEN but CAM_CDB_POINTER is not set",
+		     csio->cdb_len));
 		bcopy(csio->cdb_io.cdb_bytes, &req->CDB.CDB32[0],csio->cdb_len);
+	}
 	req->IoFlags = htole16(csio->cdb_len);
 
 	/*
@@ -2429,6 +2433,7 @@ mprsas_scsiio_complete(struct mpr_softc *sc, struct mpr_command *cm)
 		 * driver is being shutdown.
 		 */
 		if ((csio->cdb_io.cdb_bytes[0] == INQUIRY) &&
+		    (csio->data_ptr != NULL) &&
 		    ((csio->data_ptr[0] & 0x1f) == T_DIRECT) &&
 		    (sc->mapping_table[target_id].device_info &
 		    MPI2_SAS_DEVICE_INFO_SATA_DEVICE) &&
@@ -2496,8 +2501,9 @@ mprsas_scsiio_complete(struct mpr_softc *sc, struct mpr_command *cm)
 		 */
 		mprsas_set_ccbstatus(ccb, CAM_REQ_CMP_ERR);
 		mprsas_log_command(cm, MPR_INFO,
-		    "terminated ioc %x scsi %x state %x xfer %u\n",
-		    le16toh(rep->IOCStatus), rep->SCSIStatus, rep->SCSIState,
+		    "terminated ioc %x loginfo %x scsi %x state %x xfer %u\n",
+		    le16toh(rep->IOCStatus), le32toh(rep->IOCLogInfo),
+		    rep->SCSIStatus, rep->SCSIState,
 		    le32toh(rep->TransferCount));
 		break;
 	case MPI2_IOCSTATUS_INVALID_FUNCTION:
@@ -2512,8 +2518,9 @@ mprsas_scsiio_complete(struct mpr_softc *sc, struct mpr_command *cm)
 	case MPI2_IOCSTATUS_SCSI_TASK_MGMT_FAILED:
 	default:
 		mprsas_log_command(cm, MPR_XINFO,
-		    "completed ioc %x scsi %x state %x xfer %u\n",
-		    le16toh(rep->IOCStatus), rep->SCSIStatus, rep->SCSIState,
+		    "completed ioc %x loginfo %x scsi %x state %x xfer %u\n",
+		    le16toh(rep->IOCStatus), le32toh(rep->IOCLogInfo),
+		    rep->SCSIStatus, rep->SCSIState,
 		    le32toh(rep->TransferCount));
 		csio->resid = cm->cm_length;
 		mprsas_set_ccbstatus(ccb, CAM_REQ_CMP_ERR);

@@ -56,13 +56,16 @@ __FBSDID("$FreeBSD$");
 
 #include "opt_inet.h"
 #include "opt_inet6.h"
-#include "opt_ipsec.h"
 #include "opt_tcpdebug.h"
 
 #include <sys/param.h>
+#include <sys/lock.h>
 #include <sys/module.h>
+#include <sys/mutex.h>
 #include <sys/kernel.h>
+#ifdef TCP_HHOOK
 #include <sys/hhook.h>
+#endif
 #include <sys/malloc.h>
 #include <sys/mbuf.h>
 #include <sys/proc.h>		/* for proc0 declaration */
@@ -112,11 +115,6 @@ __FBSDID("$FreeBSD$");
 #ifdef TCP_OFFLOAD
 #include <netinet/tcp_offload.h>
 #endif
-
-#ifdef IPSEC
-#include <netipsec/ipsec.h>
-#include <netipsec/ipsec6.h>
-#endif /*IPSEC*/
 
 #include <machine/in_cksum.h>
 
@@ -169,7 +167,7 @@ static void	 tcp_do_segment_fastack(struct mbuf *, struct tcphdr *,
 static void
 tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	       struct tcpcb *tp, struct tcpopt *to, int drop_hdrlen, int tlen, 
-	       int ti_locked, u_long tiwin)
+	       int ti_locked, uint32_t tiwin)
 {
 	int acked;
 	uint16_t nsegs;
@@ -248,7 +246,7 @@ tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	 */
 	if ((to->to_flags & TOF_TS) != 0 &&
 	    to->to_tsecr) {
-		u_int t;
+		uint32_t t;
 
 		t = tcp_ts_getticks() - to->to_tsecr;
 		if (!tp->t_rttlow || tp->t_rttlow > t)
@@ -266,8 +264,10 @@ tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	if (winup_only == 0) {
 		acked = BYTES_THIS_ACK(tp, th);
 
+#ifdef TCP_HHOOK
 		/* Run HHOOK_TCP_ESTABLISHED_IN helper hooks. */
 		hhook_run_tcp_est_in(tp, th, to);
+#endif
 
 		TCPSTAT_ADD(tcps_rcvackbyte, acked);
 		sbdrop(&so->so_snd, acked);
@@ -306,7 +306,7 @@ tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 				  (void *)tcp_saveipgen,
 				  &tcp_savetcp, 0);
 #endif
-		TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
+		TCP_PROBE3(debug__input, tp, th, m);
 		m_freem(m);
 		if (tp->snd_una == tp->snd_max)
 			tcp_timer_activate(tp, TT_REXMT, 0);
@@ -343,7 +343,7 @@ tcp_do_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 static void
 tcp_do_fastnewdata(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		   struct tcpcb *tp, struct tcpopt *to, int drop_hdrlen, int tlen, 
-		   int ti_locked, u_long tiwin)
+		   int ti_locked, uint32_t tiwin)
 {
 	int newsize = 0;	/* automatic sockbuf scaling */
 #ifdef TCPDEBUG
@@ -398,7 +398,7 @@ tcp_do_fastnewdata(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		tcp_trace(TA_INPUT, ostate, tp,
 			  (void *)tcp_saveipgen, &tcp_savetcp, 0);
 #endif
-	TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
+	TCP_PROBE3(debug__input, tp, th, m);
 	/*
 	 * Automatic sizing of receive socket buffer.  Often the send
 	 * buffer size is not optimally adjusted to the actual network
@@ -501,7 +501,7 @@ tcp_do_fastnewdata(struct mbuf *m, struct tcphdr *th, struct socket *so,
 static void
 tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		struct tcpcb *tp, struct tcpopt *to, int drop_hdrlen, int tlen, 
-		int ti_locked, u_long tiwin, int thflags)
+		int ti_locked, uint32_t tiwin, int thflags)
 {
 	int  acked, ourfinisacked, needoutput = 0;
 	int rstreason, todrop, win;
@@ -573,8 +573,7 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			goto dropwithreset;
 		}
 		if ((thflags & (TH_ACK|TH_RST)) == (TH_ACK|TH_RST)) {
-			TCP_PROBE5(connect__refused, NULL, tp,
-			    mtod(m, const char *), tp, th);
+			TCP_PROBE5(connect__refused, NULL, tp, m, tp, th);
 			tp = tcp_drop(tp, ECONNREFUSED);
 		}
 		if (thflags & TH_RST)
@@ -595,7 +594,7 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 				(TF_RCVD_SCALE|TF_REQ_SCALE)) {
 				tp->rcv_scale = tp->request_r_scale;
 			}
-			tp->rcv_adv += imin(tp->rcv_wnd,
+			tp->rcv_adv += min(tp->rcv_wnd,
 			    TCP_MAXWIN << tp->rcv_scale);
 			tp->snd_una++;		/* SYN is acked */
 			/*
@@ -627,7 +626,7 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			} else {
 				tcp_state_change(tp, TCPS_ESTABLISHED);
 				TCP_PROBE5(connect__established, NULL, tp,
-				    mtod(m, const char *), tp, th);
+				    m, tp, th);
 				cc_conn_init(tp);
 				tcp_timer_activate(tp, TT_KEEP,
 				    TP_KEEPIDLE(tp));
@@ -740,9 +739,10 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 				case TCPS_FIN_WAIT_1:
 				case TCPS_FIN_WAIT_2:
 				case TCPS_CLOSE_WAIT:
+				case TCPS_CLOSING:
+				case TCPS_LAST_ACK:
 					so->so_error = ECONNRESET;
 				close:
-					tcp_state_change(tp, TCPS_CLOSED);
 					/* FALLTHROUGH */
 				default:
 					tp = tcp_close(tp);
@@ -997,7 +997,7 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		} else {
 			tcp_state_change(tp, TCPS_ESTABLISHED);
 			TCP_PROBE5(accept__established, NULL, tp,
-			    mtod(m, const char *), tp, th);
+			    m, tp, th);
 			cc_conn_init(tp);
 			tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp));
 		}
@@ -1040,8 +1040,10 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			 */
 			tp->sackhint.sacked_bytes = 0;
 
+#ifdef TCP_HHOOK
 		/* Run HHOOK_TCP_ESTABLISHED_IN helper hooks. */
 		hhook_run_tcp_est_in(tp, th, to);
+#endif
 
 		if (SEQ_LEQ(th->th_ack, tp->snd_una)) {
 			if (tlen == 0 && tiwin == tp->snd_wnd) {
@@ -1111,6 +1113,15 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 
 						if (awnd < tp->snd_ssthresh) {
 							tp->snd_cwnd += tp->t_maxseg;
+							/*
+							 * RFC5681 Section 3.2 talks about cwnd
+							 * inflation on additional dupacks and
+							 * deflation on recovering from loss.
+							 *
+							 * We keep cwnd into check so that
+							 * we don't have to 'deflate' it when we
+							 * get out of recovery.
+							 */
 							if (tp->snd_cwnd > tp->snd_ssthresh)
 								tp->snd_cwnd = tp->snd_ssthresh;
 						}
@@ -1150,19 +1161,22 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 						TCPSTAT_INC(
 						    tcps_sack_recovery_episode);
 						tp->sack_newdata = tp->snd_nxt;
-						tp->snd_cwnd = tp->t_maxseg;
+						if (CC_ALGO(tp)->cong_signal == NULL)
+							tp->snd_cwnd = tp->t_maxseg;
 						(void) tp->t_fb->tfb_tcp_output(tp);
 						goto drop;
 					}
 					tp->snd_nxt = th->th_ack;
-					tp->snd_cwnd = tp->t_maxseg;
+					if (CC_ALGO(tp)->cong_signal == NULL)
+						tp->snd_cwnd = tp->t_maxseg;
 					(void) tp->t_fb->tfb_tcp_output(tp);
 					KASSERT(tp->snd_limited <= 2,
 					    ("%s: tp->snd_limited too big",
 					    __func__));
-					tp->snd_cwnd = tp->snd_ssthresh +
-					     tp->t_maxseg *
-					     (tp->t_dupacks - tp->snd_limited);
+					if (CC_ALGO(tp)->cong_signal == NULL)
+						tp->snd_cwnd = tp->snd_ssthresh +
+						    tp->t_maxseg *
+						    (tp->t_dupacks - tp->snd_limited);
 					if (SEQ_GT(onxt, tp->snd_nxt))
 						tp->snd_nxt = onxt;
 					goto drop;
@@ -1179,7 +1193,7 @@ tcp_do_slowpath(struct mbuf *m, struct tcphdr *th, struct socket *so,
 					 */
 					cc_ack_received(tp, th, nsegs,
 					    CC_DUPACK);
-					u_long oldcwnd = tp->snd_cwnd;
+					uint32_t oldcwnd = tp->snd_cwnd;
 					tcp_seq oldsndmax = tp->snd_max;
 					u_int sent;
 					int avail;
@@ -1296,7 +1310,7 @@ process_ACK:
 		 * huge RTT and blow up the retransmit timer.
 		 */
 		if ((to->to_flags & TOF_TS) != 0 && to->to_tsecr) {
-			u_int t;
+			uint32_t t;
 
 			t = tcp_ts_getticks() - to->to_tsecr;
 			if (!tp->t_rttlow || tp->t_rttlow > t)
@@ -1500,7 +1514,7 @@ step6:
 		 * but if two URG's are pending at once, some out-of-band
 		 * data may creep in... ick.
 		 */
-		if (th->th_urp <= (u_long)tlen &&
+		if (th->th_urp <= (uint32_t)tlen &&
 		    !(so->so_options & SO_OOBINLINE)) {
 			/* hdr drop is delayed */
 			tcp_pulloutofband(so, th, m, drop_hdrlen);
@@ -1655,7 +1669,7 @@ dodata:							/* XXX */
 		tcp_trace(TA_INPUT, ostate, tp, (void *)tcp_saveipgen,
 			  &tcp_savetcp, 0);
 #endif
-	TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
+	TCP_PROBE3(debug__input, tp, th, m);
 
 	/*
 	 * Return any desired output.
@@ -1702,7 +1716,7 @@ dropafterack:
 		tcp_trace(TA_DROP, ostate, tp, (void *)tcp_saveipgen,
 			  &tcp_savetcp, 0);
 #endif
-	TCP_PROBE3(debug__drop, tp, th, mtod(m, const char *));
+	TCP_PROBE3(debug__drop, tp, th, m);
 	if (ti_locked == TI_RLOCKED) {
 		INP_INFO_RUNLOCK(&V_tcbinfo);
 	}
@@ -1745,7 +1759,7 @@ drop:
 		tcp_trace(TA_DROP, ostate, tp, (void *)tcp_saveipgen,
 			  &tcp_savetcp, 0);
 #endif
-	TCP_PROBE3(debug__drop, tp, th, mtod(m, const char *));
+	TCP_PROBE3(debug__drop, tp, th, m);
 	if (tp != NULL)
 		INP_WUNLOCK(tp->t_inpcb);
 	m_freem(m);
@@ -1765,7 +1779,7 @@ tcp_do_segment_fastslow(struct mbuf *m, struct tcphdr *th, struct socket *so,
 			int ti_locked)
 {
 	int thflags;
-	u_long tiwin;
+	uint32_t tiwin;
 	char *s;
 	uint16_t nsegs;
 	int can_enter;
@@ -1811,8 +1825,6 @@ tcp_do_segment_fastslow(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	 * validation to ignore broken/spoofed segs.
 	 */
 	tp->t_rcvtime = ticks;
-	if (TCPS_HAVEESTABLISHED(tp->t_state))
-		tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp));
 
 	/*
 	 * Unscale the window into a 32-bit value.
@@ -1991,7 +2003,7 @@ tcp_do_segment_fastslow(struct mbuf *m, struct tcphdr *th, struct socket *so,
 static int
 tcp_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	       struct tcpcb *tp, struct tcpopt *to, int drop_hdrlen, int tlen, 
-	       int ti_locked, u_long tiwin)
+	       int ti_locked, uint32_t tiwin)
 {
 	int acked;
 	uint16_t nsegs;
@@ -2109,7 +2121,7 @@ tcp_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	 */
 	if ((to->to_flags & TOF_TS) != 0 &&
 	    to->to_tsecr) {
-		u_int t;
+		uint32_t t;
 
 		t = tcp_ts_getticks() - to->to_tsecr;
 		if (!tp->t_rttlow || tp->t_rttlow > t)
@@ -2127,8 +2139,10 @@ tcp_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	if (winup_only == 0) {
 		acked = BYTES_THIS_ACK(tp, th);
 
+#ifdef TCP_HHOOK
 		/* Run HHOOK_TCP_ESTABLISHED_IN helper hooks. */
 		hhook_run_tcp_est_in(tp, th, to);
+#endif
 
 		TCPSTAT_ADD(tcps_rcvackbyte, acked);
 		sbdrop(&so->so_snd, acked);
@@ -2162,7 +2176,7 @@ tcp_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 				  (void *)tcp_saveipgen,
 				  &tcp_savetcp, 0);
 #endif
-		TCP_PROBE3(debug__input, tp, th, mtod(m, const char *));
+		TCP_PROBE3(debug__input, tp, th, m);
 		m_freem(m);
 		if (tp->snd_una == tp->snd_max)
 			tcp_timer_activate(tp, TT_REXMT, 0);
@@ -2213,7 +2227,7 @@ tcp_do_segment_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 		       int ti_locked)
 {
 	int thflags;
-	u_long tiwin;
+	uint32_t tiwin;
 	char *s;
 	struct in_conninfo *inc;
 	struct tcpopt to;
@@ -2256,8 +2270,6 @@ tcp_do_segment_fastack(struct mbuf *m, struct tcphdr *th, struct socket *so,
 	 * validation to ignore broken/spoofed segs.
 	 */
 	tp->t_rcvtime = ticks;
-	if (TCPS_HAVEESTABLISHED(tp->t_state))
-		tcp_timer_activate(tp, TT_KEEP, TP_KEEPIDLE(tp));
 
 	/*
 	 * Unscale the window into a 32-bit value.

@@ -3,7 +3,7 @@
 .include <src.opts.mk>
 
 PROG=	fstyp
-SRCS=	cd9660.c ext2fs.c fstyp.c geli.c msdosfs.c ntfs.c ufs.c
+SRCS=	cd9660.c exfat.c ext2fs.c fstyp.c geli.c msdosfs.c ntfs.c ufs.c
 
 .if ${MK_ZFS} != "no"
 SRCS +=	zfs.c
@@ -14,8 +14,9 @@ MAN=	fstyp.8
 WARNS?=	2
 
 .include <src.opts.mk>
+.include <bsd.endian.mk>
 
-.if ${MK_TESTS} != "no"
+.if ${MK_TESTS} != "no" && ${TARGET_ENDIANNESS} == 1234
 SUBDIR+=	tests
 .endif
 

@@ -89,7 +89,7 @@
 #define	 ISS_DATa_CM		(0x01 << 8)
 #define	 ISS_INSN_S1PTW		(0x01 << 7)
 #define	 ISS_DATa_WnR		(0x01 << 6)
-#define	 ISS_DATA_DFSC_MASK	(0x1f << 0)
+#define	 ISS_DATA_DFSC_MASK	(0x3f << 0)
 #define	 ISS_DATA_DFSC_ASF_L0	(0x00 << 0)
 #define	 ISS_DATA_DFSC_ASF_L1	(0x01 << 0)
 #define	 ISS_DATA_DFSC_ASF_L2	(0x02 << 0)
@@ -115,7 +115,7 @@
 #define	 ISS_DATA_DFSC_ECC_L2	(0x1e << 0)
 #define	 ISS_DATA_DFSC_ECC_L3	(0x1f << 0)
 #define	 ISS_DATA_DFSC_ALIGN	(0x21 << 0)
-#define	 ISS_DATA_DFSC_TLB_CONFLICT (0x28 << 0)
+#define	 ISS_DATA_DFSC_TLB_CONFLICT (0x30 << 0)
 #define	ESR_ELx_IL		(0x01 << 25)
 #define	ESR_ELx_EC_SHIFT	26
 #define	ESR_ELx_EC_MASK		(0x3f << 26)
@@ -357,6 +357,10 @@
 /* MAIR_EL1 - Memory Attribute Indirection Register */
 #define	MAIR_ATTR_MASK(idx)	(0xff << ((n)* 8))
 #define	MAIR_ATTR(attr, idx) ((attr) << ((idx) * 8))
+#define	 MAIR_DEVICE_nGnRnE	0x00
+#define	 MAIR_NORMAL_NC		0x44
+#define	 MAIR_NORMAL_WT		0x88
+#define	 MAIR_NORMAL_WB		0xff
 
 /* PAR_EL1 - Physical Address Register */
 #define	PAR_F_SHIFT		0

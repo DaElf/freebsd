@@ -29,7 +29,7 @@
 .\"
 .\" $FreeBSD$
 .\"
-.Dd July 3, 2015
+.Dd February 27, 2017
 .Dt SETKEY 8
 .Os
 .\"
@@ -270,8 +270,6 @@ must be a decimal number, or a hexadecimal number with
 prefix.
 SPI values between 0 and 255 are reserved for future use by IANA
 and they cannot be used.
-TCP-MD5 associations must use 0x1000 and therefore only have per-host
-granularity at this time.
 .\"
 .Pp
 .It Ar extensions
@@ -595,12 +593,11 @@ keyed-md5	128		ah: 96bit ICV (no document)
 keyed-sha1	160		ah: 96bit ICV (no document)
 		160		ah-old: 128bit ICV (no document)
 null		0 to 2048	for debugging
-hmac-sha2-256	256		ah: 96bit ICV
-				(draft-ietf-ipsec-ciph-sha-256-00)
+hmac-sha2-256	256		ah: 128bit ICV (RFC4868)
 		256		ah-old: 128bit ICV (no document)
-hmac-sha2-384	384		ah: 96bit ICV (no document)
+hmac-sha2-384	384		ah: 192bit ICV (RFC4868)
 		384		ah-old: 128bit ICV (no document)
-hmac-sha2-512	512		ah: 96bit ICV (no document)
+hmac-sha2-512	512		ah: 256bit ICV (RFC4868)
 		512		ah-old: 128bit ICV (no document)
 hmac-ripemd160	160		ah: 96bit ICV (RFC2857)
 				ah-old: 128bit ICV (no document)
@@ -713,6 +710,8 @@ The
 .Nm
 utility first appeared in WIDE Hydrangea IPv6 protocol stack kit.
 The utility was completely re-designed in June 1998.
+It first appeared in
+.Fx 4.0 .
 .\"
 .Sh BUGS
 The

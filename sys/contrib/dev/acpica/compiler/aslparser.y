@@ -6,7 +6,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -66,6 +66,7 @@ void *
 AslLocalAllocate (
     unsigned int            Size);
 
+
 /* Bison/yacc configuration */
 
 #define static
@@ -99,7 +100,7 @@ AslLocalAllocate (
  * These shift/reduce conflicts are expected. There should be zero
  * reduce/reduce conflicts.
  */
-%expect 101
+%expect 102
 
 /*! [Begin] no source code translation */
 
@@ -122,8 +123,11 @@ m4_include(asltypes.y)
 /* Production rules */
 
 m4_include(aslrules.y)
+m4_include(aslprimaries.y)
 m4_include(aslcstyle.y)
+m4_include(aslkeywords.y)
 m4_include(aslresources.y)
+m4_include(aslhelpers.y)
 %%
 
 /*! [End] no source code translation !*/

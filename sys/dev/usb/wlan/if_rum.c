@@ -1118,7 +1118,6 @@ tr_setup:
 
 				tap->wt_flags = 0;
 				tap->wt_rate = data->rate;
-				rum_get_tsf(sc, &tap->wt_tsf);
 				tap->wt_antenna = sc->tx_ant;
 
 				ieee80211_radiotap_tx(vap, m);
@@ -1504,11 +1503,10 @@ rum_tx_crypto_flags(struct rum_softc *sc, struct ieee80211_node *ni,
 static int
 rum_tx_mgt(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 {
-	struct ieee80211vap *vap = ni->ni_vap;
+	const struct ieee80211_txparam *tp = ni->ni_txparms;
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct rum_tx_data *data;
 	struct ieee80211_frame *wh;
-	const struct ieee80211_txparam *tp;
 	struct ieee80211_key *k = NULL;
 	uint32_t flags = 0;
 	uint16_t dur;
@@ -1537,8 +1535,6 @@ rum_tx_mgt(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 
 		wh = mtod(m0, struct ieee80211_frame *);
 	}
-
-	tp = &vap->iv_txparms[ieee80211_chan2mode(ic->ic_curchan)];
 
 	if (!IEEE80211_IS_MULTICAST(wh->i_addr1)) {
 		flags |= RT2573_TX_NEED_ACK;
@@ -1643,7 +1639,7 @@ rum_tx_data(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 	struct ieee80211com *ic = &sc->sc_ic;
 	struct rum_tx_data *data;
 	struct ieee80211_frame *wh;
-	const struct ieee80211_txparam *tp;
+	const struct ieee80211_txparam *tp = ni->ni_txparms;
 	struct ieee80211_key *k = NULL;
 	uint32_t flags = 0;
 	uint16_t dur;
@@ -1662,15 +1658,16 @@ rum_tx_data(struct rum_softc *sc, struct mbuf *m0, struct ieee80211_node *ni)
 		qos = 0;
 	ac = M_WME_GETAC(m0);
 
-	tp = &vap->iv_txparms[ieee80211_chan2mode(ni->ni_chan)];
-	if (IEEE80211_IS_MULTICAST(wh->i_addr1))
+	if (m0->m_flags & M_EAPOL)
+		rate = tp->mgmtrate;
+	else if (IEEE80211_IS_MULTICAST(wh->i_addr1))
 		rate = tp->mcastrate;
 	else if (tp->ucastrate != IEEE80211_FIXED_RATE_NONE)
 		rate = tp->ucastrate;
-	else if (m0->m_flags & M_EAPOL)
-		rate = tp->mgmtrate;
-	else
+	else {
+		(void) ieee80211_ratectl_rate(ni, NULL, 0);
 		rate = ni->ni_txrate;
+	}
 
 	if (wh->i_fc[1] & IEEE80211_FC1_PROTECTED) {
 		k = ieee80211_crypto_get_txkey(ni, m0);
@@ -2189,12 +2186,11 @@ rum_set_chan(struct rum_softc *sc, struct ieee80211_channel *c)
 static void
 rum_set_maxretry(struct rum_softc *sc, struct ieee80211vap *vap)
 {
-	const struct ieee80211_txparam *tp;
 	struct ieee80211_node *ni = vap->iv_bss;
+	const struct ieee80211_txparam *tp = ni->ni_txparms;
 	struct rum_vap *rvp = RUM_VAP(vap);
 
-	tp = &vap->iv_txparms[ieee80211_chan2mode(ni->ni_chan)];
-	rvp->maxretry = tp->maxretry < 0xf ? tp->maxretry : 0xf;
+	rvp->maxretry = MIN(tp->maxretry, 0xf);
 
 	rum_modbits(sc, RT2573_TXRX_CSR4, RT2573_SHORT_RETRY(rvp->maxretry) |
 	    RT2573_LONG_RETRY(rvp->maxretry),
@@ -3045,7 +3041,7 @@ rum_key_alloc(struct ieee80211vap *vap, struct ieee80211_key *k,
 		} else
 			*keyix = 0;
 	} else {
-		*keyix = k - vap->iv_nw_keys;
+		*keyix = ieee80211_crypto_get_key_wepidx(vap, k);
 	}
 	*rxkeyix = *keyix;
 	return 1;
@@ -3155,9 +3151,8 @@ rum_ratectl_task(void *arg, int pending)
 	struct rum_vap *rvp = arg;
 	struct ieee80211vap *vap = &rvp->vap;
 	struct rum_softc *sc = vap->iv_ic->ic_softc;
-	struct ieee80211_node *ni;
+	struct ieee80211_ratectl_tx_stats *txs = &sc->sc_txs;
 	int ok[3], fail;
-	int sum, success, retrycnt;
 
 	RUM_LOCK(sc);
 	/* read and clear statistic registers (STA_CSR0 to STA_CSR5) */
@@ -3168,17 +3163,14 @@ rum_ratectl_task(void *arg, int pending)
 	ok[2] = (le32toh(sc->sta[5]) & 0xffff);	/* TX ok w/ multiple retries */
 	fail =  (le32toh(sc->sta[5]) >> 16);	/* TX retry-fail count */
 
-	success = ok[0] + ok[1] + ok[2];
-	sum = success + fail;
+	txs->flags = IEEE80211_RATECTL_TX_STATS_RETRIES;
+	txs->nframes = ok[0] + ok[1] + ok[2] + fail;
+	txs->nsuccess = txs->nframes - fail;
 	/* XXX at least */
-	retrycnt = ok[1] + ok[2] * 2 + fail * (rvp->maxretry + 1);
+	txs->nretries = ok[1] + ok[2] * 2 + fail * (rvp->maxretry + 1);
 
-	if (sum != 0) {
-		ni = ieee80211_ref_node(vap->iv_bss);
-		ieee80211_ratectl_tx_update(vap, ni, &sum, &ok, &retrycnt);
-		(void) ieee80211_ratectl_rate(ni, NULL, 0);
-		ieee80211_free_node(ni);
-	}
+	if (txs->nframes != 0)
+		ieee80211_ratectl_tx_update(vap, txs);
 
 	/* count TX retry-fail as Tx errors */
 	if_inc_counter(vap->iv_ifp, IFCOUNTER_OERRORS, fail);

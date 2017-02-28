@@ -872,10 +872,11 @@ pte_remove(mmu_t mmu, pmap_t pmap, vm_offset_t va, uint8_t flags)
 	if (PTE_ISWIRED(pte))
 		pmap->pm_stats.wired_count--;
 
+	/* Get vm_page_t for mapped pte. */
+	m = PHYS_TO_VM_PAGE(PTE_PA(pte));
+
 	/* Handle managed entry. */
 	if (PTE_ISMANAGED(pte)) {
-		/* Get vm_page_t for mapped pte. */
-		m = PHYS_TO_VM_PAGE(PTE_PA(pte));
 
 		if (PTE_ISMODIFIED(pte))
 			vm_page_dirty(m);
@@ -884,6 +885,15 @@ pte_remove(mmu_t mmu, pmap_t pmap, vm_offset_t va, uint8_t flags)
 			vm_page_aflag_set(m, PGA_REFERENCED);
 
 		pv_remove(pmap, va, m);
+	} else if (m->md.pv_tracked) {
+		/*
+		 * Always pv_insert()/pv_remove() on MPC85XX, in case DPAA is
+		 * used.  This is needed by the NCSW support code for fast
+		 * VA<->PA translation.
+		 */
+		pv_remove(pmap, va, m);
+		if (TAILQ_EMPTY(&m->md.pv_list))
+			m->md.pv_tracked = false;
 	}
 
 	mtx_lock_spin(&tlbivax_mutex);
@@ -2499,9 +2509,13 @@ mmu_booke_clear_modify(mmu_t mmu, vm_page_t m)
  * is necessary that 0 only be returned when there are truly no
  * reference bits set.
  *
- * XXX: The exact number of bits to check and clear is a matter that
- * should be tested and standardized at some point in the future for
- * optimal aging of shared pages.
+ * As an optimization, update the page's dirty field if a modified bit is
+ * found while counting reference bits.  This opportunistic update can be
+ * performed at low cost and can eliminate the need for some future calls
+ * to pmap_is_modified().  However, since this function stops after
+ * finding PMAP_TS_REFERENCED_MAX reference bits, it may not detect some
+ * dirty pages.  Those dirty pages will only be detected by a future call
+ * to pmap_is_modified().
  */
 static int
 mmu_booke_ts_referenced(mmu_t mmu, vm_page_t m)
@@ -2518,6 +2532,8 @@ mmu_booke_ts_referenced(mmu_t mmu, vm_page_t m)
 		PMAP_LOCK(pv->pv_pmap);
 		if ((pte = pte_find(mmu, pv->pv_pmap, pv->pv_va)) != NULL &&
 		    PTE_ISVALID(pte)) {
+			if (PTE_ISMODIFIED(pte))
+				vm_page_dirty(m);
 			if (PTE_ISREFERENCED(pte)) {
 				mtx_lock_spin(&tlbivax_mutex);
 				tlb_miss_lock();
@@ -2528,7 +2544,7 @@ mmu_booke_ts_referenced(mmu_t mmu, vm_page_t m)
 				tlb_miss_unlock();
 				mtx_unlock_spin(&tlbivax_mutex);
 
-				if (++count > 4) {
+				if (++count >= PMAP_TS_REFERENCED_MAX) {
 					PMAP_UNLOCK(pv->pv_pmap);
 					break;
 				}
@@ -2951,13 +2967,13 @@ mmu_booke_change_attr(mmu_t mmu, vm_offset_t addr, vm_size_t sz,
 	for (va = addr; va < addr + sz; va += PAGE_SIZE) {
 		pte = pte_find(mmu, kernel_pmap, va);
 		*pte &= ~(PTE_MAS2_MASK << PTE_MAS2_SHIFT);
-		*pte |= tlb_calc_wimg(PTE_PA(pte), mode << PTE_MAS2_SHIFT);
+		*pte |= tlb_calc_wimg(PTE_PA(pte), mode) << PTE_MAS2_SHIFT;
 		tlb0_flush_entry(va);
 	}
 	tlb_miss_unlock();
 	mtx_unlock_spin(&tlbivax_mutex);
 
-	return (pte_vatopa(mmu, kernel_pmap, va));
+	return (0);
 }
 
 /**************************************************************************/
@@ -3459,6 +3475,33 @@ pmap_early_io_map(vm_paddr_t pa, vm_size_t size)
 
 	return (va);
 }
+
+void
+pmap_track_page(pmap_t pmap, vm_offset_t va)
+{
+	vm_paddr_t pa;
+	vm_page_t page;
+	struct pv_entry *pve;
+
+	va = trunc_page(va);
+	pa = pmap_kextract(va);
+
+	rw_wlock(&pvh_global_lock);
+	PMAP_LOCK(pmap);
+	page = PHYS_TO_VM_PAGE(pa);
+
+	TAILQ_FOREACH(pve, &page->md.pv_list, pv_link) {
+		if ((pmap == pve->pv_pmap) && (va == pve->pv_va)) {
+			goto out;
+		}
+	}
+	page->md.pv_tracked = true;
+	pv_insert(pmap, va, page);
+out:
+	PMAP_UNLOCK(pmap);
+	rw_wunlock(&pvh_global_lock);
+}
+
 
 /*
  * Setup MAS4 defaults.

@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -133,7 +133,7 @@ OptSearchToRoot (
      * not match, and we cannot use this optimization.
      */
     Path = &(((char *) TargetPath->Pointer)[
-        TargetPath->Length - ACPI_NAME_SIZE]),
+        TargetPath->Length - ACPI_NAME_SIZE]);
     ScopeInfo.Scope.Node = CurrentNode;
 
     /* Lookup the NameSeg using SEARCH_PARENT (search-to-root) */

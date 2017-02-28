@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -350,6 +350,20 @@ OpnDoFieldCommon (
             PkgLengthNode = Next->Asl.Child;
             NewBitOffset = (UINT32) PkgLengthNode->Asl.Value.Integer;
             CurrentBitOffset += NewBitOffset;
+
+            if ((NewBitOffset == 0) &&
+                (Next->Asl.ParseOpcode == PARSEOP_RESERVED_BYTES))
+            {
+                /*
+                 * Unnamed field with a bit length of zero. We can
+                 * safely just ignore this. However, we will not ignore
+                 * a named field of zero length, we don't want to just
+                 * toss out a name.
+                 */
+                Next->Asl.ParseOpcode = PARSEOP_DEFAULT_ARG;
+                PkgLengthNode->Asl.ParseOpcode = PARSEOP_DEFAULT_ARG;
+                break;
+            }
 
             /* Save the current AccessAs value for error checking later */
 

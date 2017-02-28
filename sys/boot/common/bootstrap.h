@@ -73,12 +73,12 @@ int	kern_pread(int fd, vm_offset_t dest, size_t len, off_t off);
 void	*alloc_pread(int fd, off_t off, size_t len);
 
 /* bcache.c */
-void	bcache_init(u_int nblks, size_t bsize);
+void	bcache_init(size_t nblks, size_t bsize);
 void	bcache_add_dev(int);
 void	*bcache_allocate(void);
 void	bcache_free(void *);
-int	bcache_strategy(void *devdata, int rw, daddr_t blk, size_t offset,
-			size_t size, char *buf, size_t *rsize);
+int	bcache_strategy(void *devdata, int rw, daddr_t blk, size_t size,
+			char *buf, size_t *rsize);
 
 /*
  * Disk block cache
@@ -86,7 +86,7 @@ int	bcache_strategy(void *devdata, int rw, daddr_t blk, size_t offset,
 struct bcache_devdata
 {
     int         (*dv_strategy)(void *devdata, int rw, daddr_t blk,
-			size_t offset, size_t size, char *buf, size_t *rsize);
+			size_t size, char *buf, size_t *rsize);
     void	*dv_devdata;
     void	*dv_cache;
 };
@@ -141,8 +141,6 @@ struct pnpinfo
 };
 
 STAILQ_HEAD(pnpinfo_stql, pnpinfo);
-
-extern struct pnpinfo_stql pnp_devices;
 
 extern struct pnphandler	*pnphandlers[];		/* provided by MD code */
 

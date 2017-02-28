@@ -77,16 +77,15 @@ void	ieee80211_promisc(struct ieee80211vap *, bool);
 void	ieee80211_allmulti(struct ieee80211vap *, bool);
 void	ieee80211_syncflag(struct ieee80211vap *, int flag);
 void	ieee80211_syncflag_ht(struct ieee80211vap *, int flag);
+void	ieee80211_syncflag_vht(struct ieee80211vap *, int flag);
 void	ieee80211_syncflag_ext(struct ieee80211vap *, int flag);
 
 #define	ieee80211_input(ni, m, rssi, nf) \
 	((ni)->ni_vap->iv_input(ni, m, NULL, rssi, nf))
 int	ieee80211_input_all(struct ieee80211com *, struct mbuf *, int, int);
 
-int	ieee80211_input_mimo(struct ieee80211_node *, struct mbuf *,
-	    struct ieee80211_rx_stats *);
-int	ieee80211_input_mimo_all(struct ieee80211com *, struct mbuf *,
-	    struct ieee80211_rx_stats *);
+int	ieee80211_input_mimo(struct ieee80211_node *, struct mbuf *);
+int	ieee80211_input_mimo_all(struct ieee80211com *, struct mbuf *);
 
 struct ieee80211_bpf_params;
 int	ieee80211_mgmt_output(struct ieee80211_node *, struct mbuf *, int,
@@ -363,7 +362,8 @@ struct ieee80211_beacon_offsets {
 	uint8_t		*bo_csa;	/* start of CSA element */
 	uint8_t		*bo_quiet;	/* start of Quiet element */
 	uint8_t		*bo_meshconf;	/* start of MESHCONF element */
-	uint8_t		*bo_spare[3];
+	uint8_t		*bo_vhtinfo;	/* start of VHT info element (XXX VHTCAP?) */
+	uint8_t		*bo_spare[2];
 };
 struct mbuf *ieee80211_beacon_alloc(struct ieee80211_node *);
 
@@ -391,6 +391,8 @@ enum {
 	IEEE80211_BEACON_TDMA	= 9,	/* TDMA Info */
 	IEEE80211_BEACON_ATH	= 10,	/* ATH parameters */
 	IEEE80211_BEACON_MESHCONF = 11,	/* Mesh Configuration */
+	IEEE80211_BEACON_QUIET	= 12,	/* Quiet time IE */
+	IEEE80211_BEACON_VHTINFO	= 13,	/* VHT information */
 };
 int	ieee80211_beacon_update(struct ieee80211_node *,
 		struct mbuf *, int mcast);

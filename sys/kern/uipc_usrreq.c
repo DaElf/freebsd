@@ -12,7 +12,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -742,6 +742,9 @@ uipc_listen(struct socket *so, int backlog, struct thread *td)
 {
 	struct unpcb *unp;
 	int error;
+
+	if (so->so_type != SOCK_STREAM && so->so_type != SOCK_SEQPACKET)
+		return (EOPNOTSUPP);
 
 	unp = sotounpcb(so);
 	KASSERT(unp != NULL, ("uipc_listen: unp == NULL"));
@@ -1899,6 +1902,7 @@ unp_internalize(struct mbuf **controlp, struct thread *td)
 	struct filedescent *fde, **fdep, *fdev;
 	struct file *fp;
 	struct timeval *tv;
+	struct timespec *ts;
 	int i, *fdp;
 	void *data;
 	socklen_t clen = control->m_len, datalen;
@@ -2017,6 +2021,30 @@ unp_internalize(struct mbuf **controlp, struct thread *td)
 			bt = (struct bintime *)
 			    CMSG_DATA(mtod(*controlp, struct cmsghdr *));
 			bintime(bt);
+			break;
+
+		case SCM_REALTIME:
+			*controlp = sbcreatecontrol(NULL, sizeof(*ts),
+			    SCM_REALTIME, SOL_SOCKET);
+			if (*controlp == NULL) {
+				error = ENOBUFS;
+				goto out;
+			}
+			ts = (struct timespec *)
+			    CMSG_DATA(mtod(*controlp, struct cmsghdr *));
+			nanotime(ts);
+			break;
+
+		case SCM_MONOTONIC:
+			*controlp = sbcreatecontrol(NULL, sizeof(*ts),
+			    SCM_MONOTONIC, SOL_SOCKET);
+			if (*controlp == NULL) {
+				error = ENOBUFS;
+				goto out;
+			}
+			ts = (struct timespec *)
+			    CMSG_DATA(mtod(*controlp, struct cmsghdr *));
+			nanouptime(ts);
 			break;
 
 		default:

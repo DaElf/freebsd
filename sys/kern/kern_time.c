@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -387,6 +387,11 @@ sys_clock_settime(struct thread *td, struct clock_settime_args *uap)
 	return (kern_clock_settime(td, uap->clock_id, &ats));
 }
 
+static int allow_insane_settime = 0;
+SYSCTL_INT(_debug, OID_AUTO, allow_insane_settime, CTLFLAG_RWTUN,
+    &allow_insane_settime, 0,
+    "do not perform possibly restrictive checks on settime(2) args");
+
 int
 kern_clock_settime(struct thread *td, clockid_t clock_id, struct timespec *ats)
 {
@@ -399,6 +404,8 @@ kern_clock_settime(struct thread *td, clockid_t clock_id, struct timespec *ats)
 		return (EINVAL);
 	if (ats->tv_nsec < 0 || ats->tv_nsec >= 1000000000 ||
 	    ats->tv_sec < 0)
+		return (EINVAL);
+	if (!allow_insane_settime && ats->tv_sec > 9999ULL * 366 * 24 * 60 * 60)
 		return (EINVAL);
 	/* XXX Don't convert nsec->usec and back */
 	TIMESPEC_TO_TIMEVAL(&atv, ats);

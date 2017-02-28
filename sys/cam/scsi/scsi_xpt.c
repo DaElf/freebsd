@@ -1626,8 +1626,8 @@ probe_device_check:
 				  sizeof(struct scsi_inquiry_data));
 
 			if (have_serialnum)
-				MD5Update(&context, serial_buf->serial_num,
-					  serial_buf->length);
+				MD5Update(&context, path->device->serial_num,
+					  path->device->serial_num_len);
 
 			MD5Final(digest, &context);
 			if (bcmp(softc->digest, digest, 16) == 0)
@@ -3139,6 +3139,6 @@ scsi_proto_debug_out(union ccb *ccb)
 	device = ccb->ccb_h.path->device;
 	CAM_DEBUG(ccb->ccb_h.path,
 	    CAM_DEBUG_CDB,("%s. CDB: %s\n",
-		scsi_op_desc(ccb->csio.cdb_io.cdb_bytes[0], &device->inq_data),
-		scsi_cdb_string(ccb->csio.cdb_io.cdb_bytes, cdb_str, sizeof(cdb_str))));
+		scsi_op_desc(scsiio_cdb_ptr(&ccb->csio)[0], &device->inq_data),
+		scsi_cdb_string(scsiio_cdb_ptr(&ccb->csio), cdb_str, sizeof(cdb_str))));
 }

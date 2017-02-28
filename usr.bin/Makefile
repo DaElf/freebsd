@@ -6,7 +6,6 @@
 # XXX MISSING:		deroff diction graph learn plot
 #			spell spline struct xsend
 # XXX Use GNU versions: diff ld patch
-# Moved to secure: bdes
 #
 
 SUBDIR=	alias \
@@ -36,7 +35,6 @@ SUBDIR=	alias \
 	ctlstat \
 	cut \
 	dirname \
-	dpv \
 	du \
 	elf2aout \
 	elfdump \
@@ -122,6 +120,7 @@ SUBDIR=	alias \
 	pr \
 	printenv \
 	printf \
+	proccontrol \
 	procstat \
 	protect \
 	rctl \
@@ -199,6 +198,7 @@ SUBDIR.${MK_BLUETOOTH}+=	bluetooth
 SUBDIR.${MK_BSD_CPIO}+=	cpio
 SUBDIR.${MK_CALENDAR}+=	calendar
 SUBDIR.${MK_CLANG}+=	clang
+SUBDIR.${MK_DIALOG}+=	dpv
 SUBDIR.${MK_EE}+=	ee
 SUBDIR.${MK_FILE}+=	file
 SUBDIR.${MK_FINGER}+=	finger

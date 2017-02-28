@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -275,10 +275,24 @@ AslDoOptions (
         {
         case '^':
 
+            /* Get the required argument */
+
+            if (AcpiGetoptArgument (argc, argv))
+            {
+                return (-1);
+            }
+
             Gbl_DoCompile = FALSE;
             break;
 
         case 'a':
+
+            /* Get the required argument */
+
+            if (AcpiGetoptArgument (argc, argv))
+            {
+                return (-1);
+            }
 
             Gbl_DoCompile = FALSE;
             Gbl_DisassembleAll = TRUE;
@@ -388,6 +402,11 @@ AslDoOptions (
         case 'c':
 
             UtDisplayConstantOpcodes ();
+            exit (0);
+
+        case 'd':
+
+            AslDisassemblyHelp ();
             exit (0);
 
         case 'f':
@@ -537,6 +556,13 @@ AslDoOptions (
             /* Display compile time(s) */
 
             Gbl_CompileTimesFlag = TRUE;
+            break;
+
+        case 'd':
+
+            /* Disable disassembler code optimizations */
+
+            AcpiGbl_DoDisassemblerOptimizations = FALSE;
             break;
 
         case 'e':

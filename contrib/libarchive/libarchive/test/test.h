@@ -121,6 +121,32 @@
 #endif
 
 /*
+ * If this platform has <sys/acl.h>, acl_create(), acl_init(),
+ * acl_set_file(), and ACL_USER, we assume it has the rest of the
+ * POSIX.1e draft functions used in archive_read_extract.c.
+ */
+#if HAVE_SYS_ACL_H && HAVE_ACL_CREATE_ENTRY && HAVE_ACL_INIT && HAVE_ACL_SET_FILE
+#if HAVE_ACL_USER
+#define	HAVE_POSIX_ACL	1
+#elif HAVE_ACL_TYPE_EXTENDED
+#define	HAVE_DARWIN_ACL	1
+#endif
+#endif
+
+/*
+ * If this platform has <sys/acl.h>, acl_get(), facl_get(), acl_set(),
+ * facl_set() and types aclent_t and ace_t it uses Solaris-style ACL functions
+ */
+#if HAVE_SYS_ACL_H && HAVE_ACL_GET && HAVE_FACL_GET && HAVE_ACL_SET && HAVE_FACL_SET && HAVE_ACLENT_T && HAVE_ACE_T
+#define	HAVE_SUN_ACL	1
+#endif
+
+/* Define if platform supports NFSv4 ACLs */
+#if (HAVE_POSIX_ACL && HAVE_ACL_TYPE_NFS4) || HAVE_SUN_ACL || HAVE_DARWIN_ACL
+#define	HAVE_NFS4_ACL	1
+#endif
+
+/*
  * Redefine DEFINE_TEST for use in defining the test functions.
  */
 #undef DEFINE_TEST
@@ -174,6 +200,9 @@
 /* Assert that file contents match a string. */
 #define assertFileContents(data, data_size, pathname) \
   assertion_file_contents(__FILE__, __LINE__, data, data_size, pathname)
+/* Verify that a file does not contain invalid strings */
+#define assertFileContainsNoInvalidStrings(pathname, strings) \
+  assertion_file_contains_no_invalid_strings(__FILE__, __LINE__, pathname, strings)
 #define assertFileMtime(pathname, sec, nsec)	\
   assertion_file_mtime(__FILE__, __LINE__, pathname, sec, nsec)
 #define assertFileMtimeRecent(pathname) \
@@ -241,14 +270,15 @@ int assertion_file_atime_recent(const char *, int, const char *);
 int assertion_file_birthtime(const char *, int, const char *, long, long);
 int assertion_file_birthtime_recent(const char *, int, const char *);
 int assertion_file_contains_lines_any_order(const char *, int, const char *, const char **);
+int assertion_file_contains_no_invalid_strings(const char *, int, const char *, const char **);
 int assertion_file_contents(const char *, int, const void *, int, const char *);
 int assertion_file_exists(const char *, int, const char *);
+int assertion_file_mode(const char *, int, const char *, int);
 int assertion_file_mtime(const char *, int, const char *, long, long);
 int assertion_file_mtime_recent(const char *, int, const char *);
 int assertion_file_nlinks(const char *, int, const char *, int);
 int assertion_file_not_exists(const char *, int, const char *);
 int assertion_file_size(const char *, int, const char *, long);
-int assertion_file_mode(const char *, int, const char *, int);
 int assertion_is_dir(const char *, int, const char *, int);
 int assertion_is_hardlink(const char *, int, const char *, const char *);
 int assertion_is_not_hardlink(const char *, int, const char *, const char *);
@@ -329,6 +359,9 @@ void copy_reference_file(const char *);
  */
 void extract_reference_files(const char **);
 
+/* Subtract umask from mode */
+mode_t umasked(mode_t expected_mode);
+
 /* Path to working directory for current test */
 extern const char *testworkdir;
 
@@ -338,6 +371,23 @@ extern const char *testworkdir;
 
 #include "archive.h"
 #include "archive_entry.h"
+
+/* ACL structure */
+struct archive_test_acl_t {
+	int type;  /* Type of ACL */
+	int permset; /* Permissions for this class of users. */
+	int tag; /* Owner, User, Owning group, group, other, etc. */
+	int qual; /* GID or UID of user/group, depending on tag. */
+	const char *name; /* Name of user/group, depending on tag. */
+};
+
+/* Set ACLs */
+void archive_test_set_acls(struct archive_entry *, struct archive_test_acl_t *,
+    int);
+
+/* Compare ACLs */
+void archive_test_compare_acls(struct archive_entry *,
+    struct archive_test_acl_t *, int, int, int);
 
 /* Special customized read-from-memory interface. */
 int read_open_memory(struct archive *, const void *, size_t, size_t);

@@ -11,6 +11,7 @@ TAP_TESTS_SH+= detach_l_test
 TAP_TESTS_SH+= init_B_test
 TAP_TESTS_SH+= init_J_test
 TAP_TESTS_SH+= init_a_test
+TAP_TESTS_SH+= init_alias_test
 TAP_TESTS_SH+= init_i_P_test
 TAP_TESTS_SH+= init_test
 TAP_TESTS_SH+= integrity_copy_test
@@ -25,13 +26,13 @@ TAP_TESTS_SH+= readonly_test
 TAP_TESTS_SH+= resize_test
 TAP_TESTS_SH+= setkey_test
 
-TEST_METADATA.init_a_test+=	timeout="1200"
-TEST_METADATA.init_test+=	timeout="300"
-TEST_METADATA.integrity_copy_test+=	timeout="1200"
-TEST_METADATA.integrity_data_test+=	timeout="600"
-TEST_METADATA.integrity_hmac_test+=	timeout="600"
-TEST_METADATA.onetime_a_test+=	timeout="600"
-TEST_METADATA.onetime_test+=	timeout="600"
+TEST_METADATA.init_a_test+=	timeout="3600"
+TEST_METADATA.init_test+=	timeout="600"
+TEST_METADATA.integrity_copy_test+=	timeout="3600"
+TEST_METADATA.integrity_data_test+=	timeout="1800"
+TEST_METADATA.integrity_hmac_test+=	timeout="1800"
+TEST_METADATA.onetime_a_test+=	timeout="1800"
+TEST_METADATA.onetime_test+=	timeout="1800"
 
 ${PACKAGE}FILES+=		conf.sh
 

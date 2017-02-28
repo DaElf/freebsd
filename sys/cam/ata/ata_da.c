@@ -513,6 +513,14 @@ static struct ada_quirk_entry ada_quirk_table[] =
 	},
 	{
 		/*
+		 * Intel S3610 Series SSDs
+		 * 4k optimised & trim only works in 4k requests + 4k aligned
+		 */
+		{ T_DIRECT, SIP_MEDIA_FIXED, "*", "INTEL SSDSC2BX*", "*" },
+		/*quirks*/ADA_Q_4K
+	},
+	{
+		/*
 		 * Intel X25-M Series SSDs
 		 * 4k optimised & trim only works in 4k requests + 4k aligned
 		 */
@@ -566,6 +574,14 @@ static struct ada_quirk_entry ada_quirk_table[] =
 		 */
 		{ T_DIRECT, SIP_MEDIA_FIXED, "*", "Micron M5[15]0*", "MU01" },
 		/*quirks*/ADA_Q_NCQ_TRIM_BROKEN
+	},
+	{
+		/*
+		 * Micron 5100 SSDs
+		 * 4k optimised & trim only works in 4k requests + 4k aligned
+		 */
+		{ T_DIRECT, SIP_MEDIA_FIXED, "*", "Micron 5100 MTFDDAK*", "*" },
+		/*quirks*/ADA_Q_4K
 	},
 	{
 		/*
@@ -926,8 +942,7 @@ adaclose(struct disk *dp)
 
 		if (error != 0)
 			xpt_print(periph->path, "Synchronize cache failed\n");
-		else
-			softc->flags &= ~ADA_FLAG_DIRTY;
+		softc->flags &= ~ADA_FLAG_DIRTY;
 		xpt_release_ccb(ccb);
 		cam_periph_unhold(periph);
 	}
@@ -1395,9 +1410,9 @@ adasysctlinit(void *context, int pending)
 
 	sysctl_ctx_init(&softc->sysctl_ctx);
 	softc->flags |= ADA_FLAG_SCTX_INIT;
-	softc->sysctl_tree = SYSCTL_ADD_NODE(&softc->sysctl_ctx,
+	softc->sysctl_tree = SYSCTL_ADD_NODE_WITH_LABEL(&softc->sysctl_ctx,
 		SYSCTL_STATIC_CHILDREN(_kern_cam_ada), OID_AUTO, tmpstr2,
-		CTLFLAG_RD, 0, tmpstr);
+		CTLFLAG_RD, 0, tmpstr, "device_index");
 	if (softc->sysctl_tree == NULL) {
 		printf("adasysctlinit: unable to allocate sysctl tree\n");
 		cam_periph_release(periph);

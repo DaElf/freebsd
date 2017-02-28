@@ -697,6 +697,9 @@ static struct
 	{PCIC_CRYPTO,		PCIS_CRYPTO_NETCOMP,	"entertainment crypto"},
 	{PCIC_DASP,		-1,			"dasp"},
 	{PCIC_DASP,		PCIS_DASP_DPIO,		"DPIO module"},
+	{PCIC_DASP,		PCIS_DASP_PERFCNTRS,	"performance counters"},
+	{PCIC_DASP,		PCIS_DASP_COMM_SYNC,	"communication synchronizer"},
+	{PCIC_DASP,		PCIS_DASP_MGMT_CARD,	"signal processing management"},
 	{0, 0,		NULL}
 };
 
@@ -876,7 +879,8 @@ getdevice(const char *name)
 		errx(1, "Device name is too long");
 	memcpy(patterns[0].pd_name, name, cp - name);
 	patterns[0].pd_unit = strtol(cp, &cp, 10);
-	assert(*cp == '\0');
+	if (*cp != '\0')
+		errx(1, "Invalid device name");
 	patterns[0].flags = PCI_GETCONF_MATCH_NAME | PCI_GETCONF_MATCH_UNIT;
 	pc.num_patterns = 1;
 	pc.pat_buf_len = sizeof(patterns);
@@ -914,11 +918,8 @@ parsesel(const char *str)
 		while (isdigit(*ep) && i < 4) {
 			selarr[i++] = strtoul(ep, &eppos, 10);
 			ep = eppos;
-			if (*ep == ':') {
+			if (*ep == ':')
 				ep++;
-				if (*ep  == '\0')
-					i = 0;
-			}
 		}
 		if (i > 0 && *ep == '\0') {
 			sel.pc_func = (i > 2) ? selarr[--i] : 0;

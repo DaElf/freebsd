@@ -27,6 +27,7 @@
  * Copyright (c) 2014 Spectra Logic Corporation, All rights reserved.
  * Copyright 2013 Saso Kiselkov. All rights reserved.
  * Copyright (c) 2014 Integros [integros.com]
+ * Copyright 2016 Toomas Soome <tsoome@me.com>
  */
 
 /*
@@ -167,15 +168,11 @@ id_t		zio_taskq_psrset_bind = PS_NONE;
 #endif
 #ifdef SYSDC
 boolean_t	zio_taskq_sysdc = B_TRUE;	/* use SDC scheduling class */
-#endif
 uint_t		zio_taskq_basedc = 80;		/* base duty cycle */
+#endif
 
 boolean_t	spa_create_process = B_TRUE;	/* no process ==> no sysdc */
 extern int	zfs_sync_pass_deferred_free;
-
-#ifndef illumos
-extern void spa_deadman(void *arg);
-#endif
 
 /*
  * This (illegal) pool name is used when temporarily importing a spa_t in order
@@ -538,12 +535,6 @@ spa_prop_validate(spa_t *spa, nvlist_t *props)
 				    zfs_prop_to_name(ZFS_PROP_COMPRESSION),
 				    &propval)) == 0 &&
 				    !BOOTFS_COMPRESS_VALID(propval)) {
-					error = SET_ERROR(ENOTSUP);
-				} else if ((error =
-				    dsl_prop_get_int_ds(dmu_objset_ds(os),
-				    zfs_prop_to_name(ZFS_PROP_RECORDSIZE),
-				    &propval)) == 0 &&
-				    propval > SPA_OLD_MAXBLOCKSIZE) {
 					error = SET_ERROR(ENOTSUP);
 				} else {
 					objnum = dmu_objset_id(os);
@@ -927,9 +918,17 @@ spa_taskqs_init(spa_t *spa, zio_type_t t, zio_taskq_type_t q)
 			 * The write issue taskq can be extremely CPU
 			 * intensive.  Run it at slightly lower priority
 			 * than the other taskqs.
+			 * FreeBSD notes:
+			 * - numerically higher priorities are lower priorities;
+			 * - if priorities divided by four (RQ_PPQ) are equal
+			 *   then a difference between them is insignificant.
 			 */
 			if (t == ZIO_TYPE_WRITE && q == ZIO_TASKQ_ISSUE)
-				pri++;
+#ifdef illumos
+				pri--;
+#else
+				pri += 4;
+#endif
 
 			tq = taskq_create_proc(name, value, pri, 50,
 			    INT_MAX, spa->spa_proc, flags);
@@ -6880,8 +6879,8 @@ spa_sync(spa_t *spa, uint64_t txg)
 	    spa->spa_sync_starttime + spa->spa_deadman_synctime));
 #else	/* !illumos */
 #ifdef _KERNEL
-	callout_reset(&spa->spa_deadman_cycid,
-	    hz * spa->spa_deadman_synctime / NANOSEC, spa_deadman, spa);
+	callout_schedule(&spa->spa_deadman_cycid,
+	    hz * spa->spa_deadman_synctime / NANOSEC);
 #endif
 #endif	/* illumos */
 
@@ -7091,8 +7090,6 @@ spa_sync(spa_t *spa, uint64_t txg)
 		spa->spa_config_syncing = NULL;
 	}
 
-	spa->spa_ubsync = spa->spa_uberblock;
-
 	dsl_pool_sync_done(dp, txg);
 
 	mutex_enter(&spa->spa_alloc_lock);
@@ -7117,6 +7114,13 @@ spa_sync(spa_t *spa, uint64_t txg)
 
 	spa->spa_sync_pass = 0;
 
+	/*
+	 * Update the last synced uberblock here. We want to do this at
+	 * the end of spa_sync() so that consumers of spa_last_synced_txg()
+	 * will be guaranteed that all the processing associated with
+	 * that txg has been completed.
+	 */
+	spa->spa_ubsync = spa->spa_uberblock;
 	spa_config_exit(spa, SCL_CONFIG, FTAG);
 
 	spa_handle_ignored_writes(spa);

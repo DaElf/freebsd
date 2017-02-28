@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -405,6 +405,7 @@ typedef struct acpi_table_desc
     ACPI_NAME_UNION                 Signature;
     ACPI_OWNER_ID                   OwnerId;
     UINT8                           Flags;
+    UINT16                          ValidationCount;
 
 } ACPI_TABLE_DESC;
 

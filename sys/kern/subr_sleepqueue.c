@@ -386,7 +386,7 @@ sleepq_set_timeout_sbt(void *wchan, sbintime_t sbt, sbintime_t pr,
 	MPASS(TD_ON_SLEEPQ(td));
 	MPASS(td->td_sleepqueue == NULL);
 	MPASS(wchan != NULL);
-	if (cold)
+	if (cold && td == &thread0)
 		panic("timed sleep before timers are working");
 	KASSERT(td->td_sleeptimo == 0, ("td %d %p td_sleeptimo %jx",
 	    td->td_tid, td, (uintmax_t)td->td_sleeptimo));
@@ -430,6 +430,7 @@ sleepq_catch_signals(void *wchan, int pri)
 	struct sigacts *ps;
 	int sig, ret;
 
+	ret = 0;
 	td = curthread;
 	p = curproc;
 	sc = SC_LOOKUP(wchan);
@@ -443,53 +444,65 @@ sleepq_catch_signals(void *wchan, int pri)
 	}
 
 	/*
-	 * See if there are any pending signals for this thread.  If not
-	 * we can switch immediately.  Otherwise do the signal processing
-	 * directly.
+	 * See if there are any pending signals or suspension requests for this
+	 * thread.  If not, we can switch immediately.
 	 */
 	thread_lock(td);
-	if ((td->td_flags & (TDF_NEEDSIGCHK | TDF_NEEDSUSPCHK)) == 0) {
-		sleepq_switch(wchan, pri);
-		return (0);
+	if ((td->td_flags & (TDF_NEEDSIGCHK | TDF_NEEDSUSPCHK)) != 0) {
+		thread_unlock(td);
+		mtx_unlock_spin(&sc->sc_lock);
+		CTR3(KTR_PROC, "sleepq catching signals: thread %p (pid %ld, %s)",
+			(void *)td, (long)p->p_pid, td->td_name);
+		PROC_LOCK(p);
+		/*
+		 * Check for suspension first. Checking for signals and then
+		 * suspending could result in a missed signal, since a signal
+		 * can be delivered while this thread is suspended.
+		 */
+		if ((td->td_flags & TDF_NEEDSUSPCHK) != 0) {
+			ret = thread_suspend_check(1);
+			MPASS(ret == 0 || ret == EINTR || ret == ERESTART);
+			if (ret != 0) {
+				PROC_UNLOCK(p);
+				mtx_lock_spin(&sc->sc_lock);
+				thread_lock(td);
+				goto out;
+			}
+		}
+		if ((td->td_flags & TDF_NEEDSIGCHK) != 0) {
+			ps = p->p_sigacts;
+			mtx_lock(&ps->ps_mtx);
+			sig = cursig(td);
+			if (sig == -1) {
+				mtx_unlock(&ps->ps_mtx);
+				KASSERT((td->td_flags & TDF_SBDRY) != 0,
+				    ("lost TDF_SBDRY"));
+				KASSERT(TD_SBDRY_INTR(td),
+				    ("lost TDF_SERESTART of TDF_SEINTR"));
+				KASSERT((td->td_flags &
+				    (TDF_SEINTR | TDF_SERESTART)) !=
+				    (TDF_SEINTR | TDF_SERESTART),
+				    ("both TDF_SEINTR and TDF_SERESTART"));
+				ret = TD_SBDRY_ERRNO(td);
+			} else if (sig != 0) {
+				ret = SIGISMEMBER(ps->ps_sigintr, sig) ?
+				    EINTR : ERESTART;
+				mtx_unlock(&ps->ps_mtx);
+			} else {
+				mtx_unlock(&ps->ps_mtx);
+			}
+		}
+		/*
+		 * Lock the per-process spinlock prior to dropping the PROC_LOCK
+		 * to avoid a signal delivery race.  PROC_LOCK, PROC_SLOCK, and
+		 * thread_lock() are currently held in tdsendsignal().
+		 */
+		PROC_SLOCK(p);
+		mtx_lock_spin(&sc->sc_lock);
+		PROC_UNLOCK(p);
+		thread_lock(td);
+		PROC_SUNLOCK(p);
 	}
-	thread_unlock(td);
-	mtx_unlock_spin(&sc->sc_lock);
-	CTR3(KTR_PROC, "sleepq catching signals: thread %p (pid %ld, %s)",
-		(void *)td, (long)p->p_pid, td->td_name);
-	PROC_LOCK(p);
-	ps = p->p_sigacts;
-	mtx_lock(&ps->ps_mtx);
-	sig = cursig(td);
-	if (sig == -1) {
-		mtx_unlock(&ps->ps_mtx);
-		KASSERT((td->td_flags & TDF_SBDRY) != 0, ("lost TDF_SBDRY"));
-		KASSERT(TD_SBDRY_INTR(td),
-		    ("lost TDF_SERESTART of TDF_SEINTR"));
-		KASSERT((td->td_flags & (TDF_SEINTR | TDF_SERESTART)) !=
-		    (TDF_SEINTR | TDF_SERESTART),
-		    ("both TDF_SEINTR and TDF_SERESTART"));
-		ret = TD_SBDRY_ERRNO(td);
-	} else if (sig == 0) {
-		mtx_unlock(&ps->ps_mtx);
-		ret = thread_suspend_check(1);
-		MPASS(ret == 0 || ret == EINTR || ret == ERESTART);
-	} else {
-		if (SIGISMEMBER(ps->ps_sigintr, sig))
-			ret = EINTR;
-		else
-			ret = ERESTART;
-		mtx_unlock(&ps->ps_mtx);
-	}
-	/*
-	 * Lock the per-process spinlock prior to dropping the PROC_LOCK
-	 * to avoid a signal delivery race.  PROC_LOCK, PROC_SLOCK, and
-	 * thread_lock() are currently held in tdsendsignal().
-	 */
-	PROC_SLOCK(p);
-	mtx_lock_spin(&sc->sc_lock);
-	PROC_UNLOCK(p);
-	thread_lock(td);
-	PROC_SUNLOCK(p);
 	if (ret == 0) {
 		sleepq_switch(wchan, pri);
 		return (0);
@@ -880,7 +893,7 @@ int
 sleepq_broadcast(void *wchan, int flags, int pri, int queue)
 {
 	struct sleepqueue *sq;
-	struct thread *td;
+	struct thread *td, *tdn;
 	int wakeup_swapper;
 
 	CTR2(KTR_PROC, "sleepq_broadcast(%p, %d)", wchan, flags);
@@ -892,9 +905,14 @@ sleepq_broadcast(void *wchan, int flags, int pri, int queue)
 	KASSERT(sq->sq_type == (flags & SLEEPQ_TYPE),
 	    ("%s: mismatch between sleep/wakeup and cv_*", __func__));
 
-	/* Resume all blocked threads on the sleep queue. */
+	/*
+	 * Resume all blocked threads on the sleep queue.  The last thread will
+	 * be given ownership of sq and may re-enqueue itself before
+	 * sleepq_resume_thread() returns, so we must cache the "next" queue
+	 * item at the beginning of the final iteration.
+	 */
 	wakeup_swapper = 0;
-	while ((td = TAILQ_FIRST(&sq->sq_blocked[queue])) != NULL) {
+	TAILQ_FOREACH_SAFE(td, &sq->sq_blocked[queue], td_slpq, tdn) {
 		thread_lock(td);
 		wakeup_swapper |= sleepq_resume_thread(sq, td, pri);
 		thread_unlock(td);

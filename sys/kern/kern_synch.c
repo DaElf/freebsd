@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -152,8 +152,8 @@ _sleep(void *ident, struct lock_object *lock, int priority,
 	    "Sleeping on \"%s\"", wmesg);
 	KASSERT(sbt != 0 || mtx_owned(&Giant) || lock != NULL,
 	    ("sleeping without a lock"));
-	KASSERT(p != NULL, ("msleep1"));
-	KASSERT(ident != NULL && TD_IS_RUNNING(td), ("msleep"));
+	KASSERT(ident != NULL, ("_sleep: NULL ident"));
+	KASSERT(TD_IS_RUNNING(td), ("_sleep: curthread not running"));
 	if (priority & PDROP)
 		KASSERT(lock != NULL && lock != &Giant.lock_object,
 		    ("PDROP requires a non-Giant lock"));
@@ -162,7 +162,7 @@ _sleep(void *ident, struct lock_object *lock, int priority,
 	else
 		class = NULL;
 
-	if (SCHEDULER_STOPPED()) {
+	if (SCHEDULER_STOPPED_TD(td)) {
 		if (lock != NULL && priority & PDROP)
 			class->lc_unlock(lock);
 		return (0);
@@ -170,13 +170,7 @@ _sleep(void *ident, struct lock_object *lock, int priority,
 	catch = priority & PCATCH;
 	pri = priority & PRIMASK;
 
-	/*
-	 * If we are already on a sleep queue, then remove us from that
-	 * sleep queue first.  We have to do this to handle recursive
-	 * sleeps.
-	 */
-	if (TD_ON_SLEEPQ(td))
-		sleepq_remove(td, td->td_wchan);
+	KASSERT(!TD_ON_SLEEPQ(td), ("recursive sleep"));
 
 	if ((uint8_t *)ident >= &pause_wchan[0] &&
 	    (uint8_t *)ident <= &pause_wchan[MAXCPU - 1])
@@ -253,10 +247,10 @@ msleep_spin_sbt(void *ident, struct mtx *mtx, const char *wmesg,
 	td = curthread;
 	p = td->td_proc;
 	KASSERT(mtx != NULL, ("sleeping without a mutex"));
-	KASSERT(p != NULL, ("msleep1"));
-	KASSERT(ident != NULL && TD_IS_RUNNING(td), ("msleep"));
+	KASSERT(ident != NULL, ("msleep_spin_sbt: NULL ident"));
+	KASSERT(TD_IS_RUNNING(td), ("msleep_spin_sbt: curthread not running"));
 
-	if (SCHEDULER_STOPPED())
+	if (SCHEDULER_STOPPED_TD(td))
 		return (0);
 
 	sleepq_lock(ident);
@@ -327,7 +321,8 @@ pause_sbt(const char *wmesg, sbintime_t sbt, sbintime_t pr, int flags)
 	if (sbt == 0)
 		sbt = tick_sbt;
 
-	if (cold || kdb_active || SCHEDULER_STOPPED()) {
+	if ((cold && curthread == &thread0) || kdb_active ||
+	    SCHEDULER_STOPPED()) {
 		/*
 		 * We delay one second at a time to avoid overflowing the
 		 * system specific DELAY() function(s):
@@ -416,7 +411,7 @@ mi_switch(int flags, struct thread *newtd)
 	 */
 	if (kdb_active)
 		kdb_switch();
-	if (SCHEDULER_STOPPED())
+	if (SCHEDULER_STOPPED_TD(td))
 		return;
 	if (flags & SW_VOL) {
 		td->td_ru.ru_nvcsw++;

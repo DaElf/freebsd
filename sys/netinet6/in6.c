@@ -554,8 +554,11 @@ in6_control(struct socket *so, u_long cmd, caddr_t data,
 		 */
 		if ((error = in6_update_ifa(ifp, ifra, ia, 0)) != 0)
 			goto out;
-		if (ia != NULL)
+		if (ia != NULL) {
+			if (ia->ia_ifa.ifa_carp)
+				(*carp_detach_p)(&ia->ia_ifa, true);
 			ifa_free(&ia->ia_ifa);
+		}
 		if ((ia = in6ifa_ifpwithaddr(ifp, &ifra->ifra_addr.sin6_addr))
 		    == NULL) {
 			/*
@@ -622,7 +625,7 @@ in6_control(struct socket *so, u_long cmd, caddr_t data,
 			 */
 			if ((error = nd6_prelist_add(&pr0, NULL, &pr)) != 0) {
 				if (carp_attached)
-					(*carp_detach_p)(&ia->ia_ifa);
+					(*carp_detach_p)(&ia->ia_ifa, false);
 				goto out;
 			}
 		}
@@ -630,7 +633,7 @@ in6_control(struct socket *so, u_long cmd, caddr_t data,
 		/* relate the address to the prefix */
 		if (ia->ia6_ndpr == NULL) {
 			ia->ia6_ndpr = pr;
-			pr->ndpr_refcnt++;
+			pr->ndpr_addrcnt++;
 
 			/*
 			 * If this is the first autoconf address from the
@@ -638,7 +641,7 @@ in6_control(struct socket *so, u_long cmd, caddr_t data,
 			 * (when required).
 			 */
 			if ((ia->ia6_flags & IN6_IFF_AUTOCONF) &&
-			    V_ip6_use_tempaddr && pr->ndpr_refcnt == 1) {
+			    V_ip6_use_tempaddr && pr->ndpr_addrcnt == 1) {
 				int e;
 				if ((e = in6_tmpifadd(ia, 1, 0)) != 0) {
 					log(LOG_NOTICE, "in6_control: failed "
@@ -647,6 +650,7 @@ in6_control(struct socket *so, u_long cmd, caddr_t data,
 				}
 			}
 		}
+		nd6_prefix_rele(pr);
 
 		/*
 		 * this might affect the status of autoconfigured addresses,
@@ -690,12 +694,16 @@ aifaddr_out:
 		 * and the prefix management.  We do this, however, to provide
 		 * as much backward compatibility as possible in terms of
 		 * the ioctl operation.
-		 * Note that in6_purgeaddr() will decrement ndpr_refcnt.
+		 * Note that in6_purgeaddr() will decrement ndpr_addrcnt.
 		 */
 		pr = ia->ia6_ndpr;
 		in6_purgeaddr(&ia->ia_ifa);
-		if (pr && pr->ndpr_refcnt == 0)
-			prelist_remove(pr);
+		if (pr != NULL && pr->ndpr_addrcnt == 0) {
+			ND6_WLOCK();
+			nd6_prefix_unlink(pr, NULL);
+			ND6_WUNLOCK();
+			nd6_prefix_del(pr);
+		}
 		EVENTHANDLER_INVOKE(ifaddr_event, ifp);
 		break;
 	}
@@ -1238,7 +1246,7 @@ in6_purgeaddr(struct ifaddr *ifa)
 	int plen, error;
 
 	if (ifa->ifa_carp)
-		(*carp_detach_p)(ifa);
+		(*carp_detach_p)(ifa, false);
 
 	/*
 	 * Remove the loopback route to the interface address.
@@ -1305,9 +1313,9 @@ in6_unlink_ifa(struct in6_ifaddr *ia, struct ifnet *ifp)
 		    "in6_unlink_ifa: autoconf'ed address "
 		    "%s has no prefix\n", ip6_sprintf(ip6buf, IA6_IN6(ia))));
 	} else {
-		ia->ia6_ndpr->ndpr_refcnt--;
+		ia->ia6_ndpr->ndpr_addrcnt--;
 		/* Do not delete lles within prefix if refcont != 0 */
-		if (ia->ia6_ndpr->ndpr_refcnt == 0)
+		if (ia->ia6_ndpr->ndpr_addrcnt == 0)
 			remove_lle = 1;
 		ia->ia6_ndpr = NULL;
 	}
@@ -1954,7 +1962,6 @@ in6_if2idlen(struct ifnet *ifp)
 	case IFT_ETHER:		/* RFC2464 */
 	case IFT_PROPVIRTUAL:	/* XXX: no RFC. treat it as ether */
 	case IFT_L2VLAN:	/* ditto */
-	case IFT_IEEE80211:	/* ditto */
 	case IFT_BRIDGE:	/* bridge(4) only does Ethernet-like links */
 	case IFT_INFINIBAND:
 		return (64);

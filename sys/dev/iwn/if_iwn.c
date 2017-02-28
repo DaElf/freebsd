@@ -210,13 +210,14 @@ static void	iwn4965_tx_done(struct iwn_softc *, struct iwn_rx_desc *,
 		    struct iwn_rx_data *);
 static void	iwn5000_tx_done(struct iwn_softc *, struct iwn_rx_desc *,
 		    struct iwn_rx_data *);
-static void	iwn_tx_done(struct iwn_softc *, struct iwn_rx_desc *, int,
+static void	iwn_tx_done(struct iwn_softc *, struct iwn_rx_desc *, int, int,
 		    uint8_t);
-static void	iwn_ampdu_tx_done(struct iwn_softc *, int, int, int, int, void *);
+static void	iwn_ampdu_tx_done(struct iwn_softc *, int, int, int, int, int,
+		    void *);
 static void	iwn_cmd_done(struct iwn_softc *, struct iwn_rx_desc *);
 static void	iwn_notif_intr(struct iwn_softc *);
 static void	iwn_wakeup_intr(struct iwn_softc *);
-static void	iwn_rftoggle_intr(struct iwn_softc *);
+static void	iwn_rftoggle_task(void *, int);
 static void	iwn_fatal_intr(struct iwn_softc *);
 static void	iwn_intr(void *);
 static void	iwn4965_update_sched(struct iwn_softc *, int, int, uint8_t,
@@ -333,11 +334,9 @@ static int	iwn5000_nic_config(struct iwn_softc *);
 static int	iwn_hw_prepare(struct iwn_softc *);
 static int	iwn_hw_init(struct iwn_softc *);
 static void	iwn_hw_stop(struct iwn_softc *);
-static void	iwn_radio_on(void *, int);
-static void	iwn_radio_off(void *, int);
 static void	iwn_panicked(void *, int);
-static void	iwn_init_locked(struct iwn_softc *);
-static void	iwn_init(struct iwn_softc *);
+static int	iwn_init_locked(struct iwn_softc *);
+static int	iwn_init(struct iwn_softc *);
 static void	iwn_stop_locked(struct iwn_softc *);
 static void	iwn_stop(struct iwn_softc *);
 static void	iwn_scan_start(struct ieee80211com *);
@@ -678,8 +677,7 @@ iwn_attach(device_t dev)
 	callout_init_mtx(&sc->calib_to, &sc->sc_mtx, 0);
 	callout_init_mtx(&sc->scan_timeout, &sc->sc_mtx, 0);
 	callout_init_mtx(&sc->watchdog_to, &sc->sc_mtx, 0);
-	TASK_INIT(&sc->sc_radioon_task, 0, iwn_radio_on, sc);
-	TASK_INIT(&sc->sc_radiooff_task, 0, iwn_radio_off, sc);
+	TASK_INIT(&sc->sc_rftoggle_task, 0, iwn_rftoggle_task, sc);
 	TASK_INIT(&sc->sc_panic_task, 0, iwn_panicked, sc);
 	TASK_INIT(&sc->sc_xmit_task, 0, iwn_xmit_task, sc);
 
@@ -1400,8 +1398,6 @@ iwn_detach(device_t dev)
 		iwn_xmit_queue_drain(sc);
 		IWN_UNLOCK(sc);
 
-		ieee80211_draintask(&sc->sc_ic, &sc->sc_radioon_task);
-		ieee80211_draintask(&sc->sc_ic, &sc->sc_radiooff_task);
 		iwn_stop(sc);
 
 		taskqueue_drain_all(sc->sc_tq);
@@ -1909,6 +1905,9 @@ iwn_alloc_rx_ring(struct iwn_softc *sc, struct iwn_rx_ring *ring)
 			goto fail;
 		}
 
+		bus_dmamap_sync(ring->data_dmat, data->map,
+		    BUS_DMASYNC_PREREAD);
+
 		/* Set physical address of RX buffer (256-byte aligned). */
 		ring->desc[i] = htole32(paddr >> 8);
 	}
@@ -2115,6 +2114,9 @@ iwn5000_ict_reset(struct iwn_softc *sc)
 	/* Reset ICT table. */
 	memset(sc->ict, 0, IWN_ICT_SIZE);
 	sc->ict_cur = 0;
+
+	bus_dmamap_sync(sc->ict_dma.tag, sc->ict_dma.map,
+	    BUS_DMASYNC_PREWRITE);
 
 	/* Set physical address of ICT table (4KB aligned). */
 	DPRINTF(sc, IWN_DEBUG_RESET, "%s: enabling ICT\n", __func__);
@@ -3039,13 +3041,18 @@ iwn_rx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 		if (error != 0 && error != EFBIG) {
 			panic("%s: could not load old RX mbuf", __func__);
 		}
+		bus_dmamap_sync(ring->data_dmat, data->map,
+		    BUS_DMASYNC_PREREAD);
 		/* Physical address may have changed. */
 		ring->desc[ring->cur] = htole32(paddr >> 8);
-		bus_dmamap_sync(ring->data_dmat, ring->desc_dma.map,
+		bus_dmamap_sync(ring->desc_dma.tag, ring->desc_dma.map,
 		    BUS_DMASYNC_PREWRITE);
 		counter_u64_add(ic->ic_ierrors, 1);
 		return;
 	}
+
+	bus_dmamap_sync(ring->data_dmat, data->map,
+	    BUS_DMASYNC_PREREAD);
 
 	m = data->m;
 	data->m = m1;
@@ -3147,6 +3154,7 @@ static void
 iwn_rx_compressed_ba(struct iwn_softc *sc, struct iwn_rx_desc *desc,
     struct iwn_rx_data *data)
 {
+	struct ieee80211_ratectl_tx_status *txs = &sc->sc_txs;
 	struct iwn_ops *ops = &sc->ops;
 	struct iwn_node *wn;
 	struct ieee80211_node *ni;
@@ -3158,7 +3166,7 @@ iwn_rx_compressed_ba(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	uint64_t bitmap;
 	uint16_t ssn;
 	uint8_t tid;
-	int ackfailcnt = 0, i, lastidx, qid, *res, shift;
+	int i, lastidx, qid, *res, shift;
 	int tx_ok = 0, tx_err = 0;
 
 	DPRINTF(sc, IWN_DEBUG_TRACE | IWN_DEBUG_XMIT, "->%s begin\n", __func__);
@@ -3227,15 +3235,15 @@ iwn_rx_compressed_ba(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	ni = tap->txa_ni;
 	bitmap = (le64toh(ba->bitmap) >> shift) & wn->agg[tid].bitmap;
 	for (i = 0; bitmap; i++) {
+		txs->flags = 0;		/* XXX TODO */
 		if ((bitmap & 1) == 0) {
 			tx_err ++;
-			ieee80211_ratectl_tx_complete(ni->ni_vap, ni,
-			    IEEE80211_RATECTL_TX_FAILURE, &ackfailcnt, NULL);
+			txs->status = IEEE80211_RATECTL_TX_FAIL_UNSPECIFIED;
 		} else {
 			tx_ok ++;
-			ieee80211_ratectl_tx_complete(ni->ni_vap, ni,
-			    IEEE80211_RATECTL_TX_SUCCESS, &ackfailcnt, NULL);
+			txs->status = IEEE80211_RATECTL_TX_SUCCESS;
 		}
+		ieee80211_ratectl_tx_complete(ni, txs);
 		bitmap >>= 1;
 	}
 
@@ -3501,9 +3509,9 @@ iwn4965_tx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	bus_dmamap_sync(ring->data_dmat, data->map, BUS_DMASYNC_POSTREAD);
 	if (qid >= sc->firstaggqueue) {
 		iwn_ampdu_tx_done(sc, qid, desc->idx, stat->nframes,
-		    stat->ackfailcnt, &stat->status);
+		    stat->rtsfailcnt, stat->ackfailcnt, &stat->status);
 	} else {
-		iwn_tx_done(sc, desc, stat->ackfailcnt,
+		iwn_tx_done(sc, desc, stat->rtsfailcnt, stat->ackfailcnt,
 		    le32toh(stat->status) & 0xff);
 	}
 }
@@ -3536,9 +3544,9 @@ iwn5000_tx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
 	bus_dmamap_sync(ring->data_dmat, data->map, BUS_DMASYNC_POSTREAD);
 	if (qid >= sc->firstaggqueue) {
 		iwn_ampdu_tx_done(sc, qid, desc->idx, stat->nframes,
-		    stat->ackfailcnt, &stat->status);
+		    stat->rtsfailcnt, stat->ackfailcnt, &stat->status);
 	} else {
-		iwn_tx_done(sc, desc, stat->ackfailcnt,
+		iwn_tx_done(sc, desc, stat->rtsfailcnt, stat->ackfailcnt,
 		    le16toh(stat->status) & 0xff);
 	}
 }
@@ -3547,14 +3555,14 @@ iwn5000_tx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc,
  * Adapter-independent backend for TX_DONE firmware notifications.
  */
 static void
-iwn_tx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc, int ackfailcnt,
-    uint8_t status)
+iwn_tx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc, int rtsfailcnt,
+    int ackfailcnt, uint8_t status)
 {
+	struct ieee80211_ratectl_tx_status *txs = &sc->sc_txs;
 	struct iwn_tx_ring *ring = &sc->txq[desc->qid & 0xf];
 	struct iwn_tx_data *data = &ring->data[desc->idx];
 	struct mbuf *m;
 	struct ieee80211_node *ni;
-	struct ieee80211vap *vap;
 
 	KASSERT(data->ni != NULL, ("no node"));
 
@@ -3565,17 +3573,33 @@ iwn_tx_done(struct iwn_softc *sc, struct iwn_rx_desc *desc, int ackfailcnt,
 	bus_dmamap_unload(ring->data_dmat, data->map);
 	m = data->m, data->m = NULL;
 	ni = data->ni, data->ni = NULL;
-	vap = ni->ni_vap;
 
 	/*
 	 * Update rate control statistics for the node.
 	 */
-	if (status & IWN_TX_FAIL)
-		ieee80211_ratectl_tx_complete(vap, ni,
-		    IEEE80211_RATECTL_TX_FAILURE, &ackfailcnt, NULL);
-	else
-		ieee80211_ratectl_tx_complete(vap, ni,
-		    IEEE80211_RATECTL_TX_SUCCESS, &ackfailcnt, NULL);
+	txs->flags = IEEE80211_RATECTL_STATUS_SHORT_RETRY |
+		     IEEE80211_RATECTL_STATUS_LONG_RETRY;
+	txs->short_retries = rtsfailcnt;
+	txs->long_retries = ackfailcnt;
+	if (!(status & IWN_TX_FAIL))
+		txs->status = IEEE80211_RATECTL_TX_SUCCESS;
+	else {
+		switch (status) {
+		case IWN_TX_FAIL_SHORT_LIMIT:
+			txs->status = IEEE80211_RATECTL_TX_FAIL_SHORT;
+			break;
+		case IWN_TX_FAIL_LONG_LIMIT:
+			txs->status = IEEE80211_RATECTL_TX_FAIL_LONG;
+			break;
+		case IWN_TX_STATUS_FAIL_LIFE_EXPIRE:
+			txs->status = IEEE80211_RATECTL_TX_FAIL_EXPIRED;
+			break;
+		default:
+			txs->status = IEEE80211_RATECTL_TX_FAIL_UNSPECIFIED;
+			break;
+		}
+	}
+	ieee80211_ratectl_tx_complete(ni, txs);
 
 	/*
 	 * Channels marked for "radar" require traffic to be received
@@ -3640,10 +3664,11 @@ iwn_cmd_done(struct iwn_softc *sc, struct iwn_rx_desc *desc)
 
 static void
 iwn_ampdu_tx_done(struct iwn_softc *sc, int qid, int idx, int nframes,
-    int ackfailcnt, void *stat)
+    int rtsfailcnt, int ackfailcnt, void *stat)
 {
 	struct iwn_ops *ops = &sc->ops;
 	struct iwn_tx_ring *ring = &sc->txq[qid];
+	struct ieee80211_ratectl_tx_status *txs = &sc->sc_txs;
 	struct iwn_tx_data *data;
 	struct mbuf *m;
 	struct iwn_node *wn;
@@ -3682,6 +3707,10 @@ iwn_ampdu_tx_done(struct iwn_softc *sc, int qid, int idx, int nframes,
 	 * handled differently.
 	 */
 	if (nframes == 1) {
+		txs->flags = IEEE80211_RATECTL_STATUS_SHORT_RETRY |
+			     IEEE80211_RATECTL_STATUS_LONG_RETRY;
+		txs->short_retries = rtsfailcnt;
+		txs->long_retries = ackfailcnt;
 		if ((*status & 0xff) != 1 && (*status & 0xff) != 2) {
 #ifdef	NOT_YET
 			printf("ieee80211_send_bar()\n");
@@ -3691,11 +3720,8 @@ iwn_ampdu_tx_done(struct iwn_softc *sc, int qid, int idx, int nframes,
 			 * notification is pushed up to the rate control
 			 * layer.
 			 */
-			ieee80211_ratectl_tx_complete(ni->ni_vap,
-			    ni,
-			    IEEE80211_RATECTL_TX_FAILURE,
-			    &ackfailcnt,
-			    NULL);
+			/* XXX */
+			txs->status = IEEE80211_RATECTL_TX_FAIL_UNSPECIFIED;
 		} else {
 			/*
 			 * If nframes=1, then we won't be getting a BA for
@@ -3703,12 +3729,9 @@ iwn_ampdu_tx_done(struct iwn_softc *sc, int qid, int idx, int nframes,
 			 * rate control code with how many retries were
 			 * needed to send it.
 			 */
-			ieee80211_ratectl_tx_complete(ni->ni_vap,
-			    ni,
-			    IEEE80211_RATECTL_TX_SUCCESS,
-			    &ackfailcnt,
-			    NULL);
+			txs->status = IEEE80211_RATECTL_TX_SUCCESS;
 		}
+		ieee80211_ratectl_tx_complete(ni, txs);
 	}
 
 	bitmap = 0;
@@ -3985,19 +4008,28 @@ iwn_wakeup_intr(struct iwn_softc *sc)
 }
 
 static void
-iwn_rftoggle_intr(struct iwn_softc *sc)
+iwn_rftoggle_task(void *arg, int npending)
 {
+	struct iwn_softc *sc = arg;
 	struct ieee80211com *ic = &sc->sc_ic;
-	uint32_t tmp = IWN_READ(sc, IWN_GP_CNTRL);
+	uint32_t tmp;
 
-	IWN_LOCK_ASSERT(sc);
+	IWN_LOCK(sc);
+	tmp = IWN_READ(sc, IWN_GP_CNTRL);
+	IWN_UNLOCK(sc);
 
 	device_printf(sc->sc_dev, "RF switch: radio %s\n",
 	    (tmp & IWN_GP_CNTRL_RFKILL) ? "enabled" : "disabled");
-	if (tmp & IWN_GP_CNTRL_RFKILL)
-		ieee80211_runtask(ic, &sc->sc_radioon_task);
-	else
-		ieee80211_runtask(ic, &sc->sc_radiooff_task);
+	if (!(tmp & IWN_GP_CNTRL_RFKILL)) {
+		ieee80211_suspend_all(ic);
+
+		/* Enable interrupts to get RF toggle notification. */
+		IWN_LOCK(sc);
+		IWN_WRITE(sc, IWN_INT, 0xffffffff);
+		IWN_WRITE(sc, IWN_INT_MASK, sc->int_mask);
+		IWN_UNLOCK(sc);
+	} else
+		ieee80211_resume_all(ic);
 }
 
 /*
@@ -4075,6 +4107,8 @@ iwn_intr(void *arg)
 
 	/* Read interrupts from ICT (fast) or from registers (slow). */
 	if (sc->sc_flags & IWN_FLAG_USE_ICT) {
+		bus_dmamap_sync(sc->ict_dma.tag, sc->ict_dma.map,
+		    BUS_DMASYNC_POSTREAD);
 		tmp = 0;
 		while (sc->ict[sc->ict_cur] != 0) {
 			tmp |= sc->ict[sc->ict_cur];
@@ -4109,7 +4143,7 @@ iwn_intr(void *arg)
 		IWN_WRITE(sc, IWN_FH_INT, r2);
 
 	if (r1 & IWN_INT_RF_TOGGLED) {
-		iwn_rftoggle_intr(sc);
+		taskqueue_enqueue(sc->sc_tq, &sc->sc_rftoggle_task);
 		goto done;
 	}
 	if (r1 & IWN_INT_CT_REACHED) {
@@ -4336,7 +4370,7 @@ static int
 iwn_tx_data(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 {
 	struct iwn_ops *ops = &sc->ops;
-	const struct ieee80211_txparam *tp;
+	const struct ieee80211_txparam *tp = ni->ni_txparms;
 	struct ieee80211vap *vap = ni->ni_vap;
 	struct ieee80211com *ic = ni->ni_ic;
 	struct iwn_node *wn = (void *)ni;
@@ -4372,6 +4406,13 @@ iwn_tx_data(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 		tid = 0;
 	}
 	ac = M_WME_GETAC(m);
+
+	/*
+	 * XXX TODO: Group addressed frames aren't aggregated and must
+	 * go to the normal non-aggregation queue, and have a NONQOS TID
+	 * assigned from net80211.
+	 */
+
 	if (m->m_flags & M_AMPDU_MPDU) {
 		uint16_t seqno;
 		struct ieee80211_tx_ampdu *tap = &ni->ni_tx_ampdu[ac];
@@ -4408,15 +4449,14 @@ iwn_tx_data(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	data = &ring->data[ring->cur];
 
 	/* Choose a TX rate index. */
-	tp = &vap->iv_txparms[ieee80211_chan2mode(ni->ni_chan)];
-	if (type == IEEE80211_FC0_TYPE_MGT)
+	if (type == IEEE80211_FC0_TYPE_MGT ||
+	    type == IEEE80211_FC0_TYPE_CTL ||
+	    (m->m_flags & M_EAPOL) != 0)
 		rate = tp->mgmtrate;
 	else if (IEEE80211_IS_MULTICAST(wh->i_addr1))
 		rate = tp->mcastrate;
 	else if (tp->ucastrate != IEEE80211_FIXED_RATE_NONE)
 		rate = tp->ucastrate;
-	else if (m->m_flags & M_EAPOL)
-		rate = tp->mgmtrate;
 	else {
 		/* XXX pass pktlen */
 		(void) ieee80211_ratectl_rate(ni, NULL, 0);
@@ -4610,7 +4650,7 @@ iwn_tx_data(struct iwn_softc *sc, struct mbuf *m, struct ieee80211_node *ni)
 	}
 
 	bus_dmamap_sync(ring->data_dmat, data->map, BUS_DMASYNC_PREWRITE);
-	bus_dmamap_sync(ring->data_dmat, ring->cmd_dma.map,
+	bus_dmamap_sync(ring->cmd_dma.tag, ring->cmd_dma.map,
 	    BUS_DMASYNC_PREWRITE);
 	bus_dmamap_sync(ring->desc_dma.tag, ring->desc_dma.map,
 	    BUS_DMASYNC_PREWRITE);
@@ -4803,7 +4843,7 @@ iwn_tx_data_raw(struct iwn_softc *sc, struct mbuf *m,
 	}
 
 	bus_dmamap_sync(ring->data_dmat, data->map, BUS_DMASYNC_PREWRITE);
-	bus_dmamap_sync(ring->data_dmat, ring->cmd_dma.map,
+	bus_dmamap_sync(ring->cmd_dma.tag, ring->cmd_dma.map,
 	    BUS_DMASYNC_PREWRITE);
 	bus_dmamap_sync(ring->desc_dma.tag, ring->desc_dma.map,
 	    BUS_DMASYNC_PREWRITE);
@@ -5047,25 +5087,28 @@ static void
 iwn_parent(struct ieee80211com *ic)
 {
 	struct iwn_softc *sc = ic->ic_softc;
-	struct ieee80211vap *vap = TAILQ_FIRST(&ic->ic_vaps);
-	int startall = 0, stop = 0;
- 
-	IWN_LOCK(sc);
+	struct ieee80211vap *vap;
+	int error;
+
 	if (ic->ic_nrunning > 0) {
-		if (!(sc->sc_flags & IWN_FLAG_RUNNING)) {
-			iwn_init_locked(sc);
-			if (IWN_READ(sc, IWN_GP_CNTRL) & IWN_GP_CNTRL_RFKILL)
-				startall = 1;
-			else
-				stop = 1;
+		error = iwn_init(sc);
+
+		switch (error) {
+		case 0:
+			ieee80211_start_all(ic);
+			break;
+		case EAGAIN:
+			/* radio is disabled via RFkill switch */
+			taskqueue_enqueue(sc->sc_tq, &sc->sc_rftoggle_task);
+			break;
+		default:
+			vap = TAILQ_FIRST(&ic->ic_vaps);
+			if (vap != NULL)
+				ieee80211_stop(vap);
+			break;
 		}
-	} else if (sc->sc_flags & IWN_FLAG_RUNNING)
-		iwn_stop_locked(sc);
-	IWN_UNLOCK(sc);
-	if (startall)
-		ieee80211_start_all(ic);
-	else if (vap != NULL && stop)
-		ieee80211_stop(vap);
+	} else
+		iwn_stop(sc);
 }
 
 /*
@@ -5136,7 +5179,7 @@ iwn_cmd(struct iwn_softc *sc, int code, const void *buf, int size, int async)
 		bus_dmamap_sync(ring->data_dmat, data->map,
 		    BUS_DMASYNC_PREWRITE);
 	} else {
-		bus_dmamap_sync(ring->data_dmat, ring->cmd_dma.map,
+		bus_dmamap_sync(ring->cmd_dma.tag, ring->cmd_dma.map,
 		    BUS_DMASYNC_PREWRITE);
 	}
 	bus_dmamap_sync(ring->desc_dma.tag, ring->desc_dma.map,
@@ -8644,41 +8687,6 @@ iwn_hw_stop(struct iwn_softc *sc)
 }
 
 static void
-iwn_radio_on(void *arg0, int pending)
-{
-	struct iwn_softc *sc = arg0;
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ieee80211vap *vap = TAILQ_FIRST(&ic->ic_vaps);
-
-	DPRINTF(sc, IWN_DEBUG_TRACE, "->Doing %s\n", __func__);
-
-	if (vap != NULL) {
-		iwn_init(sc);
-		ieee80211_init(vap);
-	}
-}
-
-static void
-iwn_radio_off(void *arg0, int pending)
-{
-	struct iwn_softc *sc = arg0;
-	struct ieee80211com *ic = &sc->sc_ic;
-	struct ieee80211vap *vap = TAILQ_FIRST(&ic->ic_vaps);
-
-	DPRINTF(sc, IWN_DEBUG_TRACE, "->Doing %s\n", __func__);
-
-	iwn_stop(sc);
-	if (vap != NULL)
-		ieee80211_stop(vap);
-
-	/* Enable interrupts to get RF toggle notification. */
-	IWN_LOCK(sc);
-	IWN_WRITE(sc, IWN_INT, 0xffffffff);
-	IWN_WRITE(sc, IWN_INT_MASK, sc->int_mask);
-	IWN_UNLOCK(sc);
-}
-
-static void
 iwn_panicked(void *arg0, int pending)
 {
 	struct iwn_softc *sc = arg0;
@@ -8709,7 +8717,11 @@ iwn_panicked(void *arg0, int pending)
 	IWN_LOCK(sc);
 
 	iwn_stop_locked(sc);
-	iwn_init_locked(sc);
+	if ((error = iwn_init_locked(sc)) != 0) {
+		device_printf(sc->sc_dev,
+		    "%s: could not init hardware\n", __func__);
+		goto unlock;
+	}
 	if (vap->iv_state >= IEEE80211_S_AUTH &&
 	    (error = iwn_auth(sc, vap)) != 0) {
 		device_printf(sc->sc_dev,
@@ -8721,11 +8733,12 @@ iwn_panicked(void *arg0, int pending)
 		    "%s: could not move to run state\n", __func__);
 	}
 
+unlock:
 	IWN_UNLOCK(sc);
 #endif
 }
 
-static void
+static int
 iwn_init_locked(struct iwn_softc *sc)
 {
 	int error;
@@ -8733,6 +8746,9 @@ iwn_init_locked(struct iwn_softc *sc)
 	DPRINTF(sc, IWN_DEBUG_TRACE, "->%s begin\n", __func__);
 
 	IWN_LOCK_ASSERT(sc);
+
+	if (sc->sc_flags & IWN_FLAG_RUNNING)
+		goto end;
 
 	sc->sc_flags |= IWN_FLAG_RUNNING;
 
@@ -8748,12 +8764,8 @@ iwn_init_locked(struct iwn_softc *sc)
 
 	/* Check that the radio is not disabled by hardware switch. */
 	if (!(IWN_READ(sc, IWN_GP_CNTRL) & IWN_GP_CNTRL_RFKILL)) {
-		device_printf(sc->sc_dev,
-		    "radio is disabled by hardware switch\n");
-		/* Enable interrupts to get RF toggle notifications. */
-		IWN_WRITE(sc, IWN_INT, 0xffffffff);
-		IWN_WRITE(sc, IWN_INT_MASK, sc->int_mask);
-		return;
+		error = EAGAIN;
+		goto fail;
 	}
 
 	/* Read firmware images from the filesystem. */
@@ -8784,26 +8796,29 @@ iwn_init_locked(struct iwn_softc *sc)
 
 	callout_reset(&sc->watchdog_to, hz, iwn_watchdog, sc);
 
+end:
 	DPRINTF(sc, IWN_DEBUG_TRACE, "->%s: end\n",__func__);
 
-	return;
+	return (0);
 
 fail:
-	sc->sc_flags &= ~IWN_FLAG_RUNNING;
 	iwn_stop_locked(sc);
+
 	DPRINTF(sc, IWN_DEBUG_TRACE, "->%s: end in error\n",__func__);
+
+	return (error);
 }
 
-static void
+static int
 iwn_init(struct iwn_softc *sc)
 {
+	int error;
 
 	IWN_LOCK(sc);
-	iwn_init_locked(sc);
+	error = iwn_init_locked(sc);
 	IWN_UNLOCK(sc);
 
-	if (sc->sc_flags & IWN_FLAG_RUNNING)
-		ieee80211_start_all(&sc->sc_ic);
+	return (error);
 }
 
 static void
@@ -8812,9 +8827,13 @@ iwn_stop_locked(struct iwn_softc *sc)
 
 	IWN_LOCK_ASSERT(sc);
 
+	if (!(sc->sc_flags & IWN_FLAG_RUNNING))
+		return;
+
 	sc->sc_is_scanning = 0;
 	sc->sc_tx_timer = 0;
 	callout_stop(&sc->watchdog_to);
+	callout_stop(&sc->scan_timeout);
 	callout_stop(&sc->calib_to);
 	sc->sc_flags &= ~IWN_FLAG_RUNNING;
 

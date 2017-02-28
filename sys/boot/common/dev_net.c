@@ -80,7 +80,7 @@ static int	net_open(struct open_file *, ...);
 static int	net_close(struct open_file *);
 static void	net_cleanup(void);
 static int	net_strategy();
-static void	net_print(int);
+static int	net_print(int);
 
 static int net_getparams(int sock);
 
@@ -120,11 +120,9 @@ net_open(struct open_file *f, ...)
 	devname = va_arg(args, char*);
 	va_end(args);
 
-#ifdef	NETIF_OPEN_CLOSE_ONCE
 	/* Before opening another interface, close the previous one first. */
 	if (netdev_sock >= 0 && strcmp(devname, netdev_name) != 0)
 		net_cleanup();
-#endif
 
 	/* On first open, do netif open, mount, etc. */
 	if (netdev_opens == 0) {
@@ -198,21 +196,6 @@ net_close(struct open_file *f)
 
 	f->f_devdata = NULL;
 
-#ifndef	NETIF_OPEN_CLOSE_ONCE
-	/* Extra close call? */
-	if (netdev_opens <= 0)
-		return (0);
-	netdev_opens--;
-	/* Not last close? */
-	if (netdev_opens > 0)
-		return (0);
-	/* On last close, do netif close, etc. */
-#ifdef	NETIF_DEBUG
-	if (debug)
-		printf("net_close: calling net_cleanup()\n");
-#endif
-	net_cleanup();
-#endif
 	return (0);
 }
 
@@ -342,23 +325,34 @@ exit:
 	return (0);
 }
 
-static void
+static int
 net_print(int verbose)
 {
 	struct netif_driver *drv;
 	int i, d, cnt;
+	int ret = 0;
+
+	if (netif_drivers[0] == NULL)
+		return (ret);
+
+	printf("%s devices:", netdev.dv_name);
+	if ((ret = pager_output("\n")) != 0)
+		return (ret);
 
 	cnt = 0;
 	for (d = 0; netif_drivers[d]; d++) {
 		drv = netif_drivers[d];
 		for (i = 0; i < drv->netif_nifs; i++) {
-			printf("\t%s%d:", "net", cnt++);
-			if (verbose)
+			printf("\t%s%d:", netdev.dv_name, cnt++);
+			if (verbose) {
 				printf(" (%s%d)", drv->netif_bname,
 				    drv->netif_ifs[i].dif_unit);
+			}
+			if ((ret = pager_output("\n")) != 0)
+				return (ret);
 		}
 	}
-	printf("\n");
+	return (ret);
 }
 
 /*
@@ -368,7 +362,7 @@ net_print(int verbose)
 uint32_t
 net_parse_rootpath()
 {
-	int i, ipstart;
+	int i;
 	n_long addr = INADDR_NONE;
 
 	netproto = NET_NFS;
@@ -383,7 +377,7 @@ net_parse_rootpath()
 			break;
 	if (i && i != FNAME_SIZE && rootpath[i] == ':') {
 		rootpath[i++] = '\0';
-		addr = inet_addr(&rootpath[ipstart]);
+		addr = inet_addr(&rootpath[0]);
 		bcopy(&rootpath[i], rootpath, strlen(&rootpath[i])+1);
 	}
 

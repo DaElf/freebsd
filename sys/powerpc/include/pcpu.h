@@ -88,7 +88,7 @@ struct pvo_entry;
 	vm_offset_t	pc_qmap_addr;					\
 	uint32_t	*pc_booke_tlb_lock;				\
 	int		pc_tid_next;					\
-	char		__pad[165]
+	char		__pad[173]
 
 /* Definitions for register offsets within the exception tmp save areas */
 #define	CPUSAVE_R27	0		/* where r27 gets saved */
@@ -142,7 +142,7 @@ struct pvo_entry;
 
 #ifdef _KERNEL
 
-#define pcpup	((struct pcpu *) powerpc_get_pcpup())
+#define pcpup	(get_pcpu())
 
 static __inline __pure2 struct thread *
 __curthread(void)

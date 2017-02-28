@@ -757,13 +757,24 @@ mprsas_add_device(struct mpr_softc *sc, u16 handle, u8 linkrate){
 		}
 	}
 
-	id = mpr_mapping_get_sas_id(sc, sas_address, handle);
+	/*
+	 * use_phynum:
+	 *  1 - use the PhyNum field as a fallback to the mapping logic
+	 *  0 - never use the PhyNum field
+	 * -1 - only use the PhyNum field
+	 */
+	id = MPR_MAP_BAD_ID;
+	if (sc->use_phynum != -1) 
+		id = mpr_mapping_get_sas_id(sc, sas_address, handle);
 	if (id == MPR_MAP_BAD_ID) {
-		printf("failure at %s:%d/%s()! Could not get ID for device "
-		    "with handle 0x%04x\n", __FILE__, __LINE__, __func__,
-		    handle);
-		error = ENXIO;
-		goto out;
+		if ((sc->use_phynum == 0)
+		 || ((id = config_page.PhyNum) > sassc->maxtargets)) {
+			mpr_dprint(sc, MPR_INFO, "failure at %s:%d/%s()! "
+			    "Could not get ID for device with handle 0x%04x\n",
+			    __FILE__, __LINE__, __func__, handle);
+			error = ENXIO;
+			goto out;
+		}
 	}
 
 	if (mprsas_check_id(sassc, id) != 0) {
@@ -772,9 +783,16 @@ mprsas_add_device(struct mpr_softc *sc, u16 handle, u8 linkrate){
 		goto out;
 	}
 
+	targ = &sassc->targets[id];
+	if (targ->handle != 0x0) {
+		mpr_dprint(sc, MPR_MAPPING, "Attempting to reuse target id "
+		    "%d handle 0x%04x\n", id, targ->handle);
+		error = ENXIO;
+		goto out;
+	}
+
 	mpr_dprint(sc, MPR_MAPPING, "SAS Address from SAS device page0 = %jx\n",
 	    sas_address);
-	targ = &sassc->targets[id];
 	targ->devinfo = device_info;
 	targ->devname = le32toh(config_page.DeviceName.High);
 	targ->devname = (targ->devname << 32) | 
@@ -893,6 +911,7 @@ mprsas_get_sas_address_for_sata_disk(struct mpr_softc *sc,
 	u8 sas_status;
 
 	memset(&ata_identify, 0, sizeof(ata_identify));
+	memset(&mpi_reply, 0, sizeof(mpi_reply));
 	try_count = 0;
 	do {
 		rc = mprsas_get_sata_identify(sc, handle, &mpi_reply,
@@ -1056,6 +1075,7 @@ out:
 		mpr_free_command(sc, cm);
 	else if (error == 0)
 		error = EWOULDBLOCK;
+	cm->cm_data = NULL;
 	free(buffer, M_MPR);
 	return (error);
 }
@@ -1196,18 +1216,18 @@ mprsas_SSU_to_SATA_devices(struct mpr_softc *sc)
 			continue;
 		}
 
-		ccb = xpt_alloc_ccb_nowait();
-		if (ccb == NULL) {
-			mpr_dprint(sc, MPR_FAULT, "Unable to alloc CCB to stop "
-			    "unit.\n");
-			return;
-		}
-
 		/*
 		 * The stop_at_shutdown flag will be set if this device is
 		 * a SATA direct-access end device.
 		 */
 		if (target->stop_at_shutdown) {
+			ccb = xpt_alloc_ccb_nowait();
+			if (ccb == NULL) {
+				mpr_dprint(sc, MPR_FAULT, "Unable to alloc CCB to stop "
+				    "unit.\n");
+				return;
+			}
+
 			if (xpt_create_path(&ccb->ccb_h.path, xpt_periph,
 			    pathid, targetid, CAM_LUN_WILDCARD) !=
 			    CAM_REQ_CMP) {

@@ -43,11 +43,11 @@ __FBSDID("$FreeBSD$");
 
 static int	ofwd_init(void);
 static int	ofwd_strategy(void *devdata, int flag, daddr_t dblk,
-		    size_t offset, size_t size, char *buf, size_t *rsize);
+		    size_t size, char *buf, size_t *rsize);
 static int	ofwd_open(struct open_file *f, ...);
 static int	ofwd_close(struct open_file *f);
 static int	ofwd_ioctl(struct open_file *f, u_long cmd, void *data);
-static void	ofwd_print(int verbose);
+static int	ofwd_print(int verbose);
 
 struct devsw ofwdisk = {
 	"block",
@@ -83,8 +83,8 @@ ofwd_init(void)
 }
 
 static int
-ofwd_strategy(void *devdata, int flag __unused, daddr_t dblk, size_t offset,
-    size_t size, char *buf, size_t *rsize)
+ofwd_strategy(void *devdata, int flag __unused, daddr_t dblk, size_t size,
+    char *buf, size_t *rsize)
 {
 	struct ofw_devdesc *dp = (struct ofw_devdesc *)devdata;
 	daddr_t pos;
@@ -161,8 +161,8 @@ ofwd_ioctl(struct open_file *f __unused, u_long cmd __unused,
 	return (EINVAL);
 }
 
-static void
+static int
 ofwd_print(int verbose __unused)
 {
-
+	return (0);
 }

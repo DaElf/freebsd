@@ -5,7 +5,7 @@
  *****************************************************************************/
 
 /*
- * Copyright (C) 2000 - 2016, Intel Corp.
+ * Copyright (C) 2000 - 2017, Intel Corp.
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -51,7 +51,7 @@ const AH_TABLE *
 AcpiAhGetTableInfo (
     char                    *Signature);
 
-extern const AH_TABLE      AcpiSupportedTables[];
+extern const AH_TABLE      Gbl_AcpiSupportedTables[];
 
 
 /*******************************************************************************
@@ -73,7 +73,7 @@ AcpiAhGetTableInfo (
     const AH_TABLE      *Info;
 
 
-    for (Info = AcpiSupportedTables; Info->Signature; Info++)
+    for (Info = Gbl_AcpiSupportedTables; Info->Signature; Info++)
     {
         if (ACPI_COMPARE_NAME (Signature, Info->Signature))
         {
@@ -89,7 +89,7 @@ AcpiAhGetTableInfo (
  * Note: Any tables added here should be duplicated within AcpiDmTableData
  * in the file common/dmtable.c
  */
-const AH_TABLE      AcpiSupportedTables[] =
+const AH_TABLE      Gbl_AcpiSupportedTables[] =
 {
     {ACPI_SIG_ASF,  "Alert Standard Format table"},
     {ACPI_SIG_BERT, "Boot Error Record Table"},
@@ -124,6 +124,7 @@ const AH_TABLE      AcpiSupportedTables[] =
     {ACPI_SIG_NFIT, "NVDIMM Firmware Interface Table"},
     {ACPI_SIG_PCCT, "Platform Communications Channel Table"},
     {ACPI_SIG_PMTT, "Platform Memory Topology Table"},
+    {ACPI_SIG_RASF, "RAS Features Table"},
     {ACPI_RSDP_NAME,"Root System Description Pointer"},
     {ACPI_SIG_RSDT, "Root System Description Table"},
     {ACPI_SIG_S3PT, "S3 Performance Table"},
