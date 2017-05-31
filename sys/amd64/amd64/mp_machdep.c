@@ -412,6 +412,7 @@ void
 invltlb_invpcid_handler(void)
 {
 	struct invpcid_descr d;
+	uint32_t generation;
 
 #ifdef COUNT_XINVLTLB_HITS
 	xhits_gbl[PCPU_GET(cpuid)]++;
@@ -420,17 +421,20 @@ invltlb_invpcid_handler(void)
 	(*ipi_invltlb_counts[PCPU_GET(cpuid)])++;
 #endif /* COUNT_IPIS */
 
+	generation = smp_tlb_generation;
 	d.pcid = smp_tlb_pmap->pm_pcids[PCPU_GET(cpuid)].pm_pcid;
 	d.pad = 0;
 	d.addr = 0;
 	invpcid(&d, smp_tlb_pmap == kernel_pmap ? INVPCID_CTXGLOB :
 	    INVPCID_CTX);
-	atomic_add_int(&smp_tlb_wait, 1);
+	PCPU_SET(smp_tlb_done, generation);
 }
 
 void
 invltlb_pcid_handler(void)
 {
+	uint32_t generation;
+  
 #ifdef COUNT_XINVLTLB_HITS
 	xhits_gbl[PCPU_GET(cpuid)]++;
 #endif /* COUNT_XINVLTLB_HITS */
@@ -438,6 +442,7 @@ invltlb_pcid_handler(void)
 	(*ipi_invltlb_counts[PCPU_GET(cpuid)])++;
 #endif /* COUNT_IPIS */
 
+	generation = smp_tlb_generation;	/* Overlap with serialization */
 	if (smp_tlb_pmap == kernel_pmap) {
 		invltlb_glob();
 	} else {
@@ -453,5 +458,5 @@ invltlb_pcid_handler(void)
 			    smp_tlb_pmap->pm_pcids[PCPU_GET(cpuid)].pm_pcid);
 		}
 	}
-	atomic_add_int(&smp_tlb_wait, 1);
+	PCPU_SET(smp_tlb_done, generation);
 }

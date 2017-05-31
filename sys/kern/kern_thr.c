@@ -36,6 +36,7 @@ __FBSDID("$FreeBSD$");
 #include <sys/priv.h>
 #include <sys/proc.h>
 #include <sys/posix4.h>
+#include <sys/ptrace.h>
 #include <sys/racct.h>
 #include <sys/resourcevar.h>
 #include <sys/rwlock.h>
@@ -254,7 +255,7 @@ thread_create(struct thread *td, struct rtprio *rtp,
 	thread_unlock(td);
 	if (P_SHOULDSTOP(p))
 		newtd->td_flags |= TDF_ASTPENDING | TDF_NEEDSUSPCHK;
-	if (p->p_flag2 & P2_LWP_EVENTS)
+	if (p->p_ptevents & PTRACE_LWP)
 		newtd->td_dbgflags |= TDB_BORN;
 
 	/*
@@ -354,8 +355,8 @@ kern_thr_exit(struct thread *td)
 
 	p->p_pendingexits++;
 	td->td_dbgflags |= TDB_EXIT;
-	if (p->p_flag & P_TRACED && p->p_flag2 & P2_LWP_EVENTS)
-		ptracestop(td, SIGTRAP);
+	if (p->p_ptevents & PTRACE_LWP)
+		ptracestop(td, SIGTRAP, NULL);
 	PROC_UNLOCK(p);
 	tidhash_remove(td);
 	PROC_LOCK(p);
@@ -577,8 +578,11 @@ sys_thr_set_name(struct thread *td, struct thr_set_name_args *uap)
 	error = 0;
 	name[0] = '\0';
 	if (uap->name != NULL) {
-		error = copyinstr(uap->name, name, sizeof(name),
-			NULL);
+		error = copyinstr(uap->name, name, sizeof(name), NULL);
+		if (error == ENAMETOOLONG) {
+			error = copyin(uap->name, name, sizeof(name) - 1);
+			name[sizeof(name) - 1] = '\0';
+		}
 		if (error)
 			return (error);
 	}

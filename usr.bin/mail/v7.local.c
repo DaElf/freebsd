@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -68,9 +68,12 @@ findmail(char *user, char *buf, int buflen)
 void
 demail(void)
 {
+	int fd;
 
 	if (value("keep") != NULL || rm(mailname) < 0)
-		(void)close(open(mailname, O_CREAT | O_TRUNC | O_WRONLY, 0600));
+		if ((fd = open(mailname, O_CREAT | O_TRUNC | O_WRONLY, 0600)) >=
+		    0)
+			(void)close(fd);
 }
 
 /*

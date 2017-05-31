@@ -677,40 +677,15 @@ devfs_close_f(struct file *fp, struct thread *td)
 }
 
 static int
-devfs_fsync(struct vop_fsync_args *ap)
-{
-	int error;
-	struct bufobj *bo;
-	struct devfs_dirent *de;
-
-	if (!vn_isdisk(ap->a_vp, &error)) {
-		bo = &ap->a_vp->v_bufobj;
-		de = ap->a_vp->v_data;
-		if (error == ENXIO && bo->bo_dirty.bv_cnt > 0) {
-			printf("Device %s went missing before all of the data "
-			    "could be written to it; expect data loss.\n",
-			    de->de_dirent->d_name);
-
-			error = vop_stdfsync(ap);
-			if (bo->bo_dirty.bv_cnt != 0 || error != 0)
-				panic("devfs_fsync: vop_stdfsync failed.");
-		}
-
-		return (0);
-	}
-
-	return (vop_stdfsync(ap));
-}
-
-static int
 devfs_getattr(struct vop_getattr_args *ap)
 {
 	struct vnode *vp = ap->a_vp;
 	struct vattr *vap = ap->a_vap;
-	int error;
 	struct devfs_dirent *de;
 	struct devfs_mount *dmp;
 	struct cdev *dev;
+	struct timeval boottime;
+	int error;
 
 	error = devfs_populate_vp(vp);
 	if (error != 0)
@@ -740,6 +715,7 @@ devfs_getattr(struct vop_getattr_args *ap)
 	vap->va_blocksize = DEV_BSIZE;
 	vap->va_type = vp->v_type;
 
+	getboottime(&boottime);
 #define fix(aa)							\
 	do {							\
 		if ((aa).tv_sec <= 3600) {			\
@@ -779,47 +755,61 @@ devfs_getattr(struct vop_getattr_args *ap)
 static int
 devfs_ioctl_f(struct file *fp, u_long com, void *data, struct ucred *cred, struct thread *td)
 {
-	struct cdev *dev;
-	struct cdevsw *dsw;
-	struct vnode *vp;
-	struct vnode *vpold;
-	int error, i, ref;
-	const char *p;
-	struct fiodgname_arg *fgn;
 	struct file *fpop;
+	int error;
 
 	fpop = td->td_fpop;
-	error = devfs_fp_check(fp, &dev, &dsw, &ref);
-	if (error != 0) {
-		error = vnops.fo_ioctl(fp, com, data, cred, td);
-		return (error);
-	}
+	td->td_fpop = fp;
+	error = vnops.fo_ioctl(fp, com, data, cred, td);
+	td->td_fpop = fpop;
+	return (error);
+}
+
+static int
+devfs_ioctl(struct vop_ioctl_args *ap)
+{
+	struct fiodgname_arg *fgn;
+	struct vnode *vpold, *vp;
+	struct cdevsw *dsw;
+	struct thread *td;
+	struct cdev *dev;
+	int error, ref, i;
+	const char *p;
+	u_long com;
+
+	vp = ap->a_vp;
+	com = ap->a_command;
+	td = ap->a_td;
+
+	dsw = devvn_refthread(vp, &dev, &ref);
+	if (dsw == NULL)
+		return (ENXIO);
+	KASSERT(dev->si_refcount > 0,
+	    ("devfs: un-referenced struct cdev *(%s)", devtoname(dev)));
 
 	if (com == FIODTYPE) {
-		*(int *)data = dsw->d_flags & D_TYPEMASK;
-		td->td_fpop = fpop;
-		dev_relthread(dev, ref);
-		return (0);
+		*(int *)ap->a_data = dsw->d_flags & D_TYPEMASK;
+		error = 0;
+		goto out;
 	} else if (com == FIODGNAME) {
-		fgn = data;
+		fgn = ap->a_data;
 		p = devtoname(dev);
 		i = strlen(p) + 1;
 		if (i > fgn->len)
 			error = EINVAL;
 		else
 			error = copyout(p, fgn->buf, i);
-		td->td_fpop = fpop;
-		dev_relthread(dev, ref);
-		return (error);
+		goto out;
 	}
-	error = dsw->d_ioctl(dev, com, data, fp->f_flag, td);
-	td->td_fpop = NULL;
+
+	error = dsw->d_ioctl(dev, com, ap->a_data, ap->a_fflag, td);
+
+out:
 	dev_relthread(dev, ref);
 	if (error == ENOIOCTL)
 		error = ENOTTY;
-	if (error == 0 && com == TIOCSCTTY) {
-		vp = fp->f_vnode;
 
+	if (error == 0 && com == TIOCSCTTY) {
 		/* Do nothing if reassigning same control tty */
 		sx_slock(&proctree_lock);
 		if (td->td_proc->p_session->s_ttyvp == vp) {
@@ -1325,6 +1315,7 @@ devfs_readdir(struct vop_readdir_args *ap)
 		else
 			de = dd;
 		dp = dd->de_dirent;
+		MPASS(dp->d_reclen == GENERIC_DIRSIZ(dp));
 		if (dp->d_reclen > uio->uio_resid)
 			break;
 		dp->d_fileno = de->de_inode;
@@ -1787,9 +1778,11 @@ devfs_mmap_f(struct file *fp, vm_map_t map, vm_offset_t *addr, vm_size_t size,
 	 * compatible.
 	 */
 	mp = vp->v_mount;
-	if (mp != NULL && (mp->mnt_flag & MNT_NOEXEC) != 0)
+	if (mp != NULL && (mp->mnt_flag & MNT_NOEXEC) != 0) {
 		maxprot = VM_PROT_NONE;
-	else
+		if ((prot & VM_PROT_EXECUTE) != 0)
+			return (EACCES);
+	} else
 		maxprot = VM_PROT_EXECUTE;
 	if ((fp->f_flag & FREAD) != 0)
 		maxprot |= VM_PROT_READ;
@@ -1862,6 +1855,7 @@ static struct fileops devfs_ops_f = {
 	.fo_flags =	DFLAG_PASSABLE | DFLAG_SEEKABLE
 };
 
+/* Vops for non-CHR vnodes in /dev. */
 static struct vop_vector devfs_vnodeops = {
 	.vop_default =		&default_vnodeops,
 
@@ -1885,6 +1879,7 @@ static struct vop_vector devfs_vnodeops = {
 	.vop_vptocnp =		devfs_vptocnp,
 };
 
+/* Vops for VCHR vnodes in /dev. */
 static struct vop_vector devfs_specops = {
 	.vop_default =		&default_vnodeops,
 
@@ -1892,8 +1887,9 @@ static struct vop_vector devfs_specops = {
 	.vop_bmap =		VOP_PANIC,
 	.vop_close =		devfs_close,
 	.vop_create =		VOP_PANIC,
-	.vop_fsync =		devfs_fsync,
+	.vop_fsync =		vop_stdfsync,
 	.vop_getattr =		devfs_getattr,
+	.vop_ioctl =		devfs_ioctl,
 	.vop_link =		VOP_PANIC,
 	.vop_mkdir =		VOP_PANIC,
 	.vop_mknod =		VOP_PANIC,

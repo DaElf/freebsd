@@ -113,11 +113,9 @@ device		bpf
 
 # USB Ethernet support, requires miibus
 device		miibus
-device		axe			# ASIX Electronics USB Ethernet
 
-# Device mode support and USFS template
+# Device mode support
 device		usb_template    	# Control of the gadget
-device		usfs
 
 # Pinmux
 device		fdt_pinctrl
@@ -132,3 +130,6 @@ device		hdmi
 device		ums
 device		ukbd
 device		kbdmux
+
+# Uncomment to enable evdev support for ti_adc
+# options		EVDEV_SUPPORT

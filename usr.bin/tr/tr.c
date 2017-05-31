@@ -10,7 +10,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -42,7 +42,9 @@ static const char sccsid[] = "@(#)tr.c	8.2 (Berkeley) 5/4/95";
 #endif
 
 #include <sys/types.h>
+#include <sys/capsicum.h>
 
+#include <capsicum_helpers.h>
 #include <ctype.h>
 #include <err.h>
 #include <limits.h>
@@ -68,12 +70,20 @@ static void usage(void);
 int
 main(int argc, char **argv)
 {
+	static int carray[NCHARS_SB];
 	struct cmap *map;
 	struct cset *delete, *squeeze;
+	int n, *p;
 	int Cflag, cflag, dflag, sflag, isstring2;
 	wint_t ch, cnt, lastch;
 
 	(void)setlocale(LC_ALL, "");
+
+	if (caph_limit_stdio() == -1)
+		err(1, "unable to limit stdio");
+
+	if (cap_enter() < 0 && errno != ENOSYS)
+		err(1, "unable to enter capability mode");
 
 	Cflag = cflag = dflag = sflag = 0;
 	while ((ch = getopt(argc, argv, "Ccdsu")) != -1)
@@ -252,7 +262,7 @@ main(int argc, char **argv)
 		(void)next(&s2);
 	}
 endloop:
-	if (cflag || Cflag) {
+	if (cflag || (Cflag && MB_CUR_MAX > 1)) {
 		/*
 		 * This is somewhat tricky: since the character set is
 		 * potentially huge, we need to avoid allocating a map
@@ -266,7 +276,7 @@ endloop:
 		 */
 		s2.str = argv[1];
 		s2.state = NORMAL;
-		for (cnt = 0; cnt <= WINT_MAX; cnt++) {
+		for (cnt = 0; cnt < WINT_MAX; cnt++) {
 			if (Cflag && !iswrune(cnt))
 				continue;
 			if (cmap_lookup(map, cnt) == OOBCH) {
@@ -282,6 +292,30 @@ endloop:
 				break;
 		}
 		cmap_default(map, s2.lastch);
+	} else if (Cflag) {
+		for (p = carray, cnt = 0; cnt < NCHARS_SB; cnt++) {
+			if (cmap_lookup(map, cnt) == OOBCH && iswrune(cnt))
+				*p++ = cnt;
+			else
+				cmap_add(map, cnt, cnt);
+		}
+		n = p - carray;
+		if (Cflag && n > 1)
+			(void)mergesort(carray, n, sizeof(*carray), charcoll);
+
+		s2.str = argv[1];
+		s2.state = NORMAL;
+		for (cnt = 0; cnt < n; cnt++) {
+			(void)next(&s2);
+			cmap_add(map, carray[cnt], s2.lastch);
+			/*
+			 * Chars taken from s2 can be different this time
+			 * due to lack of complex upper/lower processing,
+			 * so fill string2 again to not miss some.
+			 */
+			if (sflag)
+				cset_add(squeeze, s2.lastch);
+		}
 	}
 
 	cset_cache(squeeze);
@@ -324,6 +358,16 @@ setup(char *arg, STR *str, int cflag, int Cflag)
 		cset_invert(cs);
 	cset_cache(cs);
 	return (cs);
+}
+
+int
+charcoll(const void *a, const void *b)
+{
+	static char sa[2], sb[2];
+
+	sa[0] = *(const int *)a;
+	sb[0] = *(const int *)b;
+	return (strcoll(sa, sb));
 }
 
 static void

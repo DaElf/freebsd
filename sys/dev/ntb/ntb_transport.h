@@ -43,12 +43,13 @@ struct ntb_queue_handlers {
 	void (*event_handler)(void *data, enum ntb_link_event status);
 };
 
+int ntb_transport_queue_count(device_t dev);
+struct ntb_transport_qp *
+ntb_transport_create_queue(device_t dev, int q,
+    const struct ntb_queue_handlers *handlers, void *data);
+void ntb_transport_free_queue(struct ntb_transport_qp *qp);
 unsigned char ntb_transport_qp_num(struct ntb_transport_qp *qp);
 unsigned int ntb_transport_max_size(struct ntb_transport_qp *qp);
-struct ntb_transport_qp *
-ntb_transport_create_queue(void *data, device_t dev,
-			   const struct ntb_queue_handlers *handlers);
-void ntb_transport_free_queue(struct ntb_transport_qp *qp);
 int ntb_transport_rx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
 			     unsigned int len);
 int ntb_transport_tx_enqueue(struct ntb_transport_qp *qp, void *cb, void *data,
@@ -57,4 +58,5 @@ void *ntb_transport_rx_remove(struct ntb_transport_qp *qp, unsigned int *len);
 void ntb_transport_link_up(struct ntb_transport_qp *qp);
 void ntb_transport_link_down(struct ntb_transport_qp *qp);
 bool ntb_transport_link_query(struct ntb_transport_qp *qp);
+uint64_t ntb_transport_link_speed(struct ntb_transport_qp *qp);
 unsigned int ntb_transport_tx_free_entry(struct ntb_transport_qp *qp);

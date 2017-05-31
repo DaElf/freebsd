@@ -86,7 +86,7 @@ __FBSDID("$FreeBSD$");
 
 #include <security/mac/mac_framework.h>
 
-void (*softdep_ast_cleanup)(void);
+void (*softdep_ast_cleanup)(struct thread *);
 
 /*
  * Define the code needed before returning to user mode, for trap and
@@ -107,15 +107,20 @@ userret(struct thread *td, struct trapframe *frame)
 	 * multi-threaded processes, where signal distribution might
 	 * change due to other threads changing sigmask, the check is
 	 * racy and cannot be performed reliably.
+	 * If current process is vfork child, indicated by P_PPWAIT, then
+	 * issignal() ignores stops, so we block the check to avoid
+	 * classifying pending signals.
 	 */
 	if (p->p_numthreads == 1) {
 		PROC_LOCK(p);
 		thread_lock(td);
-		KASSERT(!SIGPENDING(td) ||
-		    (td->td_flags & (TDF_NEEDSIGCHK | TDF_ASTPENDING)) ==
-		    (TDF_NEEDSIGCHK | TDF_ASTPENDING),
-		    ("failed to set signal flags for ast p %p td %p fl %x",
-		    p, td, td->td_flags));
+		if ((p->p_flag & P_PPWAIT) == 0) {
+			KASSERT(!SIGPENDING(td) || (td->td_flags &
+			    (TDF_NEEDSIGCHK | TDF_ASTPENDING)) ==
+			    (TDF_NEEDSIGCHK | TDF_ASTPENDING),
+			    ("failed to set signal flags for ast p %p "
+			    "td %p fl %x", p, td, td->td_flags));
+		}
 		thread_unlock(td);
 		PROC_UNLOCK(p);
 	}
@@ -123,8 +128,8 @@ userret(struct thread *td, struct trapframe *frame)
 #ifdef KTRACE
 	KTRUSERRET(td);
 #endif
-	if (softdep_ast_cleanup != NULL)
-		softdep_ast_cleanup();
+	td_softdep_cleanup(td);
+	MPASS(td->td_su == NULL);
 
 	/*
 	 * If this thread tickled GEOM, we need to wait for the giggling to
@@ -229,7 +234,7 @@ ast(struct trapframe *framep)
 	td->td_flags &= ~(TDF_ASTPENDING | TDF_NEEDSIGCHK | TDF_NEEDSUSPCHK |
 	    TDF_NEEDRESCHED | TDF_ALRMPEND | TDF_PROFPEND | TDF_MACPEND);
 	thread_unlock(td);
-	PCPU_INC(cnt.v_trap);
+	VM_CNT_INC(v_trap);
 
 	if (td->td_cowgen != p->p_cowgen)
 		thread_cow_update(td);
@@ -281,12 +286,15 @@ ast(struct trapframe *framep)
 		 * td_flags, since signal might have been delivered
 		 * after we cleared td_flags above.  This is one of
 		 * the reason for looping check for AST condition.
+		 * See comment in userret() about P_PPWAIT.
 		 */
-		KASSERT(!SIGPENDING(td) ||
-		    (td->td_flags & (TDF_NEEDSIGCHK | TDF_ASTPENDING)) ==
-		    (TDF_NEEDSIGCHK | TDF_ASTPENDING),
-		    ("failed2 to set signal flags for ast p %p td %p fl %x %x",
-		    p, td, flags, td->td_flags));
+		if ((p->p_flag & P_PPWAIT) == 0) {
+			KASSERT(!SIGPENDING(td) || (td->td_flags &
+			    (TDF_NEEDSIGCHK | TDF_ASTPENDING)) ==
+			    (TDF_NEEDSIGCHK | TDF_ASTPENDING),
+			    ("failed2 to set signal flags for ast p %p td %p "
+			    "fl %x %x", p, td, flags, td->td_flags));
+		}
 		thread_unlock(td);
 		PROC_UNLOCK(p);
 	}

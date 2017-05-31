@@ -837,7 +837,15 @@ next:
 	done += 8;
 	if (elen == 0) {
 		if (done >= len) {
-			ahci_write_fis_d2h(p, slot, cfis, ATA_S_READY | ATA_S_DSC);
+			if (ncq) {
+				if (first)
+					ahci_write_fis_d2h_ncq(p, slot);
+				ahci_write_fis_sdb(p, slot, cfis,
+				    ATA_S_READY | ATA_S_DSC);
+			} else {
+				ahci_write_fis_d2h(p, slot, cfis,
+				    ATA_S_READY | ATA_S_DSC);
+			}
 			p->pending &= ~(1 << slot);
 			ahci_check_stopped(p);
 			if (!first)
@@ -924,19 +932,36 @@ static void
 ahci_handle_read_log(struct ahci_port *p, int slot, uint8_t *cfis)
 {
 	struct ahci_cmd_hdr *hdr;
-	uint8_t buf[512];
+	uint32_t buf[128];
+	uint8_t *buf8 = (uint8_t *)buf;
+	uint16_t *buf16 = (uint16_t *)buf;
 
 	hdr = (struct ahci_cmd_hdr *)(p->cmd_lst + slot * AHCI_CL_SIZE);
-	if (p->atapi || hdr->prdtl == 0 || cfis[4] != 0x10 ||
-	    cfis[5] != 0 || cfis[9] != 0 || cfis[12] != 1 || cfis[13] != 0) {
+	if (p->atapi || hdr->prdtl == 0 || cfis[5] != 0 ||
+	    cfis[9] != 0 || cfis[12] != 1 || cfis[13] != 0) {
 		ahci_write_fis_d2h(p, slot, cfis,
 		    (ATA_E_ABORT << 8) | ATA_S_READY | ATA_S_ERROR);
 		return;
 	}
 
 	memset(buf, 0, sizeof(buf));
-	memcpy(buf, p->err_cfis, sizeof(p->err_cfis));
-	ahci_checksum(buf, sizeof(buf));
+	if (cfis[4] == 0x00) {	/* Log directory */
+		buf16[0x00] = 1; /* Version -- 1 */
+		buf16[0x10] = 1; /* NCQ Command Error Log -- 1 page */
+		buf16[0x13] = 1; /* SATA NCQ Send and Receive Log -- 1 page */
+	} else if (cfis[4] == 0x10) {	/* NCQ Command Error Log */
+		memcpy(buf8, p->err_cfis, sizeof(p->err_cfis));
+		ahci_checksum(buf8, sizeof(buf));
+	} else if (cfis[4] == 0x13) {	/* SATA NCQ Send and Receive Log */
+		if (blockif_candelete(p->bctx) && !blockif_is_ro(p->bctx)) {
+			buf[0x00] = 1;	/* SFQ DSM supported */
+			buf[0x01] = 1;	/* SFQ DSM TRIM supported */
+		}
+	} else {
+		ahci_write_fis_d2h(p, slot, cfis,
+		    (ATA_E_ABORT << 8) | ATA_S_READY | ATA_S_ERROR);
+		return;
+	}
 
 	if (cfis[2] == ATA_READ_LOG_EXT)
 		ahci_write_fis_piosetup(p);
@@ -1718,7 +1743,7 @@ ahci_handle_cmd(struct ahci_port *p, int slot, uint8_t *cfis)
 	case ATA_SEND_FPDMA_QUEUED:
 		if ((cfis[13] & 0x1f) == ATA_SFPDMA_DSM &&
 		    cfis[17] == 0 && cfis[16] == ATA_DSM_TRIM &&
-		    cfis[11] == 0 && cfis[13] == 1) {
+		    cfis[11] == 0 && cfis[3] == 1) {
 			ahci_handle_dsm_trim(p, slot, cfis, 0);
 			break;
 		}

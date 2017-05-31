@@ -175,24 +175,8 @@ update_mp(struct mount *mp, struct thread *td)
 
 	if (pmp->pm_flags & MSDOSFSMNT_NOWIN95)
 		pmp->pm_flags |= MSDOSFSMNT_SHORTNAME;
-	else if (!(pmp->pm_flags &
-	    (MSDOSFSMNT_SHORTNAME | MSDOSFSMNT_LONGNAME))) {
-		struct vnode *rootvp;
-
-		/*
-		 * Try to divine whether to support Win'95 long filenames
-		 */
-		if (FAT32(pmp))
-			pmp->pm_flags |= MSDOSFSMNT_LONGNAME;
-		else {
-			if ((error =
-			    msdosfs_root(mp, LK_EXCLUSIVE, &rootvp)) != 0)
-				return error;
-			pmp->pm_flags |= findwin95(VTODE(rootvp)) ?
-			    MSDOSFSMNT_LONGNAME : MSDOSFSMNT_SHORTNAME;
-			vput(rootvp);
-		}
-	}
+	else
+		pmp->pm_flags |= MSDOSFSMNT_LONGNAME;
 	return 0;
 }
 
@@ -414,7 +398,7 @@ mountmsdosfs(struct vnode *devvp, struct mount *mp)
 	struct byte_bpb33 *b33;
 	struct byte_bpb50 *b50;
 	struct byte_bpb710 *b710;
-	u_int8_t SecPerClust;
+	uint8_t SecPerClust;
 	u_long clusters;
 	int ronly, error;
 	struct g_consumer *cp;
@@ -620,7 +604,7 @@ mountmsdosfs(struct vnode *devvp, struct mount *mp)
 		    <= ((CLUST_RSRVD - CLUST_FIRST) & FAT12_MASK)) {
 			/*
 			 * This will usually be a floppy disk. This size makes
-			 * sure that one fat entry will not be split across
+			 * sure that one FAT entry will not be split across
 			 * multiple blocks.
 			 */
 			pmp->pm_fatmask = FAT12_MASK;
@@ -733,9 +717,9 @@ mountmsdosfs(struct vnode *devvp, struct mount *mp)
 		goto error_exit;
 
 	/*
-	 * If they want fat updates to be synchronous then let them suffer
+	 * If they want FAT updates to be synchronous then let them suffer
 	 * the performance degradation in exchange for the on disk copy of
-	 * the fat being correct just about all the time.  I suppose this
+	 * the FAT being correct just about all the time.  I suppose this
 	 * would be a good thing to turn on if the kernel is still flakey.
 	 */
 	if (mp->mnt_flag & MNT_SYNCHRONOUS)
@@ -758,7 +742,7 @@ mountmsdosfs(struct vnode *devvp, struct mount *mp)
 	mp->mnt_stat.f_fsid.val[1] = mp->mnt_vfc->vfc_typenum;
 	MNT_ILOCK(mp);
 	mp->mnt_flag |= MNT_LOCAL;
-	mp->mnt_kern_flag |= MNTK_USES_BCACHE;
+	mp->mnt_kern_flag |= MNTK_USES_BCACHE | MNTK_NO_IOPF;
 	MNT_IUNLOCK(mp);
 
 	if (pmp->pm_flags & MSDOSFS_LARGEFS)
@@ -776,8 +760,7 @@ error_exit:
 	}
 	if (pmp) {
 		lockdestroy(&pmp->pm_fatlock);
-		if (pmp->pm_inusemap)
-			free(pmp->pm_inusemap, M_MSDOSFSFAT);
+		free(pmp->pm_inusemap, M_MSDOSFSFAT);
 		free(pmp, M_MSDOSFSMNT);
 		mp->mnt_data = NULL;
 	}
@@ -942,14 +925,14 @@ msdosfs_sync(struct mount *mp, int waitfor)
 	td = curthread;
 
 	/*
-	 * If we ever switch to not updating all of the fats all the time,
+	 * If we ever switch to not updating all of the FATs all the time,
 	 * this would be the place to update them from the first one.
 	 */
 	if (pmp->pm_fmod != 0) {
 		if (pmp->pm_flags & MSDOSFSMNT_RONLY)
 			panic("msdosfs_sync: rofs mod");
 		else {
-			/* update fats here */
+			/* update FATs here */
 		}
 	}
 	/*

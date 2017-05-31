@@ -207,6 +207,7 @@ struct apic_ops {
 	void	(*create)(u_int, int);
 	void	(*init)(vm_paddr_t);
 	void	(*xapic_mode)(void);
+	bool	(*is_x2apic)(void);
 	void	(*setup)(int);
 	void	(*dump)(const char *);
 	void	(*disable)(void);
@@ -232,6 +233,9 @@ struct apic_ops {
 
 	/* CMC */
 	void	(*enable_cmc)(void);
+
+	/* AMD ELVT */
+	int	(*enable_mca_elvt)(void);
 
 	/* IPI */
 	void	(*ipi_raw)(register_t, u_int);
@@ -268,6 +272,13 @@ lapic_xapic_mode(void)
 {
 
 	apic_ops.xapic_mode();
+}
+
+static inline bool
+lapic_is_x2apic(void)
+{
+
+	return (apic_ops.is_x2apic());
 }
 
 static inline void
@@ -395,6 +406,13 @@ lapic_enable_cmc(void)
 {
 
 	apic_ops.enable_cmc();
+}
+
+static inline int
+lapic_enable_mca_elvt(void)
+{
+
+	return (apic_ops.enable_mca_elvt());
 }
 
 static inline void

@@ -18,7 +18,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -62,6 +62,8 @@ __FBSDID("$FreeBSD$");
 #include <string.h>
 #include <wchar.h>
 #include <wctype.h>
+
+#include "collate.h"
 
 #define	EOS	'\0'
 
@@ -236,6 +238,8 @@ rangematch(const char *pattern, wchar_t test, int flags, char **newp,
 	wchar_t c, c2;
 	size_t pclen;
 	const char *origpat;
+	struct xlocale_collate *table =
+		(struct xlocale_collate*)__get_locale()->components[XLC_COLLATE];
 
 	/*
 	 * A bracket expression starting with an unquoted circumflex
@@ -290,7 +294,11 @@ rangematch(const char *pattern, wchar_t test, int flags, char **newp,
 			if (flags & FNM_CASEFOLD)
 				c2 = towlower(c2);
 
-			if (c <= test && test <= c2)
+			if (table->__collate_load_error ?
+			    c <= test && test <= c2 :
+			       __wcollate_range_cmp(c, test) <= 0
+			    && __wcollate_range_cmp(test, c2) <= 0
+			   )
 				ok = 1;
 		} else if (c == test)
 			ok = 1;

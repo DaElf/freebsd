@@ -31,6 +31,7 @@ __FBSDID("$FreeBSD$");
 #include <stand.h>
 #include <string.h>
 #include <setjmp.h>
+#include <sys/disk.h>
 
 #include "bootstrap.h"
 #include "disk.h"
@@ -45,15 +46,12 @@ static int userboot_zfs_found;
 
 #define	USERBOOT_VERSION	USERBOOT_VERSION_4
 
-#define	MALLOCSZ		(10*1024*1024)
-static char mallocbuf[MALLOCSZ];
+#define	MALLOCSZ		(64*1024*1024)
+
 struct loader_callbacks *callbacks;
 void *callbacks_arg;
 
-extern char bootprog_name[];
-extern char bootprog_rev[];
-extern char bootprog_date[];
-extern char bootprog_maker[];
+extern char bootprog_info[];
 static jmp_buf jb;
 
 struct arch_switch archsw;	/* MI/MD interface boundary */
@@ -110,21 +108,7 @@ loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 	 */
 	cons_probe();
 
-        if (version != USERBOOT_VERSION) {
-		printf("%s: version expected %d got %d\n", __func__,
-		      USERBOOT_VERSION, version);
-		return(EOPNOTSUPP);
-	}
-
-	/*
-	 * March through the device switch probing for things.
-	 */
-	for (i = 0; devsw[i] != NULL; i++)
-		if (devsw[i]->dv_init != NULL)
-			(devsw[i]->dv_init)();
-
-	printf("%s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
+	printf("\n%s", bootprog_info);
 #if 0
 	printf("Memory: %ld k\n", memsize() / 1024);
 #endif
@@ -295,6 +279,16 @@ command_reloadbe(int argc, char *argv[])
 	}
 
 	return (CMD_OK);
+}
+
+uint64_t
+ldi_get_size(void *priv)
+{
+	int fd = (uintptr_t) priv;
+	uint64_t size;
+
+	ioctl(fd, DIOCGMEDIASIZE, &size);
+	return (size);
 }
 #endif /* USERBOOT_ZFS_SUPPORT */
 

@@ -1,11 +1,18 @@
 # $FreeBSD$
 
+.include <src.opts.mk>
+
+.if ${MK_FORTH} != "no"
+CFLAGS+= -DBOOT_FORTH
+.include "${.CURDIR}/../../Makefile.ficl"
+.endif
+
 LIB=	efi
 INTERNALLIB=
 WARNS?=	2
 
 SRCS=	delay.c devpath.c efi_console.c efinet.c efipart.c env.c errno.c \
-	handles.c libefi.c
+	handles.c wchar.c libefi.c
 
 .if ${MACHINE_CPUARCH} == "amd64" || ${MACHINE_CPUARCH} == "i386"
 SRCS+=	time.c
@@ -19,9 +26,11 @@ SRCS+=	time_event.c
 # of a short. There's no good cast to use here so just ignore the
 # warnings for now.
 CWARNFLAGS.efinet.c+=	-Wno-format
+CWARNFLAGS.efipart.c+=	-Wno-format
+CWARNFLAGS.env.c+=	-Wno-format
 
 .if ${MACHINE_CPUARCH} == "aarch64"
-CFLAGS+=	-msoft-float -mgeneral-regs-only
+CFLAGS+=	-mgeneral-regs-only
 .endif
 .if ${MACHINE_ARCH} == "amd64"
 CFLAGS+= -fPIC -mno-red-zone
@@ -35,6 +44,10 @@ CFLAGS+= -I${.CURDIR}/../../common
 
 # Handle FreeBSD specific %b and %D printf format specifiers
 CFLAGS+= ${FORMAT_EXTENSIONS}
+
+# Do not use TERM_EMU on arm and arm64 as it doesn't behave well with serial console
+.if ${MACHINE_CPUARCH} != "arm" && ${MACHINE_CPUARCH} != "aarch64"
 CFLAGS+= -DTERM_EMU
+.endif
 
 .include <bsd.lib.mk>

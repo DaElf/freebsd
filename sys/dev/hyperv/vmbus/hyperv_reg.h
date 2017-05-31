@@ -30,6 +30,7 @@
 #define _HYPERV_REG_H_
 
 #include <sys/param.h>
+#include <sys/systm.h>
 
 /*
  * Hyper-V Synthetic MSRs
@@ -56,7 +57,10 @@
 
 #define MSR_HV_VP_INDEX			0x40000002
 
-#define MSR_HV_TIME_REF_COUNT		0x40000020
+#define MSR_HV_REFERENCE_TSC		0x40000021
+#define MSR_HV_REFTSC_ENABLE		0x0001ULL
+#define MSR_HV_REFTSC_RSVD_MASK		0x0ffeULL
+#define MSR_HV_REFTSC_PGSHIFT		12
 
 #define MSR_HV_SCONTROL			0x40000080
 #define MSR_HV_SCTRL_ENABLE		0x0001ULL
@@ -105,15 +109,7 @@
 #define CPUID_LEAF_HV_IDENTITY		0x40000002
 
 #define CPUID_LEAF_HV_FEATURES		0x40000003
-/* EAX: features */
-#define CPUID_HV_MSR_TIME_REFCNT	0x0002	/* MSR_HV_TIME_REF_COUNT */
-#define CPUID_HV_MSR_SYNIC		0x0004	/* MSRs for SynIC */
-#define CPUID_HV_MSR_SYNTIMER		0x0008	/* MSRs for SynTimer */
-#define CPUID_HV_MSR_APIC		0x0010	/* MSR_HV_{EOI,ICR,TPR} */
-#define CPUID_HV_MSR_HYPERCALL		0x0020	/* MSR_HV_GUEST_OS_ID
-						 * MSR_HV_HYPERCALL */
-#define CPUID_HV_MSR_VP_INDEX		0x0040	/* MSR_HV_VP_INDEX */
-#define CPUID_HV_MSR_GUEST_IDLE		0x0400	/* MSR_HV_GUEST_IDLE */
+/* EAX: features include/hyperv.h CPUID_HV_MSR */
 /* ECX: power management features */
 #define CPUPM_HV_CSTATE_MASK		0x000f	/* deepest C-state */
 #define CPUPM_HV_C3_HPET		0x0010	/* C3 requires HPET */
@@ -131,6 +127,15 @@
 #define CPUID_LEAF_HV_RECOMMENDS	0x40000004
 #define CPUID_LEAF_HV_LIMITS		0x40000005
 #define CPUID_LEAF_HV_HWFEATURES	0x40000006
+
+/*
+ * Hyper-V Monitor Notification Facility
+ */
+struct hyperv_mon_param {
+	uint32_t	mp_connid;
+	uint16_t	mp_evtflag_ofs;
+	uint16_t	mp_rsvd;
+} __packed;
 
 /*
  * Hyper-V message types
@@ -153,13 +158,22 @@
 /*
  * Hypercall input parameters
  */
+#define HYPERCALL_PARAM_ALIGN		8
+#if 0
+/*
+ * XXX
+ * <<Hypervisor Top Level Functional Specification 4.0b>> requires
+ * input parameters size to be multiple of 8, however, many post
+ * message input parameters do _not_ meet this requirement.
+ */
+#define HYPERCALL_PARAM_SIZE_ALIGN	8
+#endif
 
 /*
  * HYPERCALL_POST_MESSAGE
  */
 #define HYPERCALL_POSTMSGIN_DSIZE_MAX	240
 #define HYPERCALL_POSTMSGIN_SIZE	256
-#define HYPERCALL_POSTMSGIN_ALIGN	8
 
 struct hypercall_postmsg_in {
 	uint32_t	hc_connid;
@@ -172,13 +186,8 @@ CTASSERT(sizeof(struct hypercall_postmsg_in) == HYPERCALL_POSTMSGIN_SIZE);
 
 /*
  * HYPERCALL_SIGNAL_EVENT
+ *
+ * struct hyperv_mon_param.
  */
-#define HYPERCALL_SIGEVTIN_ALIGN	8
-
-struct hypercall_sigevt_in {
-	uint32_t	hc_connid;
-	uint16_t	hc_evtflag_ofs;
-	uint16_t	hc_rsvd;
-} __packed;
 
 #endif	/* !_HYPERV_REG_H_ */

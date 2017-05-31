@@ -15,7 +15,7 @@
  * 2. Redistributions in binary form must reproduce the above copyright
  *    notice, this list of conditions and the following disclaimer in the
  *    documentation and/or other materials provided with the distribution.
- * 4. Neither the name of the University nor the names of its contributors
+ * 3. Neither the name of the University nor the names of its contributors
  *    may be used to endorse or promote products derived from this software
  *    without specific prior written permission.
  *
@@ -381,21 +381,18 @@ volatile int	ticks;
 int	psratio;
 
 static DPCPU_DEFINE(int, pcputicks);	/* Per-CPU version of ticks. */
-static int global_hardclock_run = 0;
+#ifdef DEVICE_POLLING
+static int devpoll_run = 0;
+#endif
 
 /*
  * Initialize clock frequencies and start both clocks running.
  */
 /* ARGSUSED*/
 static void
-initclocks(dummy)
-	void *dummy;
+initclocks(void *dummy)
 {
-#ifdef EARLY_AP_STARTUP
-	struct proc *p;
-	struct thread *td;
-#endif
-	register int i;
+	int i;
 
 	/*
 	 * Set divisors to 1 (normal case) and let the machine-specific
@@ -413,40 +410,6 @@ initclocks(dummy)
 	psratio = profhz / i;
 #ifdef SW_WATCHDOG
 	EVENTHANDLER_REGISTER(watchdog_list, watchdog_config, NULL, 0);
-#endif
-	/*
-	 * Arrange for ticks to wrap 10 minutes after boot to help catch
-	 * sign problems sooner.
-	 */
-	ticks = INT_MAX - (hz * 10 * 60);
-
-#ifdef EARLY_AP_STARTUP
-	/*
-	 * Fixup the tick counts in any blocked or sleeping threads to
-	 * account for the jump above.
-	 */
-	sx_slock(&allproc_lock);
-	FOREACH_PROC_IN_SYSTEM(p) {
-		PROC_LOCK(p);
-		if (p->p_state == PRS_NEW) {
-			PROC_UNLOCK(p);
-			continue;
-		}
-		FOREACH_THREAD_IN_PROC(p, td) {
-			thread_lock(td);
-			if (TD_ON_LOCK(td)) {
-				MPASS(td->td_blktick == 0);
-				td->td_blktick = ticks;
-			}
-			if (TD_ON_SLEEPQ(td)) {
-				MPASS(td->td_slptick == 0);
-				td->td_slptick = ticks;
-			}
-			thread_unlock(td);
-		}
-		PROC_UNLOCK(p);
-	}
-	sx_sunlock(&allproc_lock);
 #endif
 }
 
@@ -584,15 +547,15 @@ hardclock_cnt(int cnt, int usermode)
 #endif
 	/* We are in charge to handle this tick duty. */
 	if (newticks > 0) {
-		/* Dangerous and no need to call these things concurrently. */
-		if (atomic_cmpset_acq_int(&global_hardclock_run, 0, 1)) {
-			tc_ticktock(newticks);
+		tc_ticktock(newticks);
 #ifdef DEVICE_POLLING
+		/* Dangerous and no need to call these things concurrently. */
+		if (atomic_cmpset_acq_int(&devpoll_run, 0, 1)) {
 			/* This is very short and quick. */
 			hardclock_device_poll();
-#endif /* DEVICE_POLLING */
-			atomic_store_rel_int(&global_hardclock_run, 0);
+			atomic_store_rel_int(&devpoll_run, 0);
 		}
+#endif /* DEVICE_POLLING */
 #ifdef SW_WATCHDOG
 		if (watchdog_enabled > 0) {
 			i = atomic_fetchadd_int(&watchdog_ticks, -newticks);
@@ -617,11 +580,10 @@ hardclock_sync(int cpu)
  * Compute number of ticks in the specified amount of time.
  */
 int
-tvtohz(tv)
-	struct timeval *tv;
+tvtohz(struct timeval *tv)
 {
-	register unsigned long ticks;
-	register long sec, usec;
+	unsigned long ticks;
+	long sec, usec;
 
 	/*
 	 * If the number of usecs in the whole seconds part of the time
@@ -678,8 +640,7 @@ tvtohz(tv)
  * keeps the profile clock running constantly.
  */
 void
-startprofclock(p)
-	register struct proc *p;
+startprofclock(struct proc *p)
 {
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
@@ -698,8 +659,7 @@ startprofclock(p)
  * Stop profiling on a process.
  */
 void
-stopprofclock(p)
-	register struct proc *p;
+stopprofclock(struct proc *p)
 {
 
 	PROC_LOCK_ASSERT(p, MA_OWNED);
