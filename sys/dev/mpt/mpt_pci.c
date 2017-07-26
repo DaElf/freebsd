@@ -633,8 +633,7 @@ static int
 mpt_pci_shutdown_post_sync(device_t dev)
 {
 
-	printf("%s dev %d why does mpt need a post sync shutdown?\n",
-	       __func__, dev);
+	printf("%s why does mpt need a post sync shutdown?\n", __func__);
 	return 0;
 }
 
