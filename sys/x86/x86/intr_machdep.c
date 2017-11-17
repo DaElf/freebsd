@@ -210,7 +210,7 @@ intr_clear_all_handlers(void)
 	struct intsrc *isrc;
 	int i;
 
-	mtx_lock(&intr_table_lock);
+	sx_xlock(&intrsrc_lock);
 	for (i = 0; i < NUM_IO_INTS; i++) {
 		isrc = interrupt_sources[i];
 		if (isrc != NULL) {
@@ -218,7 +218,7 @@ intr_clear_all_handlers(void)
 			isrc->is_pic->pic_disable_intr(isrc);
 		}
 	}
-	mtx_unlock(&intr_table_lock);
+	sx_xunlock(&intrsrc_lock);
 	return (0);
 }
 
