@@ -228,8 +228,7 @@ generic_stop_cpus(cpuset_t map, u_int type)
 	KASSERT(
 	    type == IPI_STOP || type == IPI_STOP_HARD
 #if X86
-	    || type == IPI_SUSPEND
-	    || type == IPI_KLOAD,
+	    || type == IPI_SUSPEND || type == IPI_KLOAD
 #endif
 	    , ("%s: invalid stop type", __func__));
 

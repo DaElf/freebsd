@@ -110,21 +110,6 @@ loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 	cons_probe();
 
 	printf("\n%s", bootprog_info);
-        if (version != USERBOOT_VERSION) {
-		printf("%s: version expected %d got %d\n", __func__,
-		      USERBOOT_VERSION, version);
-		return(EOPNOTSUPP);
-	}
-
-	/*
-	 * March through the device switch probing for things.
-	 */
-	for (i = 0; devsw[i] != NULL; i++)
-		if (devsw[i]->dv_init != NULL)
-			(devsw[i]->dv_init)();
-
-	printf("%s, Revision %s\n", bootprog_name, bootprog_rev);
-	printf("(%s, %s)\n", bootprog_maker, bootprog_date);
 #if 0
 	printf("Memory: %ld k\n", memsize() / 1024);
 #endif

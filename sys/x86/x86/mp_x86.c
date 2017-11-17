@@ -93,7 +93,6 @@ int	mcount_lock;
 int	mp_naps;		/* # of Applications processors */
 int	boot_cpu_id = -1;	/* designated BSP */
 
-
 #ifdef KLOAD
 /* page table setup by kload so we can set the APs to a known page table */
 extern pt_entry_t kload_pgtbl;
