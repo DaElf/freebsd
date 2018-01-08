@@ -88,7 +88,7 @@ int
 loader_main(struct loader_callbacks *cb, void *arg, int version, int ndisks)
 {
 
-	const char *var;
+	char *var;
 	int i;
 
 	/*
