@@ -406,10 +406,10 @@ k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem)
 		);
 }
 
-static const char *
+static char *
 k_getenv(void *arg, int idx)
 {
-	static const char *vars[] = {
+	static char *vars[] = {
 		NULL
 	};
 
