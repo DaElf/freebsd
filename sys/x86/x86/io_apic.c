@@ -446,10 +446,10 @@ ioapic_program_intpin(struct ioapic_intsrc *intpin)
 
 	/* Write the values to the APIC. */
 	if (bootverbose) {
-		printf("%s: IOAPIC_REDTBL_HI intpin %d value 0x%x high 0x%x low 0x%x\n",
+		printf("%s: IOAPIC_REDTBL_HI intpin %d high 0x%x low 0x%x\n",
 		       __func__,
 		       intpin->io_intpin,
-		       value, high, low);
+		       high, low);
 	}
 	ioapic_write(io->io_addr, IOAPIC_REDTBL_HI(intpin->io_intpin), high);
 	
