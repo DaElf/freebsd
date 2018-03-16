@@ -258,11 +258,7 @@ invltlb_ret:
 /*
  * Executed by a CPU when it receives an IPI_KLOAD from another CPU.
  */
-	.text
-	SUPERALIGN_TEXT
-IDTVEC(cpukload)
-	PUSH_FRAME
-
+	INTR_HANDLER cpukload
 	call	as_lapic_eoi
 	call	cpukload_handler
 	jmp	doreti
