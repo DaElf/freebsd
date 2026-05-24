@@ -19,7 +19,6 @@ SUBDIR+=	cpucontrol
 .if ${MK_HYPERV} != "no"
 SUBDIR+=	hyperv
 .endif
-SUBDIR+=	kgmon
 SUBDIR+=	kload
 SUBDIR+=	lptcontrol
 SUBDIR+=	mptable

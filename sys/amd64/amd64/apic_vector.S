@@ -229,13 +229,11 @@ IDTVEC(spuriousint)
 /*
  * Executed by a CPU when it receives an IPI_KLOAD from another CPU.
  */
-	.text
-	SUPERALIGN_TEXT
-IDTVEC(cpukload)
-	PUSH_FRAME
-
-	call	as_lapic_eoi
+	INTR_HANDLER cpukload
+	KMSAN_ENTER
 	call	cpukload_handler
+	call	as_lapic_eoi
+	KMSAN_LEAVE
 	jmp	doreti
 
 /*

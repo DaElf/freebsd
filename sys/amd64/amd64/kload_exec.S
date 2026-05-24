@@ -27,7 +27,7 @@
  *
  */
 
-#include "assym.s"
+#include "assym.inc"
 
 #define	CR0_PG	0x80000000	/* PaGing enable */
 

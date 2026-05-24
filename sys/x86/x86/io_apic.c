@@ -364,7 +364,7 @@ static void
 ioapic_program_intpin(struct ioapic_intsrc *intpin)
 {
 	struct ioapic *io = (struct ioapic *)intpin->io_intsrc.is_pic;
-	uint32_t low, high;
+	uint32_t low, high, value;
 #ifdef IOMMU
 	int error;
 #endif

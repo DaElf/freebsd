@@ -823,7 +823,7 @@ lapic_xapic_mode(void)
 }
 
 void
-native_lapic_clear_lapic(u_int disable)
+lapic_clear_lapic(u_int disable)
 {
 	struct lapic *la;
 	uint32_t value;

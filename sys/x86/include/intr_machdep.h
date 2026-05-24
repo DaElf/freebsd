@@ -161,6 +161,7 @@ int	msi_map(int irq, uint64_t *addr, uint32_t *data);
 int	msi_release(int *irqs, int count);
 int	msix_alloc(device_t dev, int *irq);
 int	msix_release(int irq);
+int	intr_clear_all_handlers(void);
 #ifdef XENHVM
 void	xen_intr_alloc_irqs(void);
 #endif

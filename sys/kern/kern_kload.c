@@ -113,7 +113,7 @@ kload_kmem_alloc(vm_size_t size)
 	vm_offset_t va;
 	int num_pages;
 
-	va = kmem_alloc_attr(kernel_arena, size,
+	va = (vm_offset_t)kmem_alloc_attr(size,
 	    M_WAITOK | M_ZERO,
 	    0, (1 << 30) /* 1Gig limit */,
 	    VM_MEMATTR_WRITE_COMBINING);
@@ -140,7 +140,6 @@ struct kload_cpage {
 static int
 kload_add_page(struct kload_items *items, unsigned long item_m)
 {
-	vm_paddr_t phys;
 	unsigned long va;
 
 	if (*items->item != 0) {
@@ -155,7 +154,6 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 		if (items->head_va == 0)
 			items->head_va = va;
 
-		phys = vtophys(va);
 		/* store the address of indrect page */
 		*items->item = (unsigned long)
 		    (vtophys(va) + KLOADBASE) | KLOAD_INDIRECT;
@@ -202,7 +200,7 @@ kload_copyin_segment(struct kload_segment *khdr, int seg)
 	if (va && ((num_pages * PAGE_SIZE) > kload_prealloc)) {
 		printf("%s size over prealloc size %d need %d\n", __func__,
 		       kload_prealloc, num_pages * PAGE_SIZE);
-		kmem_free(kernel_arena, va, kload_prealloc);
+		kmem_free((void *)va, kload_prealloc);
 		va = 0;
 	}
 
@@ -422,7 +420,7 @@ kload_shutdown_final(void *arg, int howto)
 		/* we should be bound to cpu 0 at this point */
 		printf("%s: cpuid %d\n", __func__, PCPU_GET(cpuid));
 		CPU_CLR(PCPU_GET(cpuid), &map);
-		CPU_NAND(&map, &stopped_cpus);
+		CPU_ANDNOT(&map, &map, &stopped_cpus);
 		if (!CPU_EMPTY(&map)) {
 			printf("cpu_reset: Stopping other CPUs\n");
 			kload_suspend_cpus(map);
@@ -480,9 +478,9 @@ kload_modload(struct module *module, int cmd, void *arg)
 
 static int offset = NO_SYSCALL;
 
-static struct sysent kload_sysent= {
-	3,			/* sy_narg */
-	(sy_call_t *)sys_kload	/* sy_call */
+static struct sysent kload_sysent = {
+	.sy_narg = 3,
+	.sy_call = (sy_call_t *)sys_kload,
 };
 
 SYSCALL_MODULE(kload, &offset, &kload_sysent, kload_modload, NULL);

@@ -304,7 +304,7 @@ intr_clear_all_handlers(void)
 	int i;
 
 	sx_xlock(&intrsrc_lock);
-	for (i = 0; i < NUM_IO_INTS; i++) {
+	for (i = 0; i < (int)num_io_irqs; i++) {
 		isrc = interrupt_sources[i];
 		if (isrc != NULL) {
 			isrc->is_pic->pic_disable_source(isrc, PIC_EOI);

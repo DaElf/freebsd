@@ -258,17 +258,11 @@ k_seek(void *arg, void *h, uint64_t offset, int whence)
 }
 
 static int
-k_stat(void *arg, void *h,
-       int *mode_return, int *uid_return,
-       int *gid_return, uint64_t *size_return)
+k_stat(void *arg, void *h, struct stat *stp)
 {
-
 	struct load_file *lf = (struct load_file *)h;
 
-	*mode_return = lf->l_stat.st_mode;
-	*uid_return = lf->l_stat.st_uid;
-	*gid_return = lf->l_stat.st_gid;
-	*size_return = lf->l_stat.st_size;
+	*stp = lf->l_stat;
 	return (0);
 }
 
@@ -406,10 +400,10 @@ k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem)
 		);
 }
 
-static const char *
+static char *
 k_getenv(void *arg, int idx)
 {
-	static const char *vars[] = {
+	static char *vars[] = {
 		NULL
 	};
 
@@ -421,7 +415,7 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen)
 {
 	struct bios_smap_xattr *smapbasex, *smapx, *smapendx;
 	struct bios_smap *smapbase, *smap;
-	size_t i,j;
+	size_t j;
 	size_t len;
 	char name[] = "machdep.smap";
 	int mib[CTL_MAXNAME];
@@ -429,7 +423,10 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen)
 	len = name2oid(name, mib);
 
 	/* get the current smap from the running system */
-	i = sysctl(mib, 2, 0, &j, 0, 0);
+	if (sysctl(mib, 2, 0, &j, 0, 0) < 0) {
+		printf("kload: sysctl machdep.smap size failed\n");
+		return (1);
+	}
 	len = j;
 
 	/*
@@ -444,7 +441,11 @@ k_buildsmap(void *arg, void **smap_void, size_t *outlen)
 		return (1);
 	}
 
-	i = sysctl(mib, 2, smapbasex, &j, NULL, 0);
+	if (sysctl(mib, 2, smapbasex, &j, NULL, 0) < 0) {
+		printf("kload: sysctl machdep.smap failed\n");
+		free(smapbasex);
+		return (1);
+	}
 
 	smapendx = (struct bios_smap_xattr *)((uintptr_t)smapbasex + len);
 	for (smapx = smapbasex, smap = smapbase; smapx < smapendx; smapx++, smap++ ) {
