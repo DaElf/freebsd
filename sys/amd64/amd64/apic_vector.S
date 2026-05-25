@@ -228,11 +228,13 @@ IDTVEC(spuriousint)
 
 /*
  * Executed by a CPU when it receives an IPI_KLOAD from another CPU.
+ * Send EOI before calling the handler since the handler disables the
+ * LAPIC and may halt the CPU without returning.
  */
 	INTR_HANDLER cpukload
+	call	as_lapic_eoi
 	KMSAN_ENTER
 	call	cpukload_handler
-	call	as_lapic_eoi
 	KMSAN_LEAVE
 	jmp	doreti
 
