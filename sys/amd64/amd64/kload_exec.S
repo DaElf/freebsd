@@ -48,18 +48,20 @@
 
         .globl relocate_kernel
 relocate_kernel:
-        /* Install the new page table. */
-        movq	32(%rcx), %rax /* page table */
         movq	40(%rcx), %r9  /* address of control_page with new PT */
-        movq	%rax, %cr3
 
         /*
-         * Set cr4 to a known state:
-         *  - page size extensions
+         * Set cr4 to a known state before loading CR3.  Per Intel SDM,
+         * CR4.PAE must be set before loading a PAE page table into CR3.
+         *  - page size extensions enabled
          *  - physical address extension enabled
          */
         movq	$(X86_CR4_PSE | X86_CR4_PAE), %rax
         movq	%rax, %cr4
+
+        /* Install the new page table. */
+        movq	32(%rcx), %rax /* page table */
+        movq	%rax, %cr3
 
         /* Move the stack to the end of control page. */
         lea 4096(%r9), %rsp
@@ -156,9 +158,12 @@ identity_mapped:
         movsq
         jmp     0b
 2:
+        /* Flush all cache lines before jumping to new kernel. */
+        wbinvd
+
         /*
          * Set all of the registers to known values.
-         * Leave %rsp alone.
+         * Leave %rsp alone.  %r9 is zeroed after its last use below.
          */
         xorq	%rax, %rax
         xorq	%rbx, %rbx
@@ -167,14 +172,27 @@ identity_mapped:
         xorq    %rsi, %rsi
         xorq    %rdi, %rdi
         xorq    %rbp, %rbp
+        xorq    %r8,  %r8
+        xorq    %r10, %r10
+        xorq    %r11, %r11
+        xorq    %r12, %r12
+        xorq    %r13, %r13
+        xorq    %r14, %r14
+        xorq    %r15, %r15
 
-        pushq	16(%r9)	/* physfree */
+        pushq	16(%r9)		/* physfree */
         movq	8(%r9), %rax	/* modulep */
+        /*
+         * locore.S saves %rsp to %rbp then reads modulep via movl 4(%rbp).
+         * Shifting left 32 places modulep in bytes 4-7 of this stack slot,
+         * matching the expected stack layout: 0(%rsp)=unused, 4(%rsp)=modulep.
+         */
         salq	$32, %rax
         pushq	%rax
 
-        pushq $0x8
-        pushq	48(%r9)	/* entry # kernel entry pt */
+        pushq	$0x8
+        pushq	48(%r9)		/* kernel entry point */
+        xorq	%r9, %r9	/* zero r9 after last use */
         lretq
 relocate_kernel_end:
         .globl relocate_kernel_size
