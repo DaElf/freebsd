@@ -1655,7 +1655,7 @@ cpukload_handler(void)
 		/* Disable PGE. */
 		load_cr4(rcr4() & ~CR4_PGE);
 
-		/* Disable caches (CD = 1, NW = 0) and paging*/
+		/* Disable caches (CD = 1, NW = 0); paging remains enabled. */
 		load_cr0((rcr0() & ~CR0_NW) | CR0_CD | CR0_PG);
 
 		/* Flushes caches and TLBs. */
