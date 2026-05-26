@@ -93,9 +93,9 @@ int	boot_cpu_id = -1;	/* designated BSP */
 
 #ifdef KLOAD
 /* page table setup by kload so we can set the APs to a known page table */
-extern pt_entry_t kload_pgtbl;
+extern pt_entry_t *kload_pgtbl;
 #else
-static pt_entry_t kload_pgtbl = 0;
+static pt_entry_t *kload_pgtbl = NULL;
 #endif
 
 
@@ -1612,15 +1612,30 @@ cpukload_handler(void)
 
 	mtx_assert(&smp_ipi_mtx, MA_NOTOWNED);
 
-	/*
-	 * shutdown interrupts to the cpu
-	 * and then set the mask as stopped
-	 */
-	lapic_clear_lapic(1 /* disable lapic */);
-
 	cpu = PCPU_GET(cpuid);
-	printf("%s cpu %d\n", __func__, cpu);
+
+	if (kload_pgtbl != NULL) {
+		/*
+		 * kload path: print, signal suspended, then halt.
+		 * printf before CPU_SET_ATOMIC so the BSP does not proceed
+		 * with the kernel overwrite while APs still execute kernel
+		 * code.  Skip lapic_clear_lapic — the new kernel reinits
+		 * the APIC via INIT/SIPI.  Do not load kload_pgtbl here;
+		 * AP stacks may be above 1GB physical and would fault under
+		 * the kload identity-map.
+		 */
+		printf("%s cpu %d\n", __func__, cpu);
+		CPU_SET_ATOMIC(cpu, &suspended_cpus);
+		(void)intr_disable();
+		halt();
+	}
+
+	/* ACPI suspend path below. */
+	lapic_clear_lapic(1);
+
 	if (savectx(&susppcbs[cpu]->sp_pcb)) {
+		/* Save path: first call, context saved. */
+		printf("%s cpu %d\n", __func__, cpu);
 #ifdef __amd64__
 		fpususpend(susppcbs[cpu]->sp_fpususpend);
 #else
@@ -1629,6 +1644,8 @@ cpukload_handler(void)
 		wbinvd();
 		CPU_SET_ATOMIC(cpu, &suspended_cpus);
 	} else {
+		/* Resume path: returned here via restorectx. */
+		printf("%s cpu %d\n", __func__, cpu);
 #ifdef __amd64__
 		fpuresume(susppcbs[cpu]->sp_fpususpend);
 #else
@@ -1643,14 +1660,13 @@ cpukload_handler(void)
 		CPU_CLR_ATOMIC(cpu, &suspended_cpus);
 	}
 
-	if (kload_pgtbl) {
+	if (kload_pgtbl != NULL) {
 		/*
-		 * Set the pagetable to boot capable PT in case this is
-		 * kload suspend. If a normal suspend resume we restore
-		 * the originnal page table
+		 * ACPI suspend path only: load boot-capable page table.
+		 * kload path returns early above.
 		 */
 		(void)intr_disable();
-		load_cr3(kload_pgtbl);
+		load_cr3((u_long)kload_pgtbl);
 
 		/* Disable PGE. */
 		load_cr4(rcr4() & ~CR4_PGE);
@@ -1663,7 +1679,6 @@ cpukload_handler(void)
 		invltlb();
 
 		halt();
-
 	}
 }
 

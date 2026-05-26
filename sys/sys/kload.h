@@ -81,6 +81,11 @@ struct kload_args {
 };
 
 /*
+ * defined in kern/kern_kload.c
+ */
+vm_offset_t kload_kmem_alloc_safe(vm_size_t size);
+
+/*
  * defined in <arch>/kload.c
  */
 pt_entry_t * kload_build_page_table(void);

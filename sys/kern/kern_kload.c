@@ -91,7 +91,7 @@ static unsigned long max_addr = 0 , min_addr = 0;
 #define	ONEGIG			(1<<30)
 #define	GUEST_GDTR_LIMIT	(3 * 8 - 1)
 
-extern char kernphys[];
+extern vm_paddr_t kernphys;
 #define	KLOADBASE		KERNBASE
 
 static void
@@ -126,6 +126,30 @@ kload_kmem_alloc(vm_size_t size)
 	return (va);
 }
 
+/*
+ * Allocate below kernphys so the allocation survives the kernel copy loop.
+ * The copy loop writes to [kernphys, kernphys+kernsize), so any control
+ * structure (indirection pages, page table, GDT, IDT, control/code pages)
+ * that is read during the copy must live below that range.
+ */
+vm_offset_t
+kload_kmem_alloc_safe(vm_size_t size)
+{
+	vm_offset_t va;
+
+	va = (vm_offset_t)kmem_alloc_attr(size,
+	    M_WAITOK | M_ZERO,
+	    0x100000, kernphys,
+	    VM_MEMATTR_DEFAULT);
+
+	if (va == 0)
+		panic("kload_kmem_alloc_safe: no memory in [0x100000, 0x%lx)",
+		    (unsigned long)kernphys);
+	printf("kload_kmem_alloc_safe: va %p phys 0x%lx size %zu\n",
+	    (void *)va, (unsigned long)vtophys(va), (size_t)size);
+	return (va);
+}
+
 struct kload_cpage {
 	unsigned long kcp_magic;	/* 0 */
 	unsigned long kcp_modulep;	/* 1 */
@@ -150,7 +174,7 @@ kload_add_page(struct kload_items *items, unsigned long item_m)
 
 	if ((items->item == items->last_item) || (items->i_count == 0)) {
 		/* out of space in current page grab a new one */
-		va = (unsigned long)kload_kmem_alloc(PAGE_SIZE);
+		va = (unsigned long)kload_kmem_alloc_safe(PAGE_SIZE);
 		if (items->head_va == 0)
 			items->head_va = va;
 
@@ -269,7 +293,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		k_items->last_item = &k_items->head;
 	}
 
-	control_page = kload_kmem_alloc(PAGE_SIZE * 2);
+	control_page = kload_kmem_alloc_safe(PAGE_SIZE * 2);
 	if (control_page == 0)
 		return (ENOMEM);
 	k_cpage = (struct kload_cpage *)control_page;
@@ -284,7 +308,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	k_cpage->kcp_modulep = kld.k_modulep;
 	k_cpage->kcp_physfree = kld.k_physfree;
 
-	mygdt = (struct region_descriptor *)kload_kmem_alloc(PAGE_SIZE);
+	mygdt = (struct region_descriptor *)kload_kmem_alloc_safe(PAGE_SIZE);
 	if (mygdt == NULL)
 		return (ENOMEM);
 	k_cpage->kcp_gdt = (unsigned long)vtophys(mygdt) + KLOADBASE;
@@ -309,7 +333,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 	}
 
 	null_idt = (struct region_descriptor*)
-	    kload_kmem_alloc(PAGE_SIZE);
+	    kload_kmem_alloc_safe(PAGE_SIZE);
 	if (null_idt == NULL)
 		return (ENOMEM);
 	k_cpage->kcp_idt = (unsigned long)vtophys(null_idt) + KLOADBASE;
@@ -351,7 +375,7 @@ sys_kload(struct thread *td, struct kload_args *uap)
 		       __func__,
 		       (unsigned long)k_items->head_va,
 		       (unsigned long)vtophys(k_items->head_va),
-		       (unsigned long)(KERNBASE + (vm_paddr_t)kernphys),
+		       (unsigned long)(KERNBASE + kernphys),
 		       (unsigned long)(control_page + PAGE_SIZE),
 		       (unsigned long)vtophys(control_page + PAGE_SIZE),
 		       (unsigned long)control_page,
@@ -427,6 +451,13 @@ kload_shutdown_final(void *arg, int howto)
 		}
 
 		if (bootverbose)
+			printf("%s: disable_interrupts cpuid %d\n",
+			    __func__, PCPU_GET(cpuid));
+		disable_intr();
+
+		intr_suspend();
+
+		if (bootverbose)
 			printf("%s: clear all handlers\n", __func__);
 		intr_clear_all_handlers();
 
@@ -434,17 +465,10 @@ kload_shutdown_final(void *arg, int howto)
 			printf("%s: loapic_clear_lapic\n", __func__);
 		lapic_clear_lapic(1);
 
-		intr_suspend();
-
-		if (bootverbose)
-			printf("%s: disable_interrupts cpuid %d\n",
-			    __func__, PCPU_GET(cpuid));
-		disable_intr();
-
 		printf("calling relocate_kernel\n");
 		ret = relocate_kernel(vtophys(k_items->head_va) + KLOADBASE,
 				      /* dest addr i.e. overwrite existing kernel */
-				      KERNBASE + (vm_paddr_t)kernphys,
+				      KERNBASE + kernphys,
 				      vtophys(code_page) + KLOADBASE,
 				      control_page);
 		/* currently this will never happen */
