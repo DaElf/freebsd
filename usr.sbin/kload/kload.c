@@ -616,7 +616,13 @@ main(int argc, char** argv)
 static int
 kload_load_image(void *image, unsigned long entry_pt)
 {
-	char *stack = (char *)image + 0x1000; /* PAGESIZE */
+	/*
+	 * userboot calls setreg(4, rsp) with the physical address of the
+	 * initial stack page.  modulep is at rsp+4 and physfree at rsp+8
+	 * (as 32-bit values) within the image buffer.
+	 * regs[4] is RSP; mask to 31 bits to get the image offset.
+	 */
+	char *stack = (char *)image + (regs[4] & 0x7fffffff);
 	struct kload kld;
 	int flags = KLOAD_LOAD;
 	int modid, syscall_num;
@@ -631,18 +637,22 @@ kload_load_image(void *image, unsigned long entry_pt)
 	 */
 	unsigned long kernphys = 0x200000;
 
+	printf("kload_load_image: entry_pt 0x%lx rsp 0x%jx stack@image+0x%jx\n",
+	    entry_pt, (uintmax_t)regs[4], (uintmax_t)(regs[4] & 0x7fffffff));
+
 	kld.khdr[0].k_buf = &((char *)image)[kernphys];
 	kld.khdr[0].k_memsz = roundup2(image_max_used,PAGE_SIZE) - kernphys;
 	kld.k_entry_pt = entry_pt;
 	kld.num_hdrs = 1;
 
 	/*
-	 * pull paramaters from the stack page
-	 * a better interface should be developed for kload
-	 * in the future
+	 * Pull modulep and physfree from the stack page set up by userboot.
+	 * locore.S reads modulep from 4(%rbp) and physfree from 8(%rbp).
 	 */
 	kld.k_modulep = ((unsigned int *)stack)[1];
 	kld.k_physfree = ((unsigned int *)stack)[2];
+	printf("kload_load_image: modulep 0x%x physfree 0x%x\n",
+	    kld.k_modulep, kld.k_physfree);
 
 	/*
 	 * Make sure there is 4 pages of kenv pages between the end of the
