@@ -32,8 +32,11 @@
  */
 
 #include <sys/param.h>
+#include <kenv.h>
+#include <sys/kenv.h>
 #include <sys/kload.h>
 #include <sys/ioctl.h>
+#include <sys/mount.h>
 #include <sys/module.h>
 #include <sys/stat.h>
 #include <sys/syscall.h>
@@ -71,6 +74,16 @@ uint64_t pc;
 static int k_execute = 0;
 static int k_reboot = 0;
 static void *dl_lib;
+
+/*
+ * Environment variables propagated from the running kernel into userboot.
+ * k_getenv() is called by loader_main after heap init; putenv() is called
+ * for each non-NULL result, injecting them into the loader environment so
+ * they end up in the kernel metadata passed to the new kernel.
+ * Format: "name=value" (putenv style).
+ */
+static char *kload_kenv_vars[16];
+static int kload_kenv_count = 0;
 typedef void *(*M_func)(size_t bytes, const char *file, int line);
 M_func Malloc_func;
 static void k_exit(void *, int);
@@ -403,11 +416,9 @@ k_getmem(void *arg, uint64_t *lowmem, uint64_t *highmem)
 static char *
 k_getenv(void *arg, int idx)
 {
-	static char *vars[] = {
-		NULL
-	};
-
-	return (vars[idx]);
+	if (idx >= kload_kenv_count)
+		return (NULL);
+	return (kload_kenv_vars[idx]);
 }
 
 static int
@@ -595,6 +606,63 @@ main(int argc, char** argv)
 	/* call libstand setheap to init memory allocations */
 	loader_init();
 
+	/*
+	 * Populate kload_kenv_vars[] before loader_main so k_getenv() can
+	 * return them.  loader_main calls k_getenv(0), k_getenv(1), ...
+	 * and putenv()s each result into the libstand env AFTER reinitializing
+	 * the heap — that's the correct injection point.
+	 */
+	{
+		char val[256];
+		kload_kenv_count = 0;
+
+		/*
+		 * Try kenv first.  On many ZFS systems vfs.root.mountfrom is
+		 * not in the kernel environment (root was auto-detected), so
+		 * also fall back to statfs("/") which always has the answer.
+		 */
+		if (kenv(KENV_GET, "vfs.root.mountfrom", val, sizeof(val)) > 0) {
+			printf("kload: kenv vfs.root.mountfrom=%s\n", val);
+		} else {
+			struct statfs sfs;
+			if (statfs("/", &sfs) == 0) {
+				if (strcmp(sfs.f_fstypename, "zfs") == 0)
+					snprintf(val, sizeof(val), "zfs:%s",
+					    sfs.f_mntfromname);
+				else
+					snprintf(val, sizeof(val), "%s:%s",
+					    sfs.f_fstypename, sfs.f_mntfromname);
+				printf("kload: statfs vfs.root.mountfrom=%s\n",
+				    val);
+			} else {
+				val[0] = '\0';
+				warn("kload: could not determine vfs.root.mountfrom");
+			}
+		}
+		if (val[0] != '\0') {
+			asprintf(&kload_kenv_vars[kload_kenv_count],
+			    "vfs.root.mountfrom=%s", val);
+			if (kload_kenv_vars[kload_kenv_count] != NULL)
+				kload_kenv_count++;
+		}
+
+		/* vfs.root.mountfrom.options — kenv only, optional */
+		if (kenv(KENV_GET, "vfs.root.mountfrom.options", val,
+		    sizeof(val)) > 0) {
+			asprintf(&kload_kenv_vars[kload_kenv_count],
+			    "vfs.root.mountfrom.options=%s", val);
+			if (kload_kenv_vars[kload_kenv_count] != NULL)
+				kload_kenv_count++;
+		}
+
+		/* Suppress loader visual noise — not useful during kload. */
+		kload_kenv_vars[kload_kenv_count++] = __DECONST(char *,
+		    "beastie_disable=YES");
+		kload_kenv_vars[kload_kenv_count++] = __DECONST(char *,
+		    "loader_logo=none");
+		kload_kenv_vars[kload_kenv_count++] = __DECONST(char *,
+		    "autoboot_delay=-1");
+	}
 
 	image_size = 128*1024*1024;
 	image = malloc(image_size);
@@ -603,6 +671,8 @@ main(int argc, char** argv)
 		if (disk_fd < 0)
 			err(1, "Can't open disk image '%s'", disk_image);
 	}
+
+	fflush(stdout);
 
 	tcgetattr(0, &term);
 	oldterm = term;
@@ -639,6 +709,9 @@ kload_load_image(void *image, unsigned long entry_pt)
 
 	printf("kload_load_image: entry_pt 0x%lx rsp 0x%jx stack@image+0x%jx\n",
 	    entry_pt, (uintmax_t)regs[4], (uintmax_t)(regs[4] & 0x7fffffff));
+	printf("kload_load_image: kenv_count=%d %s\n",
+	    kload_kenv_count,
+	    kload_kenv_count > 0 ? kload_kenv_vars[0] : "(none)");
 
 	kld.khdr[0].k_buf = &((char *)image)[kernphys];
 	kld.khdr[0].k_memsz = roundup2(image_max_used,PAGE_SIZE) - kernphys;
